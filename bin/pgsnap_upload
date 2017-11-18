@@ -1,0 +1,116 @@
+#!/bin/bash
+
+# pgsnap_upload: uploads status information to the central configuration database
+#                     must run on a backup worker, with passwordless (.pgpass does the job) to the
+#                     central configuration database
+# Actions taken:
+#   1 reads all files to upload from the pgsnapman root upload directory
+#   2 uploads data to the corresponding table
+
+CONFIGFILE=/etc/pgsnapman/pgsnapman.config
+VERBOSITY=$1
+
+# Get the script directory
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
+  DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+done
+SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+
+# Try to find the config file, check and read
+if [ ! -e ${CONFIGFILE} ]; then
+  CONFIGFILE=${SCRIPTPATH}/pgsnapman.config
+fi
+if [ -e ${CONFIGFILE} ]; then
+. ${CONFIGFILE}
+else
+  echo "config file not found: "${CONFIGFILE}
+  exit 1
+fi
+
+# Gets the postgres server version
+# $1 hostname (use local for local pipe connections)
+# $2 port
+# $3 user
+# $4 db name
+function getpgversion {
+  if [ "${1}" == "local" ]; then
+    pghost=""
+  else
+    pghost="-h $1"
+  fi
+  psql ${pghost} -p ${2} -U ${3} --dbname=${4} -c "SELECT 1" &> /dev/null
+  if [ "$?" == "0" ]; then
+    local result=`psql ${pghost} -p ${2} -U ${3} --dbname=${4} -A -t -c "show server_version;"`
+    local pgversion=$(echo "${result}" | cut -d '.' -f 1)$(echo "${result}" | cut -d '.' -f 2)
+  else
+    pgversion=""
+  fi
+  echo "${pgversion}"
+}
+
+# Retrieves jobs from the configuration database
+function uploadcatalogdata {
+  # Find all files
+  find ${ROOTDIR}/upload -name '*-catalog.dat' > ${ROOTDIR}/uploadcatalogdata.list
+  while read line; do
+    psql -h ${PGSMHOST} -p ${PGSMPORT} -U ${PGSMUSER} --dbname=${PGSMDB} -c "\COPY pgsnap_catalog (pgsnap_job_id, starttime, endtime, status, bu_name, bu_location) FROM ${line}" 2> /dev/null
+    if [ "$?" == "0" ]; then
+      echo "INFO `date '+%Y%m%dT%H%M%S'` uploaded catalog data  for: ${line}" >> ${PGSNAPMANLOG}
+      rm ${line}
+    else
+      echo "ERROR `date '+%Y%m%dT%H%M%S'` uploading catalog data failed for: ${line}" >> ${PGSNAPMANLOG}
+    fi
+  done < ${ROOTDIR}/uploadcatalogdata.list
+  rm ${ROOTDIR}/uploadcatalogdata.list
+}
+
+# ================================================================================
+# MAIN
+# ===============================================================================
+
+# Own hostname, id, quit with error code if we can't connect to the catalog server 
+FQDN=`hostname -f`
+BUWORKERID=`psql -h ${PGSMHOST} -p ${PGSMPORT} -U ${PGSMUSER} --dbname=${PGSMDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
+if [ "$?" != "0" ]; then
+  echo "ERROR `date '+%Y%m%dT%H%M%S'` init upload - could not connect catalog server (fatal)" >> ${PGSNAPMANLOG}
+  exit 2
+else
+  if [ "${BUWORKERID}" == "" ]; then
+    echo "ERROR `date '+%Y%m%dT%H%M%S'` init upload - worker has no jobs (fatal)" >> ${PGSNAPMANLOG}
+    exit 3
+  fi
+fi
+
+# Started, write log entry
+echo "INFO `date '+%Y%m%dT%H%M%S'` init upload" >> ${PGSNAPMANLOG}
+
+# Get a usable timestamp
+BUTIMESTAMP=`date '+%Y%m%dT%H%M%S'`
+
+# Display information
+if [ "$VERBOSITY" == "VERBOSE" ]; then
+  echo ''
+  echo '+--------------------+'
+  echo '| pgsnap_upload      |'
+  echo '+--------------------+'
+  echo ''
+  echo 'Config file:           '${CONFIGFILE}
+  echo ''
+  echo 'PgSnapman worker fqdn: '${FQDN}
+  echo 'PgSnapman worker id:   '${BUWORKERID}
+  echo ''
+  echo 'Global pgsnapman db'
+  echo '  db:   '${PGSMDB}
+  echo '  host: '${PGSMHOST}
+  echo '  port: '${PGSMPORT}
+  echo '  user: '${PGSMUSER}
+  echo ''
+fi
+
+uploadcatalogdata 
+
+exit 0
+

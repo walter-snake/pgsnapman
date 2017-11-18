@@ -1,0 +1,24 @@
+#!/bin/bash
+
+GROTEBAK=/Users/wouterb/tmp/linktest/grotebak
+
+while read line;
+do
+  echo $line
+  md5=${line:0:32}
+  file=${line:35}
+  index1=${line:0:1}
+  index2=${line:1:1}
+  echo $index1" "$index2
+  if [ -e "${GROTEBAK}/${index1}/${index2}/${md5}" ];
+  then
+    echo "contents available, linking ["${file}" -> "${md5}"]"
+    rm ${file}
+  else
+    echo "creating contents, linking ["${file}" -> "${md5}"]"
+    mkdir -p ${GROTEBAK}/${index1}/${index2}
+    mv ${file} ${GROTEBAK}/${index1}/${index2}/${md5}
+  fi
+  ln -s ${GROTEBAK}/${index1}/${index2}/${md5} ${file}
+done < md5.list
+

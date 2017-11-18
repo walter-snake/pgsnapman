@@ -1,0 +1,264 @@
+#!/bin/bash
+
+# pgsnap_cacheconfig: reads postgres server instances to backup from central configuration database
+#                     must run on a backup worker, with passwordless (.pgpass does the job) to the
+#                     central configuration database
+# Actions taken:
+#   1 connects to central configuration database
+#   2 reads which pg instances should be backed up by this host
+#   3 creates directory structure and writes connection info for every pg instance
+#   4 reads jobs from central configuration database, creates directory structure per database and write cron job file
+#
+# You may refresh the configuration as often as you like, the actual backup proces runs entirely locally (does not need
+# access to the central configuration database). 
+# 
+# Actual backups will be started by cron on this machine, each backup job is one cron entry, starts script: pgsnap_dump.
+
+CONFIGFILE=/etc/pgsnapman/pgsnapman.config
+VERBOSITY=$1
+
+# Get the script directory
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
+  DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+done
+SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+
+# Try to find the config file, check and read
+if [ ! -e ${CONFIGFILE} ]; then
+  CONFIGFILE=${SCRIPTPATH}/pgsnapman.config
+fi
+if [ -e ${CONFIGFILE} ]; then
+. ${CONFIGFILE}
+else
+  echo "config file not found: "${CONFIGFILE}
+  exit 1
+fi
+
+# Gets the postgres server version
+# $1 hostname (use local for local pipe connections)
+# $2 port
+# $3 user
+# $4 db name
+function getpgversion {
+  if [ "${1}" == "local" ]; then
+    pghost=""
+  else
+    pghost="-h $1"
+  fi
+  psql ${pghost} -p ${2} -U ${3} --dbname=${4} -c "SELECT 1" &> /dev/null
+  if [ "$?" == "0" ]; then
+    local result=`psql ${pghost} -p ${2} -U ${3} --dbname=${4} -A -t -c "show server_version;"`
+    local pgversion=$(echo "${result}" | cut -d '.' -f 1)$(echo "${result}" | cut -d '.' -f 2)
+  else
+    pgversion=""
+  fi
+  echo "${pgversion}"
+}
+
+# Retrieves jobs from the configuration database
+# $1 postgres host by id
+# $2 instance snapshot location (full path)
+function getjobs {
+  # Get postgres worker information for workers managed by this backup worker (based on hostname) and cache the data
+  psql -h ${PGSMHOST} -p ${PGSMPORT} -U ${PGSMUSER} --dbname=${PGSMDB} -F '|' -A -t -c "SELECT id,pgsnap_worker_id,pgsql_instance_id,dbname,dumptype,dumpschema, \
+      cron,keep_daily,keep_weekly,keep_monthly,keep_yearly, \
+      comment,status,jobtype, \
+      pgsnap_worker_dns_name,pgsql_instance_dns_name,pgsql_instance_port,pgsql_instance_superuser \
+    FROM vw_job_worker_instance \
+    WHERE pgsnap_worker_id = ${BUWORKERID} AND pgsql_instance_id = ${1} \
+      AND jobtype = 'CRON' \
+    ORDER BY id" > ${2}/dumpjobs.list
+  if [ "$VERBOSITY" == "VERBOSE" ]; then
+    echo "Job data for postgres instance id: "$1
+    echo "-------------------------------------"
+    echo "Snapshot base directory: "$2
+    echo "id|pgsnap_worker_id|pgsql_instance_id|dbname|dumptype|dumpschema|cron|keep_daily|keep_weekly|keep_monthly|keep_yearly|comment|jobstatus|jobtype"
+    cat ${2}/dumpjobs.list
+    echo ""
+  fi
+}
+
+# Set up directory structure for database dumps, based on data in the local cache (dumpjobs.list)
+# $1 full path to a postgres instance snapshot directory
+function preparejobs {
+  if  [ "$VERBOSITY" == "VERBOSE" ]; then
+    echo "Processing: "$1/dumpjobs.list
+  fi
+  echo "# pgsnapman pgsnap_dump jobs for "`basename $1` >> ${ROOTDIR}/cron_snapjobs.temp
+  while read line; do
+    jobid=$(echo "${line}" | cut -d '|' -f 1)
+    pgsqlid=$(echo "${line}" | cut -d '|' -f 3)
+    pgsqlhost=$(echo "${line}" | cut -d '|' -f 16)
+    pgsqlport=$(echo ${line} | cut -d '|' -f 17)
+    pgsqlsuperuser=$(echo "${line}" | cut -d '|' -f 18)
+    dbname=$(echo "${line}" | cut -d '|' -f 4)
+    butype=$(echo "${line}" | cut -d '|' -f 5)
+    schema=$(echo "${line}" | cut -d '|' -f 6)
+    cron=$(echo "${line}" | cut -d '|' -f 7)
+    jobstatus=$(echo "${line}" | cut -d '|' -f 13)
+    jobtype=$(echo "${line}" | cut -d '|' -f 14)
+    # Set schema_part for the dump name
+    if [ "${schema}" == "*" ]; then
+      schema_part=""
+    else
+      dumpoptions="--schema="${schema}
+      schema_part="."${schema}
+    fi
+    # Display a lot of data in verbose mode
+    if  [ "$VERBOSITY" == "VERBOSE" ]; then
+      echo "jobid:        ${jobid}"
+      echo "pg id:        ${pgsqlid}"
+      echo "pg host:      ${pgsqlhost}"
+      echo "pg port:      ${pgsqlport}"
+      echo "pg superuser: ${pgsqlsuperuser}"
+      echo "dbname:       ${dbname}"
+      echo "butype:       ${butype}"
+      echo "schema:       ${schema}"
+      echo "cron:         ${cron}"
+      echo "job status:   ${jobstatus}"
+      echo "job type:     ${jobtype}"
+      echo "dump options: ${dumpoptions}"
+      echo ""
+    fi
+
+    # Create a cron job entry, only if active.
+    # If postgres version could not be determined there was an error, but it will emitted as a warning at this stage.
+    # The database may be available at the scheduled time, so the dump tool will repeat this test.
+    PRE=""
+    echo "INFO job id ${jobid} - ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}"
+    echo "# INFO pgsnapman job id ${jobid} - ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}" >> ${ROOTDIR}/cron_snapjobs.temp 
+    # For active jobs, try to verify the database connection and postgresql version
+    if [ "${jobstatus}" == "ACTIVE" ]; then
+      # Check postgres instance version
+      pgversion=`getpgversion ${pgsqlhost} ${pgsqlport} ${pgsqlsuperuser} ${dbname}`
+      if [ "${pgversion}" == "" ]; then
+        echo "WARNING job id ${jobid} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part} - pg_dump version can not be verified, leaving job in place"
+      else
+        # Get pg bin path for this version
+        eval pgbinvar=PGBIN${pgversion}
+        pgbin=${!pgbinvar}
+      fi
+      # Verify if pg_dump is available, disable when db connection could be made, version
+      # checked and pg_dump not available (this is the only guaranteed problem, databases
+      # could become available later).
+      if [ "${pgversion}" != "" ]; then
+        if [ ! -e ${pgbin}/pg_dump ]; then
+          PRE="# "
+          echo "ERROR job id ${jobid} - job is disabled as pg_dump could not be found, check pgbinxx paths in config file ${CONFIGFILE})"
+          echo "# ERROR pgsnapman job is disabled as pg_dump could not be found" >> ${ROOTDIR}/cron_snapjobs.temp
+        fi
+      fi
+    fi
+    # Emit warning on halted jobs
+    if [ "${jobstatus}" == "HALTED" ]; then
+      PRE="# "
+      echo "WARNING job id ${jobid} - disabled by user (status HALTED): ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}" 
+      echo "# WARNING pgsnapman job is disabled by user" >> ${ROOTDIR}/cron_snapjobs.temp
+    fi
+    # Write cron entry
+    echo "${PRE}${cron} ${SCRIPTPATH}/pgsnap_dump ${1} ${jobid}" >> ${ROOTDIR}/cron_snapjobs.temp
+    echo "INFO job id ${jobid} - cron entry created: ${PRE}${cron} ${SCRIPTPATH}/pgsnap_dump ${1} ${jobid}"
+  done < $1/dumpjobs.list
+}
+
+# ================================================================================
+# MAIN
+# ===============================================================================
+
+# Own hostname, id, quit with error code if we can't connect to the catalog server or no backup jobs are found
+FQDN=`hostname -f`
+BUWORKERID=`psql -h ${PGSMHOST} -p ${PGSMPORT} -U ${PGSMUSER} --dbname=${PGSMDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
+if [ "$?" != "0" ]; then
+  echo "ERROR `date '+%Y%m%dT%H%M%S'` init cache config - could not connect catalog server (fatal)" >> ${PGSNAPMANLOG}
+  exit 2
+else
+  if [ "${BUWORKERID}" == "" ]; then
+    echo "WARNING `date '+%Y%m%dT%H%M%S'` init cache config - worker has no jobs (nothing to do, quit)" >> ${PGSNAPMANLOG}
+  exit 3
+  fi
+fi
+
+# Started, write log entry
+echo "INFO `date '+%Y%m%dT%H%M%S'` init cache config" >> ${PGSNAPMANLOG}
+
+# Get a usable timestamp
+BUTIMESTAMP=`date '+%Y%m%dT%H%M%S'`
+
+# Create the central pgsnapman dump directory
+mkdir -p ${ROOTDIR}
+mkdir -p ${DUMPSNAP}
+mkdir -p ${DUMPDATA}
+mkdir -p ${ROOTDIR}/upload
+
+# Create temp cron job file
+echo "# pgsnapman ###################################################################" > ${ROOTDIR}/cron_snapjobs.temp
+echo "# pgsnapman pgsnap_dump jobs created at ${BUTIMESTAMP}" >> ${ROOTDIR}/cron_snapjobs.temp
+echo "# pgsnapman ###################################################################" >> ${ROOTDIR}/cron_snapjobs.temp
+
+# Get postgres instance information for instances managed by this pgsnapman worker (based on worker id: prevents SQL injection) and cache the data
+psql -h ${PGSMHOST} -p ${PGSMPORT} -U ${PGSMUSER} --dbname=${PGSMDB} -F '|' -A -t -c "SELECT id,dns_name,pgport,comment,status,pgsql_superuser \
+  FROM vw_worker_instance WHERE pgsnap_worker_id = ${BUWORKERID} ORDER BY id" > $ROOTDIR/pg_instances.list
+
+# Display information
+if [ "$VERBOSITY" == "VERBOSE" ]; then
+  echo ''
+  echo '+--------------------+'
+  echo '| pgsnap_cacheconfig |'
+  echo '+--------------------+'
+  echo ''
+  echo 'Config file:           '${CONFIGFILE}
+  echo ''
+  echo 'PgSnapman worker fqdn: '${FQDN}
+  echo 'PgSnapman worker id:   '${BUWORKERID}
+  echo ''
+  echo 'Global pgsnapman db'
+  echo '  db:   '${PGSMDB}
+  echo '  host: '${PGSMHOST}
+  echo '  port: '${PGSMPORT}
+  echo '  user: '${PGSMUSER}
+  echo ''
+  echo 'Postgres instances managed by this pgsnapman worker:'
+  echo 'id|dns_name|pgport|comment|status|pgsuperuser'
+  cat $ROOTDIR/pg_instances.list
+  echo ''
+fi
+
+# Create directories for every server listed, write connection info to file, ready to consume
+while read line; do
+  pgid=$(echo "${line}" | cut -d '|' -f 1)
+  pgdns=$(echo "${line}" | cut -d '|' -f 2)
+  pgport=$(echo "${line}" | cut -d '|' -f 3)
+  comment=$(echo "${line}" | cut -d '|' -f 4)
+  pgstatus=$(echo "${line}" | cut -d '|' -f 5)
+  pguser=$(echo "${line}" | cut -d '|' -f 6)
+  mkdir -p ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}
+  pgconninfo=${DUMPSNAP}/${pgid}_${pgdns}_${pgport}/pgconninfo
+  if [ "${pgdns}" == "local" ]; then
+    echo "PGHOST=" > ${pgconninfo}
+  else
+    echo "PGHOST="${pgdns} > ${pgconninfo}
+  fi
+  echo "PGPORT="${pgport} >> ${pgconninfo}
+  echo "PGUSER="${pguser} >> ${pgconninfo}
+  if [ "${pgstatus}" == "ACTIVE" ]; then
+    touch ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}/active
+    rm -f ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}/halted
+  else
+    touch ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}/halted
+    rm -f ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}/active
+  fi
+  getjobs ${pgid} ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}
+  preparejobs ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}
+done < $ROOTDIR/pg_instances.list
+
+# Install new crontab, remove old pgsnap_dump entries, keep other entries
+crontab -l > ${ROOTDIR}/crontab.previous
+cat ${ROOTDIR}/crontab.previous | grep -v pgsnap_dump | grep -v pgsnapman | cat - ${ROOTDIR}/cron_snapjobs.temp > ${ROOTDIR}/crontab.latest
+crontab ${ROOTDIR}/crontab.latest
+rm ${ROOTDIR}/cron_snapjobs.temp
+
+exit 0
+
