@@ -60,14 +60,14 @@ function getpgversion {
 
 function getdbsize {
   if [ "$5" == "*" ]; then
-  SQL="SELECT sum(total_bytes) AS total_bytes FROM ( SELECT *, total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes \
+  SQL="SELECT COALESCE(sum(total_bytes), -1) AS total_bytes FROM ( SELECT *, total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes \
     FROM ( SELECT c.oid,nspname AS table_schema, relname AS TABLE_NAME , c.reltuples AS row_estimate , pg_total_relation_size(c.oid) AS total_bytes , \
     pg_indexes_size(c.oid) AS index_bytes , pg_total_relation_size(reltoastrelid) AS toast_bytes \
     FROM pg_class c \
     LEFT JOIN pg_namespace n ON n.oid = c.relnamespace \
     WHERE relkind = 'r' ) a ) a;"
   else
-  SQL="SELECT sum(total_bytes) AS total_bytes FROM ( SELECT *, total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes \
+  SQL="SELECT COALESCE(sum(total_bytes),-1) AS total_bytes FROM ( SELECT *, total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes \
     FROM ( SELECT c.oid,nspname AS table_schema, relname AS TABLE_NAME , c.reltuples AS row_estimate , pg_total_relation_size(c.oid) AS total_bytes , \
     pg_indexes_size(c.oid) AS index_bytes , pg_total_relation_size(reltoastrelid) AS toast_bytes \
     FROM pg_class c \
@@ -77,6 +77,9 @@ function getdbsize {
     GROUP BY table_schema;"
   fi
   DBSIZE=`${PGSCBIN}/psql -h ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "${SQL}"`
+  if [ "${DBSIZE}" == "" ]; then
+    DBSIZE=-1
+  fi
 }
 
 # $1 path to postgres instance snapshot root directory
@@ -87,6 +90,7 @@ function startjob {
   JOBCHK=`cat $1/$$.running | wc -l | sed 's/[ \t]*//g'`
   if [ "${JOBCHK}" == "0" ]; then
     RETVAL="JOB_NOT_FOUND"
+    rm $1/$$".running"
     return
   fi
   while read line; do
@@ -186,6 +190,9 @@ function startjob {
       getdbsize ${pgsqlhost} ${pgsqlport} ${pgsqlsuperuser} ${dbname} "${schema}"
       # Size on disk
       SIZEONDISK=`du -k ${jobdir}/${buname} | awk '{print $1 * 1024}'`
+      if [ "${SIZEONDISK}" == "0" ]; then
+        ERRORS=1
+      fi
       ENDTIME=`date '+%s'`
       let "ELAPSEDTIME = $ENDTIME - $STARTTIME"
       echo "INFO `date '+%Y%m%dT%H%M%S'` job id ${jobid} - dump ended - elapsed time ${ELAPSEDTIME}[s]" >> ${JOBLOG}

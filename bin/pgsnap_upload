@@ -56,20 +56,15 @@ function uploadcatalogdata {
   # Find all files
   find ${ROOTDIR}/upload -name '*.catalog.dat' > ${ROOTDIR}/upload/catalogdata.list
   while read line; do
-    cat ${line} >> ${ROOTDIR}/upload/catalogdata.dat
-  done < ${ROOTDIR}/upload/catalogdata.list
-  echo -e "\.\n" >> ${ROOTDIR}/upload/catalogdata.dat
-  ${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "\COPY pgsnap_catalog (pgsnap_job_id, starttime, endtime, status, bu_name, bu_location, dbsize, dumpsize) FROM ${ROOTDIR}/upload/catalogdata.dat" 2> /dev/null
-  if [ "$?" == "0" ]; then
-    echo "INFO `date '+%Y%m%dT%H%M%S'` uploaded catalog data" >> ${PGSNAPMANLOG}
-    while read line; do
+    echo -e "\.\n" | cat ${line} - | ${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "\COPY pgsnap_catalog (pgsnap_job_id, starttime, endtime, status, bu_name, bu_location, dbsize, dumpsize) FROM stdin" 2> /dev/null
+    if [ "$?" == "0" ]; then
+      echo "INFO `date '+%Y%m%dT%H%M%S'` uploaded catalog data: ${line}" >> ${PGSNAPMANLOG}
       rm ${line}
-    done < ${ROOTDIR}/upload/catalogdata.list
-  else
-    echo "ERROR `date '+%Y%m%dT%H%M%S'` uploading catalog data failed" >> ${PGSNAPMANLOG}
-  fi
+    else
+      echo "ERROR `date '+%Y%m%dT%H%M%S'` uploading catalog data failed: ${line}" >> ${PGSNAPMANLOG}
+    fi
+  done < ${ROOTDIR}/upload/catalogdata.list
   rm -f ${ROOTDIR}/upload/catalogdata.list
-  rm -f ${ROOTDIR}/upload/catalogdata.dat
 }
 
 # ================================================================================
