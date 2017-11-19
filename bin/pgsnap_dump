@@ -14,6 +14,14 @@
 # 
 # Actual backups are usually started by cron on this machine, but you may invoke it with a backup id at any time.
 
+# ============================
+# Init stuff
+# ============================
+
+# Get a usable timestamp
+INITIMESTAMP=`date '+%Y%m%dT%H%M%S'`
+
+# Settings/cmd args
 CONFIGFILE=/etc/pgsnapman/pgsnapman.config
 VERBOSITY=$3
 
@@ -33,9 +41,13 @@ fi
 if [ -e ${CONFIGFILE} ]; then
 . ${CONFIGFILE}
 else
-  echo "config file not found: "${CONFIGFILE}
+  echo "ERROR ${INITIMESTAMP} init upload failed - config file not found: ${CONFIGFILE}"
   exit 1
 fi
+
+# ============================
+# Functions
+# ============================
 
 # Gets the postgres server version
 # $1 hostname (use local for local pipe connections)
@@ -58,6 +70,12 @@ function getpgversion {
   echo "${pgversion}"
 }
 
+# $1 hostname (use local for local pipe connections)
+# $2 port
+# $3 user
+# $4 db name
+# $5 schema name ('*' represents entire database)
+# Get the actual size of the database, or a specific schema
 function getdbsize {
   if [ "$5" == "*" ]; then
   SQL="SELECT COALESCE(sum(total_bytes), -1) AS total_bytes FROM ( SELECT *, total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes \
@@ -76,12 +94,13 @@ function getdbsize {
     WHERE table_schema LIKE '$5' \
     GROUP BY table_schema;"
   fi
-  DBSIZE=`${PGSCBIN}/psql -h ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "${SQL}"`
+  DBSIZE=`${pgbin}/psql -h ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "${SQL}"`
   if [ "${DBSIZE}" == "" ]; then
     DBSIZE=-1
   fi
 }
 
+# Start a specific dump job 
 # $1 path to postgres instance snapshot root directory
 # $2 id of job to start
 function startjob {
@@ -141,7 +160,7 @@ function startjob {
     JOBLOG=${jobdir}.log
 
     # Get timestamp, backup name, postgres version
-    buname=${dbname}${schema_part}_${butype}_${BUTIMESTAMP}
+    buname=${dbname}${schema_part}_${butype}_${INITIMESTAMP}
     echo "INFO `date '+%Y%m%dT%H%M%S'` job id ${jobid} - ${jobtype} backup ${buname}" >> ${JOBLOG}
     
     # Check postgres server version and binary availability 
@@ -160,43 +179,43 @@ function startjob {
       STARTTIME=`date '+%s'`
       echo "INFO `date '+%Y%m%dT%H%M%S'` job id ${jobid} - ${butype} dump started with options ${dumpoptions}" >> ${JOBLOG}
       if [ "${butype}" == "CLUSTER_SCHEMA" ]; then
-         buname=${buname}.cluster_schema.sql
-         ${pgbin}/pg_dumpall -h ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -s -o -f ${jobdir}/${buname} -v 2>> ${jobdir}/${buname}.log
-         if [ "$?" != "0" ]; then
-           echo "ERROR `date '+%Y%m%dT%H%M%S'` job id ${jobid} - errors occured during pg_dumpall (schema) for ${buname}" >> ${JOBLOG}
-           ERRORS=1
-         fi
+        ext=".sql"
+        ${pgbin}/pg_dumpall -h ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -s -o -f ${jobdir}/${buname}${ext} -v 2>> ${jobdir}/${buname}.log
+        if [ "$?" != "0" ]; then
+          echo "ERROR `date '+%Y%m%dT%H%M%S'` job id ${jobid} - errors occured during pg_dumpall (schema) for ${buname}" >> ${JOBLOG}
+          ERRORS=1
+        fi
       else 
-         # globals (tablespaces, users)
-         ${pgbin}/pg_dumpall -h ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -g -o -f ${jobdir}/${buname}.cluster_globals.sql -v 2>> ${jobdir}/${buname}.log
-         if [ "$?" != "0" ]; then
-           echo "ERROR `date '+%Y%m%dT%H%M%S'` job id ${jobid} - errors occured during pg_dumpall (globals) for ${buname}" >> ${JOBLOG}
-           ERRORS=1
-         fi
-         # db dump (possibly schema-only)
-         ${pgbin}/pg_dump -h ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} -b -o -Fd -f ${jobdir}/${buname} -v ${dbname} 2>>  ${jobdir}/${buname}.log
-         if [ "$?" != "0" ]; then
-           echo "ERROR `date '+%Y%m%dT%H%M%S'` job id ${jobid} - errors occured during pg_dump for ${buname}" >> ${JOBLOG}
-           ERRORS=1
-         fi
-         # extract schema sql
-         ${pgbin}/pg_restore -h ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} --schema-only -f ${jobdir}/${buname}.schema -v ${jobdir}/${buname} 2>>  ${jobdir}/${buname}.log
-         if [ "$?" != "0" ]; then
-           echo `date '+%Y%m%dT%H%M%S'` "ERROR job id ${jobid} - errors occured during schema creation from dump for ${buname}" >> ${JOBLOG}
-           ERRORS=1
-         fi
+        # globals (tablespaces, users)
+        ${pgbin}/pg_dumpall -h ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -g -o -f ${jobdir}/${buname}.cluster_globals.sql -v 2>> ${jobdir}/${buname}.log
+        if [ "$?" != "0" ]; then
+          echo "ERROR `date '+%Y%m%dT%H%M%S'` job id ${jobid} - errors occured during pg_dumpall (globals) for ${buname}" >> ${JOBLOG}
+         ERRORS=1
+        fi
+        # db dump (possibly schema-only)
+        ${pgbin}/pg_dump -h ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} -b -o -Fd -f ${jobdir}/${buname} -v ${dbname} 2>>  ${jobdir}/${buname}.log
+        if [ "$?" != "0" ]; then
+          echo "ERROR `date '+%Y%m%dT%H%M%S'` job id ${jobid} - errors occured during pg_dump for ${buname}" >> ${JOBLOG}
+          ERRORS=1
+        fi
+        # extract schema sql
+        ${pgbin}/pg_restore -h ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} --schema-only -f ${jobdir}/${buname}.schema -v ${jobdir}/${buname} 2>>  ${jobdir}/${buname}.log
+        if [ "$?" != "0" ]; then
+          echo `date '+%Y%m%dT%H%M%S'` "ERROR job id ${jobid} - errors occured during schema creation from dump for ${buname}" >> ${JOBLOG}
+          ERRORS=1
+        fi
       fi
+      # Size on disk
+      SIZEONDISK=`du -k ${jobdir}/${buname}${ext} | awk '{print $1 * 1024}'`
       # Db Size
       getdbsize ${pgsqlhost} ${pgsqlport} ${pgsqlsuperuser} ${dbname} "${schema}"
-      # Size on disk
-      SIZEONDISK=`du -k ${jobdir}/${buname} | awk '{print $1 * 1024}'`
       if [ "${SIZEONDISK}" == "0" ]; then
         ERRORS=1
       fi
       ENDTIME=`date '+%s'`
       let "ELAPSEDTIME = $ENDTIME - $STARTTIME"
       echo "INFO `date '+%Y%m%dT%H%M%S'` job id ${jobid} - dump ended - elapsed time ${ELAPSEDTIME}[s]" >> ${JOBLOG}
-    fi
+   fi
   done < $1/$$.running
   rm $1/$$.running
 }
@@ -218,9 +237,6 @@ else
     echo "WARNING `date '+%Y%m%dT%H%M%S'` init backup job - worker has no jobs (not fatal, continuing)" >> ${PGSNAPMANLOG}
   fi
 fi
-
-# Get a usable timestamp
-BUTIMESTAMP=`date '+%Y%m%dT%H%M%S'`
 
 # Display information
 if [ "$VERBOSITY" == "VERBOSE" ]; then
@@ -269,9 +285,9 @@ fi
 
 # Write catalog data file, symlink in central upload dir
 COPYLOG=${jobdir}/${buname}.catalog.dat
-echo -e "${2}\t${BUTIMESTAMP}\t`date +'%Y%m%dT%H%M%S'`\t${JOBSTATUS}\t${buname}\t${jobdir}\t${DBSIZE}\t${SIZEONDISK}" > ${COPYLOG}
-#ln -s ${COPYLOG} ${ROOTDIR}/upload/$2_${BUTIMESTAMP}-catalog.dat
-ln -s ${COPYLOG} ${ROOTDIR}/upload/
+echo -e "${2}\t${INITIMESTAMP}\t`date +'%Y%m%dT%H%M%S'`\t${JOBSTATUS}\t${buname}${ext}\t${jobdir}\t${DBSIZE}\t${SIZEONDISK}" > ${COPYLOG}
+#ln -s ${COPYLOG} ${ROOTDIR}/upload/$2_${INITIMESTAMP}-catalog.dat
+ln -s ${COPYLOG} ${ROOTDIR}/upload/${jobid}_${buname}.catalog.dat
 
 exit 0
 

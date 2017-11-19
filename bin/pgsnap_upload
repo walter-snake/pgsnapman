@@ -7,6 +7,15 @@
 #   1 reads all files to upload from the pgsnapman root upload directory
 #   2 uploads data to the corresponding table
 
+
+# ============================
+# Init stuff
+# ============================
+
+# Get a usable timestamp
+INITIMESTAMP=`date '+%Y%m%dT%H%M%S'`
+
+# Settings/cmd args
 CONFIGFILE=/etc/pgsnapman/pgsnapman.config
 VERBOSITY=$1
 
@@ -26,43 +35,27 @@ fi
 if [ -e ${CONFIGFILE} ]; then
 . ${CONFIGFILE}
 else
-  echo "config file not found: "${CONFIGFILE}
+  echo "ERROR ${INITIMESTAMP} init upload failed - config file not found: ${CONFIGFILE}"
   exit 1
 fi
 
-# Gets the postgres server version
-# $1 hostname (use local for local pipe connections)
-# $2 port
-# $3 user
-# $4 db name
-function getpgversion {
-  if [ "${1}" == "local" ]; then
-    pghost=""
-  else
-    pghost="-h $1"
-  fi
-  ${PGSCBIN}/psql ${pghost} -p ${2} -U ${3} --dbname=${4} -c "SELECT 1" &> /dev/null
-  if [ "$?" == "0" ]; then
-    local result=`${PGSCBIN}/psql ${pghost} -p ${2} -U ${3} --dbname=${4} -A -t -c "show server_version;"`
-    local pgversion=$(echo "${result}" | cut -d '.' -f 1)$(echo "${result}" | cut -d '.' -f 2)
-  else
-    pgversion=""
-  fi
-  echo "${pgversion}"
-}
+# ============================
+# Functions
+# ============================
 
-# Retrieves jobs from the configuration database
+# Upload the data for the backup catalog table
+# (no parameters)
 function uploadcatalogdata {
   # Find all files
   find ${ROOTDIR}/upload -name '*.catalog.dat' > ${ROOTDIR}/upload/catalogdata.list
   while read line; do
-    echo -e "\.\n" | cat ${line} - | ${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "\COPY pgsnap_catalog (pgsnap_job_id, starttime, endtime, status, bu_name, bu_location, dbsize, dumpsize) FROM stdin" 2> /dev/null
+    echo -e "\.\n" | cat ${line} - | ${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "\COPY pgsnap_catalog (pgsnap_dumpjob_id, starttime, endtime, status, bu_name, bu_location, dbsize, dumpsize) FROM stdin"
     if [ "$?" == "0" ]; then
       echo "INFO `date '+%Y%m%dT%H%M%S'` uploaded catalog data: ${line}" >> ${PGSNAPMANLOG}
-      rm ${line}
     else
       echo "ERROR `date '+%Y%m%dT%H%M%S'` uploading catalog data failed: ${line}" >> ${PGSNAPMANLOG}
     fi
+    rm ${line}
   done < ${ROOTDIR}/upload/catalogdata.list
   rm -f ${ROOTDIR}/upload/catalogdata.list
 }
@@ -71,24 +64,22 @@ function uploadcatalogdata {
 # MAIN
 # ===============================================================================
 
-# Own hostname, id, quit with error code if we can't connect to the catalog server 
+# Own hostname, id, (we don't need it, but is a handy check if we can
+# connect to the catalog server, quit with error if it does not work)
 FQDN=`hostname -f`
 BUWORKERID=`${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
 if [ "$?" != "0" ]; then
-  echo "ERROR `date '+%Y%m%dT%H%M%S'` init upload - could not connect catalog server (fatal)" >> ${PGSNAPMANLOG}
+  echo "ERROR ${INITIMESTAMP} init upload - could not connect catalog server (fatal)" >> ${PGSNAPMANLOG}
   exit 2
 else
   if [ "${BUWORKERID}" == "" ]; then
-    echo "ERROR `date '+%Y%m%dT%H%M%S'` init upload - worker has no jobs (fatal)" >> ${PGSNAPMANLOG}
+    echo "ERROR ${INITIMESTAMP} init upload - worker has no jobs (fatal)" >> ${PGSNAPMANLOG}
     exit 3
   fi
 fi
 
 # Started, write log entry
-echo "INFO `date '+%Y%m%dT%H%M%S'` init upload" >> ${PGSNAPMANLOG}
-
-# Get a usable timestamp
-BUTIMESTAMP=`date '+%Y%m%dT%H%M%S'`
+echo "INFO ${INITIMESTAMP} init upload" >> ${PGSNAPMANLOG}
 
 # Display information
 if [ "$VERBOSITY" == "VERBOSE" ]; then
