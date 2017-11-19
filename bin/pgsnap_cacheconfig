@@ -48,9 +48,9 @@ function getpgversion {
   else
     pghost="-h $1"
   fi
-  psql ${pghost} -p ${2} -U ${3} --dbname=${4} -c "SELECT 1" &> /dev/null
+  ${PGSCBIN}/psql ${pghost} -p ${2} -U ${3} --dbname=${4} -c "SELECT 1" &> /dev/null
   if [ "$?" == "0" ]; then
-    local result=`psql ${pghost} -p ${2} -U ${3} --dbname=${4} -A -t -c "show server_version;"`
+    local result=`${PGSCBIN}/psql ${pghost} -p ${2} -U ${3} --dbname=${4} -A -t -c "show server_version;"`
     local pgversion=$(echo "${result}" | cut -d '.' -f 1)$(echo "${result}" | cut -d '.' -f 2)
   else
     pgversion=""
@@ -63,14 +63,16 @@ function getpgversion {
 # $2 instance snapshot location (full path)
 function getjobs {
   # Get postgres worker information for workers managed by this backup worker (based on hostname) and cache the data
-  psql -h ${PGSMHOST} -p ${PGSMPORT} -U ${PGSMUSER} --dbname=${PGSMDB} -F '|' -A -t -c "SELECT id,pgsnap_worker_id,pgsql_instance_id,dbname,dumptype,dumpschema, \
+  # Make creating/replacing it an atomic operation, a dump could start while writing this file. 
+  ${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT id,pgsnap_worker_id,pgsql_instance_id,dbname,dumptype,dumpschema, \
       cron,keep_daily,keep_weekly,keep_monthly,keep_yearly, \
       comment,status,jobtype, \
       pgsnap_worker_dns_name,pgsql_instance_dns_name,pgsql_instance_port,pgsql_instance_superuser \
-    FROM vw_job_worker_instance \
+    FROM vw_dumpjob_worker_instance \
     WHERE pgsnap_worker_id = ${BUWORKERID} AND pgsql_instance_id = ${1} \
       AND jobtype = 'CRON' \
-    ORDER BY id" > ${2}/dumpjobs.list
+    ORDER BY id" > ${2}/dumpjobs.list.temp
+  mv ${2}/dumpjobs.list.temp ${2}/dumpjobs.list
   if [ "$VERBOSITY" == "VERBOSE" ]; then
     echo "Job data for postgres instance id: "$1
     echo "-------------------------------------"
@@ -170,7 +172,7 @@ function preparejobs {
 
 # Own hostname, id, quit with error code if we can't connect to the catalog server or no backup jobs are found
 FQDN=`hostname -f`
-BUWORKERID=`psql -h ${PGSMHOST} -p ${PGSMPORT} -U ${PGSMUSER} --dbname=${PGSMDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
+BUWORKERID=`${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
 if [ "$?" != "0" ]; then
   echo "ERROR `date '+%Y%m%dT%H%M%S'` init cache config - could not connect catalog server (fatal)" >> ${PGSNAPMANLOG}
   exit 2
@@ -184,6 +186,11 @@ fi
 # Started, write log entry
 echo "INFO `date '+%Y%m%dT%H%M%S'` init cache config" >> ${PGSNAPMANLOG}
 
+# Get worker configuration
+${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT id,dns_name,comment, \
+  cron_cacheconfig,cron_singlejob,cron_clean,cron_upload
+  FROM vw_worker ORDER BY id" > $ROOTDIR/pgsnap_worker.conf
+
 # Get a usable timestamp
 BUTIMESTAMP=`date '+%Y%m%dT%H%M%S'`
 
@@ -195,12 +202,28 @@ mkdir -p ${ROOTDIR}/upload
 
 # Create temp cron job file
 echo "# pgsnapman ###################################################################" > ${ROOTDIR}/cron_snapjobs.temp
-echo "# pgsnapman pgsnap_dump jobs created at ${BUTIMESTAMP}" >> ${ROOTDIR}/cron_snapjobs.temp
+echo "# pgsnapman jobs created at ${BUTIMESTAMP}" >> ${ROOTDIR}/cron_snapjobs.temp
 echo "# pgsnapman ###################################################################" >> ${ROOTDIR}/cron_snapjobs.temp
 
-# Get postgres instance information for instances managed by this pgsnapman worker (based on worker id: prevents SQL injection) and cache the data
-psql -h ${PGSMHOST} -p ${PGSMPORT} -U ${PGSMUSER} --dbname=${PGSMDB} -F '|' -A -t -c "SELECT id,dns_name,pgport,comment,status,pgsql_superuser \
-  FROM vw_worker_instance WHERE pgsnap_worker_id = ${BUWORKERID} ORDER BY id" > $ROOTDIR/pg_instances.list
+# Add crontab entries for own job from worker config
+while read line; do
+  CACHECONFIGCRON=$(echo "${line}" | cut -d '|' -f 4)
+  SINGLEJOBCRON=$(echo "${line}" | cut -d '|' -f 5)
+  CLEANCRON=$(echo "${line}" | cut -d '|' -f 6)
+  UPLOADCRON=$(echo "${line}" | cut -d '|' -f 7)
+done < $ROOTDIR/pgsnap_worker.conf
+
+echo "# pgsnapman worker jobs" >> ${ROOTDIR}/cron_snapjobs.temp
+echo "${CACHECONFIGCRON} ${SCRIPTPATH}/pgsnap_cacheconfig" >> ${ROOTDIR}/cron_snapjobs.temp
+echo "${CLEANCRON} ${SCRIPTPATH}/pgsnap_clean" >> ${ROOTDIR}/cron_snapjobs.temp
+echo "${SINGLEJOBCRON} ${SCRIPTPATH}/pgsnap_singlejob" >> ${ROOTDIR}/cron_snapjobs.temp
+echo "${UPLOADCRON} ${SCRIPTPATH}/pgsnap_upload" >> ${ROOTDIR}/cron_snapjobs.temp
+
+# Get postgres instance information for all pgsql instances and cache the data (we need all of them,
+# as a one time backup could also be inserted at any time for any host).
+${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT id,dns_name,pgport,comment,status, \
+  pgsql_superuser,bu_window_start,bu_window_end,pgsql_worker_id_default \
+  FROM vw_instance ORDER BY id" > $ROOTDIR/pg_instances.list
 
 # Display information
 if [ "$VERBOSITY" == "VERBOSE" ]; then
@@ -209,19 +232,22 @@ if [ "$VERBOSITY" == "VERBOSE" ]; then
   echo '| pgsnap_cacheconfig |'
   echo '+--------------------+'
   echo ''
-  echo 'Config file:           '${CONFIGFILE}
+  echo 'Config file:              '${CONFIGFILE}
   echo ''
-  echo 'PgSnapman worker fqdn: '${FQDN}
-  echo 'PgSnapman worker id:   '${BUWORKERID}
+  echo 'PgSnapman worker fqdn:    '${FQDN}
+  echo 'PgSnapman worker id:      '${BUWORKERID}
+  echo 'PgSnapman config cron     '${CACHECONFIGCRON}
+  echo 'PgSnapman clean cron      '${CLEANCRON}
+  echo 'PgSnapman single job cron '${SINGLEJOBCRON}
   echo ''
-  echo 'Global pgsnapman db'
-  echo '  db:   '${PGSMDB}
-  echo '  host: '${PGSMHOST}
-  echo '  port: '${PGSMPORT}
-  echo '  user: '${PGSMUSER}
+  echo 'Global pgsnapman catalog db'
+  echo '  db:   '${PGSCDB}
+  echo '  host: '${PGSCHOST}
+  echo '  port: '${PGSCPORT}
+  echo '  user: '${PGSCUSER}
   echo ''
-  echo 'Postgres instances managed by this pgsnapman worker:'
-  echo 'id|dns_name|pgport|comment|status|pgsuperuser'
+  echo 'Postgres instances managed by pgsnapman:'
+  echo 'id|dns_name|pgport|comment|status|pgsuperuser|bu_window_start|bu_window_end|pgsql_worker_id_default'
   cat $ROOTDIR/pg_instances.list
   echo ''
 fi
@@ -256,7 +282,7 @@ done < $ROOTDIR/pg_instances.list
 
 # Install new crontab, remove old pgsnap_dump entries, keep other entries
 crontab -l > ${ROOTDIR}/crontab.previous
-cat ${ROOTDIR}/crontab.previous | grep -v pgsnap_dump | grep -v pgsnapman | cat - ${ROOTDIR}/cron_snapjobs.temp > ${ROOTDIR}/crontab.latest
+cat ${ROOTDIR}/crontab.previous | grep -v pgsnap | cat - ${ROOTDIR}/cron_snapjobs.temp > ${ROOTDIR}/crontab.latest
 crontab ${ROOTDIR}/crontab.latest
 rm ${ROOTDIR}/cron_snapjobs.temp
 

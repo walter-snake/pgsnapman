@@ -41,9 +41,9 @@ function getpgversion {
   else
     pghost="-h $1"
   fi
-  psql ${pghost} -p ${2} -U ${3} --dbname=${4} -c "SELECT 1" &> /dev/null
+  ${PGSCBIN}/psql ${pghost} -p ${2} -U ${3} --dbname=${4} -c "SELECT 1" &> /dev/null
   if [ "$?" == "0" ]; then
-    local result=`psql ${pghost} -p ${2} -U ${3} --dbname=${4} -A -t -c "show server_version;"`
+    local result=`${PGSCBIN}/psql ${pghost} -p ${2} -U ${3} --dbname=${4} -A -t -c "show server_version;"`
     local pgversion=$(echo "${result}" | cut -d '.' -f 1)$(echo "${result}" | cut -d '.' -f 2)
   else
     pgversion=""
@@ -54,17 +54,22 @@ function getpgversion {
 # Retrieves jobs from the configuration database
 function uploadcatalogdata {
   # Find all files
-  find ${ROOTDIR}/upload -name '*-catalog.dat' > ${ROOTDIR}/uploadcatalogdata.list
+  find ${ROOTDIR}/upload -name '*.catalog.dat' > ${ROOTDIR}/upload/catalogdata.list
   while read line; do
-    psql -h ${PGSMHOST} -p ${PGSMPORT} -U ${PGSMUSER} --dbname=${PGSMDB} -c "\COPY pgsnap_catalog (pgsnap_job_id, starttime, endtime, status, bu_name, bu_location) FROM ${line}" 2> /dev/null
-    if [ "$?" == "0" ]; then
-      echo "INFO `date '+%Y%m%dT%H%M%S'` uploaded catalog data  for: ${line}" >> ${PGSNAPMANLOG}
+    cat ${line} >> ${ROOTDIR}/upload/catalogdata.dat
+  done < ${ROOTDIR}/upload/catalogdata.list
+  echo -e "\.\n" >> ${ROOTDIR}/upload/catalogdata.dat
+  ${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "\COPY pgsnap_catalog (pgsnap_job_id, starttime, endtime, status, bu_name, bu_location, dbsize, dumpsize) FROM ${ROOTDIR}/upload/catalogdata.dat" 2> /dev/null
+  if [ "$?" == "0" ]; then
+    echo "INFO `date '+%Y%m%dT%H%M%S'` uploaded catalog data" >> ${PGSNAPMANLOG}
+    while read line; do
       rm ${line}
-    else
-      echo "ERROR `date '+%Y%m%dT%H%M%S'` uploading catalog data failed for: ${line}" >> ${PGSNAPMANLOG}
-    fi
-  done < ${ROOTDIR}/uploadcatalogdata.list
-  rm ${ROOTDIR}/uploadcatalogdata.list
+    done < ${ROOTDIR}/upload/catalogdata.list
+  else
+    echo "ERROR `date '+%Y%m%dT%H%M%S'` uploading catalog data failed" >> ${PGSNAPMANLOG}
+  fi
+  rm -f ${ROOTDIR}/upload/catalogdata.list
+  rm -f ${ROOTDIR}/upload/catalogdata.dat
 }
 
 # ================================================================================
@@ -73,7 +78,7 @@ function uploadcatalogdata {
 
 # Own hostname, id, quit with error code if we can't connect to the catalog server 
 FQDN=`hostname -f`
-BUWORKERID=`psql -h ${PGSMHOST} -p ${PGSMPORT} -U ${PGSMUSER} --dbname=${PGSMDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
+BUWORKERID=`${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
 if [ "$?" != "0" ]; then
   echo "ERROR `date '+%Y%m%dT%H%M%S'` init upload - could not connect catalog server (fatal)" >> ${PGSNAPMANLOG}
   exit 2
@@ -102,11 +107,11 @@ if [ "$VERBOSITY" == "VERBOSE" ]; then
   echo 'PgSnapman worker fqdn: '${FQDN}
   echo 'PgSnapman worker id:   '${BUWORKERID}
   echo ''
-  echo 'Global pgsnapman db'
-  echo '  db:   '${PGSMDB}
-  echo '  host: '${PGSMHOST}
-  echo '  port: '${PGSMPORT}
-  echo '  user: '${PGSMUSER}
+  echo 'Global pgsnapman catalog db'
+  echo '  db:   '${PGSCDB}
+  echo '  host: '${PGSCHOST}
+  echo '  port: '${PGSCPORT}
+  echo '  user: '${PGSCUSER}
   echo ''
 fi
 

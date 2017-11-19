@@ -48,9 +48,9 @@ function getpgversion {
   else
     pghost="-h $1"
   fi
-  psql ${pghost} -p ${2} -U ${3} --dbname=${4} -c "SELECT 1" &> /dev/null
+  ${PGSCBIN}/psql ${pghost} -p ${2} -U ${3} --dbname=${4} -c "SELECT 1" &> /dev/null
   if [ "$?" == "0" ]; then
-    local result=`psql ${pghost} -p ${2} -U ${3} --dbname=${4} -A -t -c "show server_version;"`
+    local result=`${PGSCBIN}/psql ${pghost} -p ${2} -U ${3} --dbname=${4} -A -t -c "show server_version;"`
     local pgversion=$(echo "${result}" | cut -d '.' -f 1)$(echo "${result}" | cut -d '.' -f 2)
   else
     pgversion=""
@@ -58,11 +58,37 @@ function getpgversion {
   echo "${pgversion}"
 }
 
+function getdbsize {
+  if [ "$5" == "*" ]; then
+  SQL="SELECT sum(total_bytes) AS total_bytes FROM ( SELECT *, total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes \
+    FROM ( SELECT c.oid,nspname AS table_schema, relname AS TABLE_NAME , c.reltuples AS row_estimate , pg_total_relation_size(c.oid) AS total_bytes , \
+    pg_indexes_size(c.oid) AS index_bytes , pg_total_relation_size(reltoastrelid) AS toast_bytes \
+    FROM pg_class c \
+    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace \
+    WHERE relkind = 'r' ) a ) a;"
+  else
+  SQL="SELECT sum(total_bytes) AS total_bytes FROM ( SELECT *, total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes \
+    FROM ( SELECT c.oid,nspname AS table_schema, relname AS TABLE_NAME , c.reltuples AS row_estimate , pg_total_relation_size(c.oid) AS total_bytes , \
+    pg_indexes_size(c.oid) AS index_bytes , pg_total_relation_size(reltoastrelid) AS toast_bytes \
+    FROM pg_class c \
+    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace \
+    WHERE relkind = 'r' ) a ) a \
+    WHERE table_schema LIKE '$5' \
+    GROUP BY table_schema;"
+  fi
+  DBSIZE=`${PGSCBIN}/psql -h ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "${SQL}"`
+}
+
 # $1 path to postgres instance snapshot root directory
 # $2 id of job to start
 function startjob {
   echo "INFO `date '+%Y%m%dT%H%M%S'` reading backup job info from: $1/dumpjobs.list [$2]" >> ${PGSNAPMANLOG}
   grep -E "^${2}\|" $1/dumpjobs.list > $1/$$".running"
+  JOBCHK=`cat $1/$$.running | wc -l | sed 's/[ \t]*//g'`
+  if [ "${JOBCHK}" == "0" ]; then
+    RETVAL="JOB_NOT_FOUND"
+    return
+  fi
   while read line; do
     jobid=$(echo "${line}" | cut -d '|' -f 1)
     pgsqlid=$(echo "${line}" | cut -d '|' -f 3)
@@ -120,10 +146,10 @@ function startjob {
       echo "ERROR `date '+%Y%m%dT%H%M%S'` job id ${jobid} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}"  >> ${JOBLOG}
       ERRORS=1
     else
-      eval PGBINVAR=PGBIN${pgversion}
-      PGBIN=${!PGBINVAR}
+      eval pgbinvar=PGBIN${pgversion}
+      pgbin=${!pgbinvar}
     fi
-    if [ ! -e ${PGBIN}/pg_dump ]; then
+    if [ ! -e ${pgbin}/pg_dump ]; then
       echo "ERROR `date '+%Y%m%dT%H%M%S'` job id ${jobid} - job can not run - pg_dump not found, check PGBINxx paths in config file ${CONFIGFILE}" >> ${JOBLOG}
       ERRORS=1
     else
@@ -131,31 +157,35 @@ function startjob {
       echo "INFO `date '+%Y%m%dT%H%M%S'` job id ${jobid} - ${butype} dump started with options ${dumpoptions}" >> ${JOBLOG}
       if [ "${butype}" == "CLUSTER_SCHEMA" ]; then
          buname=${buname}.cluster_schema.sql
-         pg_dumpall -h ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -s -o -f ${jobdir}/${buname} -v 2>> ${jobdir}/${buname}.log
+         ${pgbin}/pg_dumpall -h ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -s -o -f ${jobdir}/${buname} -v 2>> ${jobdir}/${buname}.log
          if [ "$?" != "0" ]; then
            echo "ERROR `date '+%Y%m%dT%H%M%S'` job id ${jobid} - errors occured during pg_dumpall (schema) for ${buname}" >> ${JOBLOG}
            ERRORS=1
          fi
       else 
          # globals (tablespaces, users)
-         pg_dumpall -h ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -g -o -f ${jobdir}/${buname}.cluster_globals.sql -v 2>> ${jobdir}/${buname}.log
+         ${pgbin}/pg_dumpall -h ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -g -o -f ${jobdir}/${buname}.cluster_globals.sql -v 2>> ${jobdir}/${buname}.log
          if [ "$?" != "0" ]; then
            echo "ERROR `date '+%Y%m%dT%H%M%S'` job id ${jobid} - errors occured during pg_dumpall (globals) for ${buname}" >> ${JOBLOG}
            ERRORS=1
          fi
          # db dump (possibly schema-only)
-         pg_dump -h ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} -b -o -Fd -f ${jobdir}/${buname} -v ${dbname} 2>>  ${jobdir}/${buname}.log
+         ${pgbin}/pg_dump -h ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} -b -o -Fd -f ${jobdir}/${buname} -v ${dbname} 2>>  ${jobdir}/${buname}.log
          if [ "$?" != "0" ]; then
            echo "ERROR `date '+%Y%m%dT%H%M%S'` job id ${jobid} - errors occured during pg_dump for ${buname}" >> ${JOBLOG}
            ERRORS=1
          fi
          # extract schema sql
-         pg_restore -h ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} --schema-only -f ${jobdir}/${buname}.schema -v ${jobdir}/${buname} 2>>  ${jobdir}/${buname}.log
+         ${pgbin}/pg_restore -h ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} --schema-only -f ${jobdir}/${buname}.schema -v ${jobdir}/${buname} 2>>  ${jobdir}/${buname}.log
          if [ "$?" != "0" ]; then
            echo `date '+%Y%m%dT%H%M%S'` "ERROR job id ${jobid} - errors occured during schema creation from dump for ${buname}" >> ${JOBLOG}
            ERRORS=1
          fi
       fi
+      # Db Size
+      getdbsize ${pgsqlhost} ${pgsqlport} ${pgsqlsuperuser} ${dbname} "${schema}"
+      # Size on disk
+      SIZEONDISK=`du -k ${jobdir}/${buname} | awk '{print $1 * 1024}'`
       ENDTIME=`date '+%s'`
       let "ELAPSEDTIME = $ENDTIME - $STARTTIME"
       echo "INFO `date '+%Y%m%dT%H%M%S'` job id ${jobid} - dump ended - elapsed time ${ELAPSEDTIME}[s]" >> ${JOBLOG}
@@ -173,7 +203,7 @@ echo "INFO `date '+%Y%m%dT%H%M%S'` init backup job `basename ${1}` [${2}]" >> ${
 
 # Own hostname, id, give warning when catalog server could not be contacted (not fatal, we only use the cache)
 FQDN=`hostname -f`
-BUWORKERID=`psql -h ${PGSMHOST} -p ${PGSMPORT} -U ${PGSMUSER} --dbname=${PGSMDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
+BUWORKERID=`${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
 if [ "$?" != "0" ]; then
   echo "WARNING `date '+%Y%m%dT%H%M%S'` init backup job - could not connect catalog server (not fatal, continuing)" >> ${PGSNAPMANLOG}
 else
@@ -197,15 +227,20 @@ if [ "$VERBOSITY" == "VERBOSE" ]; then
   echo 'PgSnapman worker fqdn: '${FQDN}
   echo 'PgSnapman worker id:   '${BUWORKERID}
   echo ''
-  echo 'Global pgsnapman db'
-  echo '  db:   '${PGSMDB}
-  echo '  host: '${PGSMHOST}
-  echo '  port: '${PGSMPORT}
-  echo '  user: '${PGSMUSER}
+  echo 'Global pgsnapman catalog db'
+  echo '  db:   '${PGSCDB}
+  echo '  host: '${PGSCHOST}
+  echo '  port: '${PGSCPORT}
+  echo '  user: '${PGSCUSER}
   echo ''
 fi
 
 startjob $1 $2
+
+if [ "${RETVAL}" == "JOB_NOT_FOUND" ]; then
+  echo "ERROR `date '+%Y%m%dT%H%M%S'` backup job `basename ${1}` [${2}] has no job entry" >> ${PGSNAPMANLOG}
+  exit 1
+fi
 
 if [ "$VERBOSITY" == "VERBOSE" ]; then
   echo 'General job log: '${JOBLOG}
@@ -217,7 +252,6 @@ fi
 # columns: pgsnap_job_id starttime endtime status bu_name bu_location
 
 # Write status info for log and catalog
-COPYLOG=${ROOTDIR}/upload/$2_${BUTIMESTAMP}-catalog.dat
 if [ "${ERRORS}" == "1" ]; then
   echo "ERROR `date '+%Y%m%dT%H%M%S'` finished backup job `basename ${1}` [${2}] with errors, check: ${JOBLOG}" >> ${PGSNAPMANLOG}
   JOBSTATUS="FAILED"
@@ -226,11 +260,11 @@ else
   JOBSTATUS="OK"
 fi
 
-# write temp file, move in place (atomic operation)
-echo -e "${2}\t${BUTIMESTAMP}\t$`date +'%Y%m%dT%H%M%S'`\t${JOBSTATUS}\t${buname}\t${jobdir}" > ${COPYLOG}.temp
-echo '\.' >> ${COPYLOG}.temp
-echo '' >> ${COPYLOG}.temp
-mv  ${COPYLOG}.temp  ${COPYLOG}
+# Write catalog data file, symlink in central upload dir
+COPYLOG=${jobdir}/${buname}.catalog.dat
+echo -e "${2}\t${BUTIMESTAMP}\t`date +'%Y%m%dT%H%M%S'`\t${JOBSTATUS}\t${buname}\t${jobdir}\t${DBSIZE}\t${SIZEONDISK}" > ${COPYLOG}
+#ln -s ${COPYLOG} ${ROOTDIR}/upload/$2_${BUTIMESTAMP}-catalog.dat
+ln -s ${COPYLOG} ${ROOTDIR}/upload/
 
 exit 0
 
