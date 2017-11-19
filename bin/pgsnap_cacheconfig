@@ -130,14 +130,14 @@ function preparejobs {
     # If postgres version could not be determined there was an error, but it will emitted as a warning at this stage.
     # The database may be available at the scheduled time, so the dump tool will repeat this test.
     PRE=""
-    echo "INFO job id ${jobid} - ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}"
+    echo "INFO job id ${jobid} - ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}" >> ${ROOTDIR}/pgsnap_cacheconfig.log
     echo "# INFO pgsnapman job id ${jobid} - ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}" >> ${ROOTDIR}/cron_snapjobs.temp 
     # For active jobs, try to verify the database connection and postgresql version
     if [ "${jobstatus}" == "ACTIVE" ]; then
       # Check postgres instance version
       pgversion=`getpgversion ${pgsqlhost} ${pgsqlport} ${pgsqlsuperuser} ${dbname}`
       if [ "${pgversion}" == "" ]; then
-        echo "WARNING job id ${jobid} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part} - pg_dump version can not be verified, leaving job in place"
+        echo "WARNING job id ${jobid} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part} - pg_dump version can not be verified, leaving job in place" >> ${ROOTDIR}/pgsnap_cacheconfig.log
       else
         # Get pg bin path for this version
         eval pgbinvar=PGBIN${pgversion}
@@ -149,7 +149,7 @@ function preparejobs {
       if [ "${pgversion}" != "" ]; then
         if [ ! -e ${pgbin}/pg_dump ]; then
           PRE="# "
-          echo "ERROR job id ${jobid} - job is disabled as pg_dump could not be found, check pgbinxx paths in config file ${CONFIGFILE})"
+          echo "ERROR job id ${jobid} - job is disabled as pg_dump could not be found, check pgbinxx paths in config file ${CONFIGFILE})" >> ${ROOTDIR}/pgsnap_cacheconfig.log
           echo "# ERROR pgsnapman job is disabled as pg_dump could not be found" >> ${ROOTDIR}/cron_snapjobs.temp
         fi
       fi
@@ -157,12 +157,12 @@ function preparejobs {
     # Emit warning on halted jobs
     if [ "${jobstatus}" == "HALTED" ]; then
       PRE="# "
-      echo "WARNING job id ${jobid} - disabled by user (status HALTED): ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}" 
+      echo "WARNING job id ${jobid} - disabled by user (status HALTED): ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}" >> ${ROOTDIR}/pgsnap_cacheconfig.log
       echo "# WARNING pgsnapman job is disabled by user" >> ${ROOTDIR}/cron_snapjobs.temp
     fi
     # Write cron entry
     echo "${PRE}${cron} ${SCRIPTPATH}/pgsnap_dump ${1} ${jobid}" >> ${ROOTDIR}/cron_snapjobs.temp
-    echo "INFO job id ${jobid} - cron entry created: ${PRE}${cron} ${SCRIPTPATH}/pgsnap_dump ${1} ${jobid}"
+    echo "INFO job id ${jobid} - cron entry created: ${PRE}${cron} ${SCRIPTPATH}/pgsnap_dump ${1} ${jobid}" >> ${ROOTDIR}/pgsnap_cacheconfig.log
   done < $1/dumpjobs.list
 }
 
@@ -174,22 +174,22 @@ function preparejobs {
 FQDN=`hostname -f`
 BUWORKERID=`${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
 if [ "$?" != "0" ]; then
-  echo "ERROR `date '+%Y%m%dT%H%M%S'` init cache config - could not connect catalog server (fatal)" >> ${PGSNAPMANLOG}
+  echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_cacheconfig init - could not connect catalog server (fatal)" >> ${PGSNAPMANLOG}
   exit 2
 else
   if [ "${BUWORKERID}" == "" ]; then
-    echo "WARNING `date '+%Y%m%dT%H%M%S'` init cache config - worker has no jobs (nothing to do, quit)" >> ${PGSNAPMANLOG}
+    echo "WARNING `date '+%Y%m%dT%H%M%S'` pgsnap_cacheconfig init - worker has no jobs (nothing to do, quit)" >> ${PGSNAPMANLOG}
   exit 3
   fi
 fi
 
 # Started, write log entry
-echo "INFO `date '+%Y%m%dT%H%M%S'` init cache config" >> ${PGSNAPMANLOG}
+echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_cacheconfig init" >> ${PGSNAPMANLOG}
 
 # Get worker configuration
 ${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT id,dns_name,comment, \
   cron_cacheconfig,cron_singlejob,cron_clean,cron_upload
-  FROM vw_worker ORDER BY id" > $ROOTDIR/pgsnap_worker.conf
+  FROM vw_worker ORDER BY id" > $ROOTDIR/pgsnap_worker.cron
 
 # Get a usable timestamp
 BUTIMESTAMP=`date '+%Y%m%dT%H%M%S'`
@@ -211,7 +211,8 @@ while read line; do
   SINGLEJOBCRON=$(echo "${line}" | cut -d '|' -f 5)
   CLEANCRON=$(echo "${line}" | cut -d '|' -f 6)
   UPLOADCRON=$(echo "${line}" | cut -d '|' -f 7)
-done < $ROOTDIR/pgsnap_worker.conf
+done < $ROOTDIR/pgsnap_worker.cron
+rm  $ROOTDIR/pgsnap_worker.cron
 
 echo "# pgsnapman worker jobs" >> ${ROOTDIR}/cron_snapjobs.temp
 echo "${CACHECONFIGCRON} ${SCRIPTPATH}/pgsnap_cacheconfig" >> ${ROOTDIR}/cron_snapjobs.temp
@@ -253,6 +254,7 @@ if [ "$VERBOSITY" == "VERBOSE" ]; then
 fi
 
 # Create directories for every server listed, write connection info to file, ready to consume
+echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_cacheconfig" > ${ROOTDIR}/pgsnap_cacheconfig.log
 while read line; do
   pgid=$(echo "${line}" | cut -d '|' -f 1)
   pgdns=$(echo "${line}" | cut -d '|' -f 2)
@@ -280,11 +282,24 @@ while read line; do
   preparejobs ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}
 done < $ROOTDIR/pg_instances.list
 
+# Figure out if there are warnings/errors
+if [ "`cat ${ROOTDIR}/pgsnap_cacheconfig.log | grep -E 'WARNING|ERROR'`" == "" ]; then
+  JOBWARNINGS=" (without warnings)"
+else
+  JOBWARNINGS=" (with warnings)"
+fi 
 # Install new crontab, remove old pgsnap_dump entries, keep other entries
 crontab -l > ${ROOTDIR}/crontab.previous
 cat ${ROOTDIR}/crontab.previous | grep -v pgsnap | cat - ${ROOTDIR}/cron_snapjobs.temp > ${ROOTDIR}/crontab.latest
 crontab ${ROOTDIR}/crontab.latest
+if [ "$?" == "0" ]; then
+  echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_cacheconfig processing - crontab properly installed${JOBWARNINGS}" >> ${PGSNAPMANLOG}
+else
+  echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_cacheconfig processing - crontab failed to install (format errors)" >> ${PGSNAPMANLOG}
+fi
 rm ${ROOTDIR}/cron_snapjobs.temp
+
+echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_cacheconfig finished" >> ${PGSNAPMANLOG}
 
 exit 0
 

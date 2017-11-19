@@ -51,9 +51,9 @@ function uploadcatalogdata {
   while read line; do
     echo -e "\.\n" | cat ${line} - | ${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "\COPY pgsnap_catalog (pgsnap_dumpjob_id, starttime, endtime, status, bu_name, bu_location, dbsize, dumpsize) FROM stdin"
     if [ "$?" == "0" ]; then
-      echo "INFO `date '+%Y%m%dT%H%M%S'` uploaded catalog data: ${line}" >> ${PGSNAPMANLOG}
+      echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - finished uploaded catalog data: ${line}" >> ${PGSNAPMANLOG}
     else
-      echo "ERROR `date '+%Y%m%dT%H%M%S'` uploading catalog data failed: ${line}" >> ${PGSNAPMANLOG}
+      echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - finished uploading catalog data failed: ${line}" >> ${PGSNAPMANLOG}
     fi
     rm ${line}
   done < ${ROOTDIR}/upload/catalogdata.list
@@ -69,17 +69,17 @@ function uploadcatalogdata {
 FQDN=`hostname -f`
 BUWORKERID=`${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
 if [ "$?" != "0" ]; then
-  echo "ERROR ${INITIMESTAMP} init upload - could not connect catalog server (fatal)" >> ${PGSNAPMANLOG}
+  echo "ERROR ${INITIMESTAMP} pgsnap_upload init - could not connect catalog server (fatal)" >> ${PGSNAPMANLOG}
   exit 2
 else
   if [ "${BUWORKERID}" == "" ]; then
-    echo "ERROR ${INITIMESTAMP} init upload - worker has no jobs (fatal)" >> ${PGSNAPMANLOG}
+    echo "ERROR ${INITIMESTAMP} pgsnap_upload init - worker has no jobs (fatal)" >> ${PGSNAPMANLOG}
     exit 3
   fi
 fi
 
 # Started, write log entry
-echo "INFO ${INITIMESTAMP} init upload" >> ${PGSNAPMANLOG}
+echo "INFO ${INITIMESTAMP} pgsnap_upload init" >> ${PGSNAPMANLOG}
 
 # Display information
 if [ "$VERBOSITY" == "VERBOSE" ]; then

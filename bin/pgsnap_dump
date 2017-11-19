@@ -104,7 +104,7 @@ function getdbsize {
 # $1 path to postgres instance snapshot root directory
 # $2 id of job to start
 function startjob {
-  echo "INFO `date '+%Y%m%dT%H%M%S'` reading backup job info from: $1/dumpjobs.list [$2]" >> ${PGSNAPMANLOG}
+  echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_dump configuration - reading job info from $1/dumpjobs.list [$2]" >> ${PGSNAPMANLOG}
   grep -E "^${2}\|" $1/dumpjobs.list > $1/$$".running"
   JOBCHK=`cat $1/$$.running | wc -l | sed 's/[ \t]*//g'`
   if [ "${JOBCHK}" == "0" ]; then
@@ -225,16 +225,16 @@ function startjob {
 # ===============================================================================
 
 # Started, write log entry (we can always continue)
-echo "INFO `date '+%Y%m%dT%H%M%S'` init backup job `basename ${1}` [${2}]" >> ${PGSNAPMANLOG}
+echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_dump init - psql_instance.job: [`basename ${1}`].[${2}]" >> ${PGSNAPMANLOG}
 
 # Own hostname, id, give warning when catalog server could not be contacted (not fatal, we only use the cache)
 FQDN=`hostname -f`
 BUWORKERID=`${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
 if [ "$?" != "0" ]; then
-  echo "WARNING `date '+%Y%m%dT%H%M%S'` init backup job - could not connect catalog server (not fatal, continuing)" >> ${PGSNAPMANLOG}
+  echo "WARNING `date '+%Y%m%dT%H%M%S'` pgsnap_dump init - could not connect catalog server (not fatal, continuing)" >> ${PGSNAPMANLOG}
 else
   if [ "${BUWORKERID}" == "" ]; then
-    echo "WARNING `date '+%Y%m%dT%H%M%S'` init backup job - worker has no jobs (not fatal, continuing)" >> ${PGSNAPMANLOG}
+    echo "WARNING `date '+%Y%m%dT%H%M%S'` pgsnap_dump init - worker has no jobs (not fatal, continuing)" >> ${PGSNAPMANLOG}
   fi
 fi
 
@@ -261,7 +261,7 @@ fi
 startjob $1 $2
 
 if [ "${RETVAL}" == "JOB_NOT_FOUND" ]; then
-  echo "ERROR `date '+%Y%m%dT%H%M%S'` backup job `basename ${1}` [${2}] has no job entry" >> ${PGSNAPMANLOG}
+  echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_dump configuration - psql_instance.job [`basename ${1}`].[${2}] has no job entry" >> ${PGSNAPMANLOG}
   exit 1
 fi
 
@@ -276,10 +276,10 @@ fi
 
 # Write status info for log and catalog
 if [ "${ERRORS}" == "1" ]; then
-  echo "ERROR `date '+%Y%m%dT%H%M%S'` finished backup job `basename ${1}` [${2}] with errors, check: ${JOBLOG}" >> ${PGSNAPMANLOG}
+  echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_dump finished - psql_instance.job [`basename ${1}`].[${2}] with errors, check: ${JOBLOG}" >> ${PGSNAPMANLOG}
   JOBSTATUS="FAILED"
 else
-  echo "INFO `date '+%Y%m%dT%H%M%S'` finished backup job `basename ${1}` [${2}]" >> ${PGSNAPMANLOG}
+  echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_dump finished - pgsql_instance.job [`basename ${1}`].[${2}]" >> ${PGSNAPMANLOG}
   JOBSTATUS="OK"
 fi
 
