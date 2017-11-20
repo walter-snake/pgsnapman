@@ -163,12 +163,17 @@ function preparejobs {
 # MAIN
 # ===============================================================================
 
-setworkerid `basename ${0}`
+# Retrieve the worker id for this worker instance
+setworkerid `basename ${0}` "EXIT_ON_ERROR"
+if [ "${BUWORKERID}" == "" ]; then
+  echo "WARNING `date '+%Y%m%dT%H%M%S'` pgsnap_cacheconfig init - worker configuration does not exist (quit)" >> ${PGSNAPMANLOG}
+  exit 3
+fi
 
 # Started, write log entry
 writeloginit `basename ${0}`
 
-# Download de worker configuration
+# Download de worker configuration (based on id)
 getworkerconfig
 
 # Create the central pgsnapman dump directory
@@ -205,29 +210,29 @@ ${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} 
 
 # Display information
 if [ "$VERBOSITY" == "VERBOSE" ]; then
-  echo ''
-  echo '+--------------------+'
-  echo '| pgsnap_cacheconfig |'
-  echo '+--------------------+'
-  echo ''
-  echo 'Config file:              '${CONFIGFILE}
-  echo ''
-  echo 'PgSnapman worker fqdn:    '${FQDN}
-  echo 'PgSnapman worker id:      '${BUWORKERID}
-  echo 'PgSnapman config cron     '${CACHECONFIGCRON}
-  echo 'PgSnapman clean cron      '${CLEANCRON}
-  echo 'PgSnapman single job cron '${SINGLEJOBCRON}
-  echo ''
-  echo 'Global pgsnapman catalog db'
-  echo '  db:   '${PGSCDB}
-  echo '  host: '${PGSCHOST}
-  echo '  port: '${PGSCPORT}
-  echo '  user: '${PGSCUSER}
-  echo ''
-  echo 'Postgres instances managed by pgsnapman:'
-  echo 'id|dns_name|pgport|comment|status|pgsuperuser|bu_window_start|bu_window_end|pgsql_worker_id_default'
+  echo ""
+  echo "+--------------------+"
+  echo "| pgsnap_cacheconfig |"
+  echo "+--------------------+"
+  echo ""
+  echo "Config file:              ${CONFIGFILE}"
+  echo ""
+  echo "PgSnapman worker fqdn:    ${FQDN}"
+  echo "PgSnapman worker id:      ${BUWORKERID}"
+  echo "PgSnapman config cron     ${CACHECONFIGCRON}"
+  echo "PgSnapman clean cron      ${CLEANCRON}"
+  echo "PgSnapman single job cron ${SINGLEJOBCRON}"
+  echo ""
+  echo "Global pgsnapman catalog db"
+  echo "  db:   ${PGSCDB}"
+  echo "  host: ${PGSCHOST}"
+  echo "  port: ${PGSCPORT}"
+  echo "  user: ${PGSCUSER}"
+  echo ""
+  echo "Postgres instances managed by pgsnapman:"
+  echo "id|dns_name|pgport|comment|status|pgsuperuser|bu_window_start|bu_window_end|pgsql_worker_id_default"
   cat $ROOTDIR/pg_instances.list
-  echo ''
+  echo ""
 fi
 
 # Create directories for every server listed, write connection info to file, ready to consume
@@ -265,6 +270,7 @@ if [ "`cat ${ROOTDIR}/pgsnap_cacheconfig.log | grep -E 'WARNING|ERROR'`" == "" ]
 else
   JOBWARNINGS=" (with warnings)"
 fi 
+
 # Install new crontab, remove old pgsnap_dump entries, keep other entries
 crontab -l > ${ROOTDIR}/crontab.previous
 cat ${ROOTDIR}/crontab.previous | grep -v pgsnap | cat - ${ROOTDIR}/cron_snapjobs.temp > ${ROOTDIR}/crontab.latest

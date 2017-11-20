@@ -320,19 +320,19 @@ fi
 # Write status info for log and catalog
 if [ "${ERRORS}" == "1" ]; then
   echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_dump finished - psql_instance.job [`basename ${1}`].[${2}] with errors, check: ${JOBLOG}" >> ${PGSNAPMANLOG}
-  jobstatus="FAILED"
+  jobresult="FAILED"
 else
   echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_dump finished - pgsql_instance.job [`basename ${1}`].[${2}]" >> ${PGSNAPMANLOG}
-  jobstatus="SUCCESS"
+  jobresult="SUCCESS"
 fi
 
 # Write catalog data file for upload, symlink in central upload dir
 copylog=${jobdir}/${buname}.catalog.dat
-echo -e "${2}\t${INITIMESTAMP}\t`date +'%Y%m%dT%H%M%S'`\t${jobstatus}\t${buname}${ext}\t${jobdir}\t${DBSIZE}\t${SIZEONDISK}" > ${copylog}
+echo -e "${2}\t${INITIMESTAMP}\t`date +'%Y%m%dT%H%M%S'`\t${jobresult}\t${buname}${ext}\t${jobdir}\t${DBSIZE}\t${SIZEONDISK}" > ${copylog}
 ln -s ${copylog} ${ROOTDIR}/upload/
 
 # Next procedures, set exit code
-if [ "${jobstatus}" == "SUCCESS" ]; then
+if [ "${jobresult}" == "SUCCESS" ]; then
   if [ "${butype}" == "FULL" ]; then
     ${SCRIPTPATH}/pgsnap_dedup ${jobdir}/${buname}
   fi

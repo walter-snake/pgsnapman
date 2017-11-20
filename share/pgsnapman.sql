@@ -10,14 +10,14 @@ SET check_function_bodies = false;
 SET client_min_messages = warning;
 
 --
--- Name: plpgsql; Type: EXTENSION; Schema: -; Owner: 
+-- Name: plpgsql; Type: EXTENSION; Schema: -; Owner: -
 --
 
 CREATE EXTENSION IF NOT EXISTS plpgsql WITH SCHEMA pg_catalog;
 
 
 --
--- Name: EXTENSION plpgsql; Type: COMMENT; Schema: -; Owner: 
+-- Name: EXTENSION plpgsql; Type: COMMENT; Schema: -; Owner: -
 --
 
 COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
@@ -26,7 +26,7 @@ COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
 SET search_path = public, pg_catalog;
 
 --
--- Name: get_pgsnap_worker_cacheconfigcron(integer); Type: FUNCTION; Schema: public; Owner: wouterb
+-- Name: get_pgsnap_worker_cacheconfigcron(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION get_pgsnap_worker_cacheconfigcron(workerid integer) RETURNS text
@@ -34,10 +34,8 @@ CREATE FUNCTION get_pgsnap_worker_cacheconfigcron(workerid integer) RETURNS text
     AS $_$select cron_cacheconfig from pgsnap_worker where id = $1;$_$;
 
 
-ALTER FUNCTION public.get_pgsnap_worker_cacheconfigcron(workerid integer) OWNER TO wouterb;
-
 --
--- Name: get_pgsnap_worker_cleancron(integer); Type: FUNCTION; Schema: public; Owner: wouterb
+-- Name: get_pgsnap_worker_cleancron(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION get_pgsnap_worker_cleancron(workerid integer) RETURNS text
@@ -45,10 +43,8 @@ CREATE FUNCTION get_pgsnap_worker_cleancron(workerid integer) RETURNS text
     AS $_$select cron_clean from pgsnap_worker where id = $1;$_$;
 
 
-ALTER FUNCTION public.get_pgsnap_worker_cleancron(workerid integer) OWNER TO wouterb;
-
 --
--- Name: get_pgsnap_worker_id(text); Type: FUNCTION; Schema: public; Owner: wouterb
+-- Name: get_pgsnap_worker_id(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION get_pgsnap_worker_id(dns_name text) RETURNS integer
@@ -56,10 +52,8 @@ CREATE FUNCTION get_pgsnap_worker_id(dns_name text) RETURNS integer
     AS $_$select id from pgsnap_worker where dns_name = $1;$_$;
 
 
-ALTER FUNCTION public.get_pgsnap_worker_id(dns_name text) OWNER TO wouterb;
-
 --
--- Name: get_pgsnap_worker_singlejobcron(integer); Type: FUNCTION; Schema: public; Owner: wouterb
+-- Name: get_pgsnap_worker_singlejobcron(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION get_pgsnap_worker_singlejobcron(workerid integer) RETURNS text
@@ -67,10 +61,8 @@ CREATE FUNCTION get_pgsnap_worker_singlejobcron(workerid integer) RETURNS text
     AS $_$select cron_singlejob from pgsnap_worker where id = $1;$_$;
 
 
-ALTER FUNCTION public.get_pgsnap_worker_singlejobcron(workerid integer) OWNER TO wouterb;
-
 --
--- Name: get_pgsnap_worker_uploadcron(integer); Type: FUNCTION; Schema: public; Owner: wouterb
+-- Name: get_pgsnap_worker_uploadcron(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION get_pgsnap_worker_uploadcron(workerid integer) RETURNS text
@@ -78,10 +70,8 @@ CREATE FUNCTION get_pgsnap_worker_uploadcron(workerid integer) RETURNS text
     AS $_$select cron_upload from pgsnap_worker where id = $1;$_$;
 
 
-ALTER FUNCTION public.get_pgsnap_worker_uploadcron(workerid integer) OWNER TO wouterb;
-
 --
--- Name: get_pgsql_instance_id(text, integer); Type: FUNCTION; Schema: public; Owner: wouterb
+-- Name: get_pgsql_instance_id(text, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION get_pgsql_instance_id(dns_name text, pgport integer) RETURNS integer
@@ -89,14 +79,12 @@ CREATE FUNCTION get_pgsql_instance_id(dns_name text, pgport integer) RETURNS int
     AS $_$select id from pgsql_instance where dns_name = $1 and pgport = $2;$_$;
 
 
-ALTER FUNCTION public.get_pgsql_instance_id(dns_name text, pgport integer) OWNER TO wouterb;
-
 SET default_tablespace = '';
 
 SET default_with_oids = false;
 
 --
--- Name: pgsnap_dumpjob; Type: TABLE; Schema: public; Owner: wouterb; Tablespace: 
+-- Name: pgsnap_dumpjob; Type: TABLE; Schema: public; Owner: -; Tablespace: 
 --
 
 CREATE TABLE pgsnap_dumpjob (
@@ -114,15 +102,14 @@ CREATE TABLE pgsnap_dumpjob (
     cron text DEFAULT 'CRON'::text,
     status text DEFAULT 'ACTIVE'::text,
     jobtype text DEFAULT 'CRON'::text,
+    pgsnap_restorejob_id integer DEFAULT (-1),
     CONSTRAINT pgsnap_dumpjob_jobtype_check CHECK ((jobtype = ANY (ARRAY['CRON'::text, 'SINGLE'::text]))),
     CONSTRAINT pgsnap_dumpjob_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
 );
 
 
-ALTER TABLE public.pgsnap_dumpjob OWNER TO wouterb;
-
 --
--- Name: pgsnap_worker; Type: TABLE; Schema: public; Owner: wouterb; Tablespace: 
+-- Name: pgsnap_worker; Type: TABLE; Schema: public; Owner: -; Tablespace: 
 --
 
 CREATE TABLE pgsnap_worker (
@@ -136,10 +123,8 @@ CREATE TABLE pgsnap_worker (
 );
 
 
-ALTER TABLE public.pgsnap_worker OWNER TO wouterb;
-
 --
--- Name: pgsql_instance; Type: TABLE; Schema: public; Owner: wouterb; Tablespace: 
+-- Name: pgsql_instance; Type: TABLE; Schema: public; Owner: -; Tablespace: 
 --
 
 CREATE TABLE pgsql_instance (
@@ -156,10 +141,8 @@ CREATE TABLE pgsql_instance (
 );
 
 
-ALTER TABLE public.pgsql_instance OWNER TO wouterb;
-
 --
--- Name: old_stuff; Type: VIEW; Schema: public; Owner: wouterb
+-- Name: old_stuff; Type: VIEW; Schema: public; Owner: -
 --
 
 CREATE VIEW old_stuff AS
@@ -175,10 +158,8 @@ CREATE VIEW old_stuff AS
      JOIN pgsnap_worker b ON ((j.pgsnap_worker_id = b.id)));
 
 
-ALTER TABLE public.old_stuff OWNER TO wouterb;
-
 --
--- Name: pgsnap_catalog; Type: TABLE; Schema: public; Owner: wouterb; Tablespace: 
+-- Name: pgsnap_catalog; Type: TABLE; Schema: public; Owner: -; Tablespace: 
 --
 
 CREATE TABLE pgsnap_catalog (
@@ -194,10 +175,8 @@ CREATE TABLE pgsnap_catalog (
 );
 
 
-ALTER TABLE public.pgsnap_catalog OWNER TO wouterb;
-
 --
--- Name: pgsnap_catalog_id_seq; Type: SEQUENCE; Schema: public; Owner: wouterb
+-- Name: pgsnap_catalog_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE pgsnap_catalog_id_seq
@@ -208,17 +187,15 @@ CREATE SEQUENCE pgsnap_catalog_id_seq
     CACHE 1;
 
 
-ALTER TABLE public.pgsnap_catalog_id_seq OWNER TO wouterb;
-
 --
--- Name: pgsnap_catalog_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: wouterb
+-- Name: pgsnap_catalog_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE pgsnap_catalog_id_seq OWNED BY pgsnap_catalog.id;
 
 
 --
--- Name: pgsnap_dumpjob_id_seq; Type: SEQUENCE; Schema: public; Owner: wouterb
+-- Name: pgsnap_dumpjob_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE pgsnap_dumpjob_id_seq
@@ -229,17 +206,47 @@ CREATE SEQUENCE pgsnap_dumpjob_id_seq
     CACHE 1;
 
 
-ALTER TABLE public.pgsnap_dumpjob_id_seq OWNER TO wouterb;
-
 --
--- Name: pgsnap_dumpjob_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: wouterb
+-- Name: pgsnap_dumpjob_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE pgsnap_dumpjob_id_seq OWNED BY pgsnap_dumpjob.id;
 
 
 --
--- Name: pgsnap_worker_id_seq; Type: SEQUENCE; Schema: public; Owner: wouterb
+-- Name: pgsnap_message; Type: TABLE; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE TABLE pgsnap_message (
+    id integer NOT NULL,
+    level text,
+    pgsnap_tool text,
+    logtime timestamp without time zone,
+    message text
+);
+
+
+--
+-- Name: pgsnap_message_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE pgsnap_message_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: pgsnap_message_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE pgsnap_message_id_seq OWNED BY pgsnap_message.id;
+
+
+--
+-- Name: pgsnap_worker_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE pgsnap_worker_id_seq
@@ -250,17 +257,15 @@ CREATE SEQUENCE pgsnap_worker_id_seq
     CACHE 1;
 
 
-ALTER TABLE public.pgsnap_worker_id_seq OWNER TO wouterb;
-
 --
--- Name: pgsnap_worker_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: wouterb
+-- Name: pgsnap_worker_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE pgsnap_worker_id_seq OWNED BY pgsnap_worker.id;
 
 
 --
--- Name: pgsql_instance_id_seq; Type: SEQUENCE; Schema: public; Owner: wouterb
+-- Name: pgsql_instance_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE pgsql_instance_id_seq
@@ -271,17 +276,37 @@ CREATE SEQUENCE pgsql_instance_id_seq
     CACHE 1;
 
 
-ALTER TABLE public.pgsql_instance_id_seq OWNER TO wouterb;
-
 --
--- Name: pgsql_instance_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: wouterb
+-- Name: pgsql_instance_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE pgsql_instance_id_seq OWNED BY pgsql_instance.id;
 
 
 --
--- Name: vw_dumpjob_worker_instance; Type: VIEW; Schema: public; Owner: wouterb
+-- Name: vw_backup_catalog_compact; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW vw_backup_catalog_compact AS
+ SELECT p.dns_name,
+    p.pgport,
+    j.dbname,
+    j.dumpschema,
+    j.dumptype,
+    c.bu_name,
+    c.starttime,
+    (c.endtime - c.starttime) AS duration,
+    c.status,
+    c.dbsize,
+    c.dumpsize
+   FROM ((pgsnap_catalog c
+     JOIN pgsnap_dumpjob j ON ((j.id = c.pgsnap_dumpjob_id)))
+     JOIN pgsql_instance p ON ((p.id = j.pgsql_instance_id)))
+  ORDER BY c.starttime DESC;
+
+
+--
+-- Name: vw_dumpjob_worker_instance; Type: VIEW; Schema: public; Owner: -
 --
 
 CREATE VIEW vw_dumpjob_worker_instance AS
@@ -302,16 +327,15 @@ CREATE VIEW vw_dumpjob_worker_instance AS
     b.dns_name AS pgsnap_worker_dns_name,
     p.dns_name AS pgsql_instance_dns_name,
     p.pgport AS pgsql_instance_port,
-    p.pgsql_superuser AS pgsql_instance_superuser
+    p.pgsql_superuser AS pgsql_instance_superuser,
+    j.pgsnap_restorejob_id
    FROM ((pgsnap_dumpjob j
      JOIN pgsnap_worker b ON ((b.id = j.pgsnap_worker_id)))
      JOIN pgsql_instance p ON ((p.id = j.pgsql_instance_id)));
 
 
-ALTER TABLE public.vw_dumpjob_worker_instance OWNER TO wouterb;
-
 --
--- Name: vw_instance; Type: VIEW; Schema: public; Owner: wouterb
+-- Name: vw_instance; Type: VIEW; Schema: public; Owner: -
 --
 
 CREATE VIEW vw_instance AS
@@ -327,10 +351,8 @@ CREATE VIEW vw_instance AS
    FROM pgsql_instance;
 
 
-ALTER TABLE public.vw_instance OWNER TO wouterb;
-
 --
--- Name: vw_worker; Type: VIEW; Schema: public; Owner: wouterb
+-- Name: vw_worker; Type: VIEW; Schema: public; Owner: -
 --
 
 CREATE VIEW vw_worker AS
@@ -344,38 +366,43 @@ CREATE VIEW vw_worker AS
    FROM pgsnap_worker;
 
 
-ALTER TABLE public.vw_worker OWNER TO wouterb;
-
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: wouterb
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY pgsnap_catalog ALTER COLUMN id SET DEFAULT nextval('pgsnap_catalog_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: wouterb
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY pgsnap_dumpjob ALTER COLUMN id SET DEFAULT nextval('pgsnap_dumpjob_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: wouterb
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY pgsnap_message ALTER COLUMN id SET DEFAULT nextval('pgsnap_message_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY pgsnap_worker ALTER COLUMN id SET DEFAULT nextval('pgsnap_worker_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: wouterb
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY pgsql_instance ALTER COLUMN id SET DEFAULT nextval('pgsql_instance_id_seq'::regclass);
 
 
 --
--- Name: pgsnap_catalog_pkey; Type: CONSTRAINT; Schema: public; Owner: wouterb; Tablespace: 
+-- Name: pgsnap_catalog_pkey; Type: CONSTRAINT; Schema: public; Owner: -; Tablespace: 
 --
 
 ALTER TABLE ONLY pgsnap_catalog
@@ -383,7 +410,7 @@ ALTER TABLE ONLY pgsnap_catalog
 
 
 --
--- Name: pgsnap_dumpjob_pkey; Type: CONSTRAINT; Schema: public; Owner: wouterb; Tablespace: 
+-- Name: pgsnap_dumpjob_pkey; Type: CONSTRAINT; Schema: public; Owner: -; Tablespace: 
 --
 
 ALTER TABLE ONLY pgsnap_dumpjob
@@ -391,7 +418,15 @@ ALTER TABLE ONLY pgsnap_dumpjob
 
 
 --
--- Name: pgsnap_worker_pkey; Type: CONSTRAINT; Schema: public; Owner: wouterb; Tablespace: 
+-- Name: pgsnap_message_pkey; Type: CONSTRAINT; Schema: public; Owner: -; Tablespace: 
+--
+
+ALTER TABLE ONLY pgsnap_message
+    ADD CONSTRAINT pgsnap_message_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: pgsnap_worker_pkey; Type: CONSTRAINT; Schema: public; Owner: -; Tablespace: 
 --
 
 ALTER TABLE ONLY pgsnap_worker
@@ -399,7 +434,7 @@ ALTER TABLE ONLY pgsnap_worker
 
 
 --
--- Name: pgsql_instance_pkey; Type: CONSTRAINT; Schema: public; Owner: wouterb; Tablespace: 
+-- Name: pgsql_instance_pkey; Type: CONSTRAINT; Schema: public; Owner: -; Tablespace: 
 --
 
 ALTER TABLE ONLY pgsql_instance
@@ -407,27 +442,17 @@ ALTER TABLE ONLY pgsql_instance
 
 
 --
--- Name: pgsnap_worker_dns_name_idx; Type: INDEX; Schema: public; Owner: wouterb; Tablespace: 
+-- Name: pgsnap_worker_dns_name_idx; Type: INDEX; Schema: public; Owner: -; Tablespace: 
 --
 
 CREATE UNIQUE INDEX pgsnap_worker_dns_name_idx ON pgsnap_worker USING btree (dns_name);
 
 
 --
--- Name: pgsql_instance_dns_name_pgport_idx; Type: INDEX; Schema: public; Owner: wouterb; Tablespace: 
+-- Name: pgsql_instance_dns_name_pgport_idx; Type: INDEX; Schema: public; Owner: -; Tablespace: 
 --
 
 CREATE UNIQUE INDEX pgsql_instance_dns_name_pgport_idx ON pgsql_instance USING btree (dns_name, pgport);
-
-
---
--- Name: public; Type: ACL; Schema: -; Owner: postgres
---
-
-REVOKE ALL ON SCHEMA public FROM PUBLIC;
-REVOKE ALL ON SCHEMA public FROM postgres;
-GRANT ALL ON SCHEMA public TO postgres;
-GRANT ALL ON SCHEMA public TO PUBLIC;
 
 
 --

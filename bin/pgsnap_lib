@@ -16,12 +16,6 @@ function setconfigfile {
   if [ ! -e ${CONFIGFILE} ]; then
     CONFIGFILE=${SCRIPTPATH}/pgsnapman.config
   fi
-  #if [ -e ${CONFIGFILE} ]; then
-  #. ${CONFIGFILE}
-  #else
-  #  echo "config file not found: "${CONFIGFILE}
-  #  exit 1
-  #fi
   if [ ! -e ${CONFIGFILE} ]; then
     echo "config file not found: "${CONFIGFILE}
     exit 1
@@ -49,18 +43,18 @@ function getpgversion {
   echo "${pgversion}"
 }
 
-# Own hostname, id, quit with error code if we can't connect to the catalog server or no backup jobs are found
+# Own hostname, id (quit on error if requested)
 # $1 tool_name
+# $2 EXIT_ON_ERROR or anything else, nothing
 function setworkerid {
   FQDN=`hostname -f`
   BUWORKERID=`${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
   if [ "$?" != "0" ]; then
-  echo "ERROR `date '+%Y%m%dT%H%M%S'` ${1} init - could not connect catalog server (fatal)" >> ${PGSNAPMANLOG}
-    exit 2
-  else
-    if [ "${BUWORKERID}" == "" ]; then
-      echo "WARNING `date '+%Y%m%dT%H%M%S'` ${1} init - worker has no jobs (nothing to do, quit)" >> ${PGSNAPMANLOG}
-      exit 3
+    if [ "${2}" == "EXIT_ON_ERROR" ]; then
+      echo "ERROR `date '+%Y%m%dT%H%M%S'` ${1} init - could not connect catalog server (fatal)" >> ${PGSNAPMANLOG}
+      exit 2
+    else
+      echo "WARNING `date '+%Y%m%dT%H%M%S'` ${1} init - could not connect catalog server (ignored)" >> ${PGSNAPMANLOG}
     fi
   fi
 }
