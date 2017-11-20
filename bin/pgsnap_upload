@@ -52,12 +52,29 @@ function uploadcatalogdata {
     echo -e "\.\n" | cat ${line} - | ${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "\COPY pgsnap_catalog (pgsnap_dumpjob_id, starttime, endtime, status, bu_name, bu_location, dbsize, dumpsize) FROM stdin"
     if [ "$?" == "0" ]; then
       echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - finished uploaded catalog data: ${line}" >> ${PGSNAPMANLOG}
+      rm -f ${line}
     else
-      echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - finished uploading catalog data failed: ${line}" >> ${PGSNAPMANLOG}
+      echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - failed uploading catalog data: ${line}" >> ${PGSNAPMANLOG}
     fi
-    rm ${line}
   done < ${ROOTDIR}/upload/catalogdata.list
   rm -f ${ROOTDIR}/upload/catalogdata.list
+}
+
+# Upload important cacheconfig messages
+# level text, pgsnap_tool text, logtime timestamp without time zone, message
+# IMPORTANT: order is reversed in the data file
+# (no parameters)
+function uploadcacheconfigmsg {
+  # Find all files
+  if [ -e ${ROOTDIR}/upload/pgsnap_cacheconfig.message.dat ]; then
+    echo -e "\.\n" | cat ${ROOTDIR}/upload/pgsnap_cacheconfig.message.dat - | ${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "\COPY pgsnap_message (pgsnap_tool, level, logtime, message) FROM stdin"
+    if [ "$?" == "0" ]; then
+      echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - finished uploaded cacheconfig messages" >> ${PGSNAPMANLOG}
+      rm -f ${ROOTDIR}/upload/pgsnap_cacheconfig.message.dat
+    else
+      echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - failed uploading cacheconfig messages" >> ${PGSNAPMANLOG}
+    fi
+  fi
 }
 
 # ================================================================================
@@ -102,6 +119,7 @@ if [ "$VERBOSITY" == "VERBOSE" ]; then
 fi
 
 uploadcatalogdata 
+uploadcacheconfigmsg
 
 exit 0
 

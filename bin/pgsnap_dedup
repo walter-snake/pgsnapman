@@ -1,24 +1,71 @@
 #!/bin/bash
 
-GROTEBAK=/Users/wouterb/tmp/linktest/grotebak
+# pgsnap_dedup: deduplicate a directory using symlinks
+#
+# $1 full path to directory to dedup
+# $2 verbosity [VERBOSE|empty]
+#
+
+# ============================
+# Init stuff
+# ============================
+
+# Get a usable timestamp
+INITIMESTAMP=`date '+%Y%m%dT%H%M%S'`
+
+# Settings/cmd args
+CONFIGFILE=/etc/pgsnapman/pgsnapman.config
+VERBOSITY=$2
+
+# Get the script directory 
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
+  DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+done
+SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+
+# Try to find the config file, check and read
+if [ ! -e ${CONFIGFILE} ]; then
+  CONFIGFILE=${SCRIPTPATH}/pgsnapman.config
+fi
+if [ -e ${CONFIGFILE} ]; then
+. ${CONFIGFILE}
+else
+  echo "ERROR ${INITIMESTAMP} init upload failed - config file not found: ${CONFIGFILE}"
+  exit 1
+fi
+
+# Check if MD5PROG, exist, otherwise clean exit.
+if [ `which "${MD5PROG}"` == "" ]; then
+  exit 0
+fi
+
+# Start message
+echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_dedup init [${1}]" >> ${PGSNAPMANLOG}
+
+# build md5 index of the specified directory
+find ${1} -type f -name '*.dat.gz' -exec ${MD5PROG} -r {} \; > ${1}.md5
 
 while read line;
 do
-  echo $line
-  md5=${line:0:32}
-  file=${line:35}
+  md5=$(echo "${line}" | cut -d ' ' -f 1)
+  file=$(echo "${line}" | cut -d ' ' -f 2)
   index1=${line:0:1}
   index2=${line:1:1}
-  echo $index1" "$index2
-  if [ -e "${GROTEBAK}/${index1}/${index2}/${md5}" ];
+  fileindex=${DEDUPDATA}/${index1}/${index2}
+  if [ -e "${fileindex}/${md5}" ];
   then
-    echo "contents available, linking ["${file}" -> "${md5}"]"
+    # echo "contents available, linking ["${file}" -> "${md5}"]"
     rm ${file}
   else
-    echo "creating contents, linking ["${file}" -> "${md5}"]"
-    mkdir -p ${GROTEBAK}/${index1}/${index2}
-    mv ${file} ${GROTEBAK}/${index1}/${index2}/${md5}
+    # echo "creating contents, linking ["${file}" -> "${md5}"]"
+    mkdir -p ${fileindex}
+    mv ${file} ${fileindex}/${md5}
   fi
-  ln -s ${GROTEBAK}/${index1}/${index2}/${md5} ${file}
-done < md5.list
+  ln -s ${fileindex}/${md5} ${file}
+done < ${1}.md5
+
+exit 0;
 
