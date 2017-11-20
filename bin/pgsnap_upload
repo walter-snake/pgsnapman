@@ -49,15 +49,23 @@ function uploadcatalogdata {
   # Find all files
   find ${ROOTDIR}/upload -name '*.catalog.dat' > ${ROOTDIR}/upload/catalogdata.list
   while read line; do
-    echo -e "\.\n" | cat ${line} - | ${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "\COPY pgsnap_catalog (pgsnap_dumpjob_id, starttime, endtime, status, bu_name, bu_location, dbsize, dumpsize) FROM stdin"
+    echo -e "\.\n" | cat ${line} - | ${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "\COPY pgsnap_catalog (pgsnap_dumpjob_id, starttime, endtime, status, bu_name, bu_location, dbsize, dumpsize) FROM stdin" 2> ${ROOTDIR}/upload/pgsnap_upload.psql.log
     if [ "$?" == "0" ]; then
       echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - finished uploaded catalog data: ${line}" >> ${PGSNAPMANLOG}
       rm -f ${line}
     else
-      echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - failed uploading catalog data: ${line}" >> ${PGSNAPMANLOG}
+      # Inspect log, read first line (makes a difference: without connection, we leave the upload in place, an invalid data file must be removed)
+      if [ "`grep -E '^psql' ${ROOTDIR}/upload/pgsnap_upload.psql.log`" == "" ]; then 
+        echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - failed uploading catalog data (SQL/data error): ${line}" >> ${PGSNAPMANLOG}
+        # remove illegal file
+        rm -f ${line}
+      else
+        echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - failed uploading catalog data (connection error): ${line}" >> ${PGSNAPMANLOG}
+      fi
     fi
   done < ${ROOTDIR}/upload/catalogdata.list
   rm -f ${ROOTDIR}/upload/catalogdata.list
+  rm -f ${ROOTDIR}/upload/pgsnap_upload.psql.log
 }
 
 # Upload important cacheconfig messages
@@ -72,9 +80,17 @@ function uploadcacheconfigmsg {
       echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - finished uploaded cacheconfig messages" >> ${PGSNAPMANLOG}
       rm -f ${ROOTDIR}/upload/pgsnap_cacheconfig.message.dat
     else
-      echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - failed uploading cacheconfig messages" >> ${PGSNAPMANLOG}
+      # Inspect log, read first line (makes a difference: without connection, we leave the upload in place, an invalid data file must be removed)
+      if [ "`grep -E '^psql' ${ROOTDIR}/upload/pgsnap_upload.psql.log`" == "" ]; then 
+        echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - failed uploading cacheconfig messages (SQL/data error): ${line}" >> ${PGSNAPMANLOG}
+        # remove illegal file
+        rm -f ${line}
+      else
+        echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - failed uploading cacheconfig messages (connection error): ${line}" >> ${PGSNAPMANLOG}
+      fi
     fi
   fi
+  rm -f ${ROOTDIR}/upload/pgsnap_upload.psql.log
 }
 
 # ================================================================================

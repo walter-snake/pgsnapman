@@ -1,0 +1,68 @@
+#!/bin/bash
+
+# pgsnapman shell script tools function library
+
+# Get a usable timestamp
+INITIMESTAMP=`date '+%Y%m%dT%H%M%S'`
+
+# Write tool init log entry
+# $1 tool_name
+function writeloginit {
+  echo "INFO ${INITIMESTAMP} ${1} init" >> ${PGSNAPMANLOG}
+}
+
+# Try to find the config file, check and read
+function setconfigfile {
+  if [ ! -e ${CONFIGFILE} ]; then
+    CONFIGFILE=${SCRIPTPATH}/pgsnapman.config
+  fi
+  #if [ -e ${CONFIGFILE} ]; then
+  #. ${CONFIGFILE}
+  #else
+  #  echo "config file not found: "${CONFIGFILE}
+  #  exit 1
+  #fi
+  if [ ! -e ${CONFIGFILE} ]; then
+    echo "config file not found: "${CONFIGFILE}
+    exit 1
+  fi
+}
+
+# Gets the postgres server version
+# $1 hostname (use local for local pipe connections)
+# $2 port
+# $3 user
+# $4 db name
+function getpgversion {
+  if [ "${1}" == "local" ]; then
+    pghost=""
+  else
+    pghost="-h $1"
+  fi
+  ${PGSCBIN}/psql ${pghost} -p ${2} -U ${3} --dbname=${4} -c "SELECT 1" &> /dev/null
+  if [ "$?" == "0" ]; then
+    local result=`${PGSCBIN}/psql ${pghost} -p ${2} -U ${3} --dbname=${4} -A -t -c "show server_version;"`
+    local pgversion=$(echo "${result}" | cut -d '.' -f 1)$(echo "${result}" | cut -d '.' -f 2)
+  else
+    pgversion=""
+  fi
+  echo "${pgversion}"
+}
+
+# Own hostname, id, quit with error code if we can't connect to the catalog server or no backup jobs are found
+# $1 tool_name
+function setworkerid {
+  FQDN=`hostname -f`
+  BUWORKERID=`${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
+  if [ "$?" != "0" ]; then
+  echo "ERROR `date '+%Y%m%dT%H%M%S'` ${1} init - could not connect catalog server (fatal)" >> ${PGSNAPMANLOG}
+    exit 2
+  else
+    if [ "${BUWORKERID}" == "" ]; then
+      echo "WARNING `date '+%Y%m%dT%H%M%S'` ${1} init - worker has no jobs (nothing to do, quit)" >> ${PGSNAPMANLOG}
+      exit 3
+    fi
+  fi
+}
+
+
