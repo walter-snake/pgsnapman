@@ -7,19 +7,12 @@
 #   1 reads all files to upload from the pgsnapman root upload directory
 #   2 uploads data to the corresponding table
 
-
-# ============================
-# Init stuff
-# ============================
-
-# Get a usable timestamp
-INITIMESTAMP=`date '+%Y%m%dT%H%M%S'`
-
-# Settings/cmd args
-CONFIGFILE=/etc/pgsnapman/pgsnapman.config
+# ======================================
+# Initialization
+# ======================================
 VERBOSITY=$1
 
-# Get the script directory
+# Get the script directory (must do this first)
 SOURCE="${BASH_SOURCE[0]}"
 while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
   DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
@@ -28,114 +21,77 @@ while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symli
 done
 SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 
-# Try to find the config file, check and read
-if [ ! -e ${CONFIGFILE} ]; then
-  CONFIGFILE=${SCRIPTPATH}/pgsnapman.config
-fi
-if [ -e ${CONFIGFILE} ]; then
-. ${CONFIGFILE}
-else
-  echo "ERROR ${INITIMESTAMP} init upload failed - config file not found: ${CONFIGFILE}"
-  exit 1
-fi
+# Load functions, will also set and source the config file
+. ${SCRIPTPATH}/pgsnap_lib
 
 # ============================
 # Functions
 # ============================
 
-# Upload the data for the backup catalog table
-# (no parameters)
-function uploadcatalogdata {
-  # Find all files
-  find ${ROOTDIR}/upload -name '*.catalog.dat' > ${ROOTDIR}/upload/catalogdata.list
-  while read line; do
-    echo -e "\.\n" | cat ${line} - | ${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "\COPY pgsnap_catalog (pgsnap_dumpjob_id, starttime, endtime, status, bu_name, bu_location, dbsize, dumpsize) FROM stdin" 2> ${ROOTDIR}/upload/pgsnap_upload.psql.log
+# Generic upload function, searches for files in upload dir, name pattern: '*.<destination>.dat'
+# $1 log destination [message|catalog], uploads to the catalog database table pgsnap_<destination>
+function uploaddata {
+  # Set SQL
+  if [ "$1" == "message" ]; then
+    sql="\COPY pgsnap_message (logtime, level, pgsnap_tool,  message) FROM stdin";
+  elif [ "$1" == "catalog" ]; then
+    sql="\COPY pgsnap_catalog (pgsnap_dumpjob_id, starttime, endtime, status, bu_name, bu_location, dbsize, dumpsize) FROM stdin"
+  fi
+  # Find files
+  find ${ROOTDIR}/upload -name "*.${1}.dat" > ${ROOTDIR}/upload/upload.dat.list
+   while read line; do
+    echo -e "\.\n" | cat ${line} - | ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "${sql}" 2> ${ROOTDIR}/upload/pgsnap_upload.psql.log
     if [ "$?" == "0" ]; then
-      echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - finished uploaded catalog data: ${line}" >> ${PGSNAPMANLOG}
+      echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - finished uploading ${1} data: ${line}" >> ${PGSNAPMANLOG}
       rm -f ${line}
     else
       # Inspect log, read first line (makes a difference: without connection, we leave the upload in place, an invalid data file must be removed)
       if [ "`grep -E '^psql' ${ROOTDIR}/upload/pgsnap_upload.psql.log`" == "" ]; then 
-        echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - failed uploading catalog data (SQL/data error): ${line}" >> ${PGSNAPMANLOG}
+        echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - failed uploading ${1} data (SQL/data error): ${line}" >> ${PGSNAPMANLOG}
         # remove illegal file
         rm -f ${line}
       else
-        echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - failed uploading catalog data (connection error): ${line}" >> ${PGSNAPMANLOG}
+        echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - failed uploading ${1} data (connection error): ${line}" >> ${PGSNAPMANLOG}
       fi
     fi
-  done < ${ROOTDIR}/upload/catalogdata.list
-  rm -f ${ROOTDIR}/upload/catalogdata.list
+  done < ${ROOTDIR}/upload/upload.dat.list
+  rm -f ${ROOTDIR}/upload/upload.dat.list
   rm -f ${ROOTDIR}/upload/pgsnap_upload.psql.log
 }
 
-# Upload important cacheconfig messages
-# level text, pgsnap_tool text, logtime timestamp without time zone, message
-# IMPORTANT: order is reversed in the data file
-# (no parameters)
-function uploadcacheconfigmsg {
-  # Find all files
-  if [ -e ${ROOTDIR}/upload/pgsnap_cacheconfig.message.dat ]; then
-    echo -e "\.\n" | cat ${ROOTDIR}/upload/pgsnap_cacheconfig.message.dat - | ${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "\COPY pgsnap_message (pgsnap_tool, level, logtime, message) FROM stdin"
-    if [ "$?" == "0" ]; then
-      echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - finished uploaded cacheconfig messages" >> ${PGSNAPMANLOG}
-      rm -f ${ROOTDIR}/upload/pgsnap_cacheconfig.message.dat
-    else
-      # Inspect log, read first line (makes a difference: without connection, we leave the upload in place, an invalid data file must be removed)
-      if [ "`grep -E '^psql' ${ROOTDIR}/upload/pgsnap_upload.psql.log`" == "" ]; then 
-        echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - failed uploading cacheconfig messages (SQL/data error): ${line}" >> ${PGSNAPMANLOG}
-        # remove illegal file
-        rm -f ${line}
-      else
-        echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_upload processing - failed uploading cacheconfig messages (connection error): ${line}" >> ${PGSNAPMANLOG}
-      fi
-    fi
-  fi
-  rm -f ${ROOTDIR}/upload/pgsnap_upload.psql.log
-}
 
 # ================================================================================
 # MAIN
 # ===============================================================================
+# Tool log
+TOOL_LOG=${ROOTDIR}/pgsnap_cacheconfig.log 
 
-# Own hostname, id, (we don't need it, but is a handy check if we can
-# connect to the catalog server, quit with error if it does not work)
-FQDN=`hostname -f`
-BUWORKERID=`${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
-if [ "$?" != "0" ]; then
-  echo "ERROR ${INITIMESTAMP} pgsnap_upload init - could not connect catalog server (fatal)" >> ${PGSNAPMANLOG}
-  exit 2
-else
-  if [ "${BUWORKERID}" == "" ]; then
-    echo "ERROR ${INITIMESTAMP} pgsnap_upload init - worker has no jobs (fatal)" >> ${PGSNAPMANLOG}
-    exit 3
-  fi
-fi
-
-# Started, write log entry
-echo "INFO ${INITIMESTAMP} pgsnap_upload init" >> ${PGSNAPMANLOG}
+# Retrieve the worker id for this worker instance
+setworkerid `basename ${0}` "EXIT_ON_ERROR"
 
 # Display information
 if [ "$VERBOSITY" == "VERBOSE" ]; then
-  echo ''
-  echo '+--------------------+'
-  echo '| pgsnap_upload      |'
-  echo '+--------------------+'
-  echo ''
-  echo 'Config file:           '${CONFIGFILE}
-  echo ''
-  echo 'PgSnapman worker fqdn: '${FQDN}
-  echo 'PgSnapman worker id:   '${BUWORKERID}
-  echo ''
-  echo 'Global pgsnapman catalog db'
-  echo '  db:   '${PGSCDB}
-  echo '  host: '${PGSCHOST}
-  echo '  port: '${PGSCPORT}
-  echo '  user: '${PGSCUSER}
-  echo ''
+  echo ""
+  echo "+--------------------+"
+  echo "| pgsnap_upload      |"
+  echo "+--------------------+"
+  echo ""
+  echo "Config file:           ${CONFIGFILE}"
+  echo ""
+  echo "PgSnapman worker fqdn: ${FQDN}"
+  echo "PgSnapman worker id:   ${BUWORKERID}"
+  echo ""
+  echo "Global pgsnapman catalog db"
+  echo "  db:   ${PGSCDB}"
+  echo "  host: ${PGSCHOST}"
+  echo "  port: ${PGSCPORT}"
+  echo "  user: ${PGSCUSER}"
+  echo ""
 fi
 
-uploadcatalogdata 
-uploadcacheconfigmsg
+# Upload the data for the available categories
+uploaddata message
+uploaddata catalog
 
 exit 0
 

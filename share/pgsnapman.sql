@@ -284,10 +284,10 @@ ALTER SEQUENCE pgsql_instance_id_seq OWNED BY pgsql_instance.id;
 
 
 --
--- Name: vw_backup_catalog_compact; Type: VIEW; Schema: public; Owner: -
+-- Name: vw_catalog_compact; Type: VIEW; Schema: public; Owner: -
 --
 
-CREATE VIEW vw_backup_catalog_compact AS
+CREATE VIEW vw_catalog_compact AS
  SELECT p.dns_name,
     p.pgport,
     j.dbname,
@@ -302,7 +302,7 @@ CREATE VIEW vw_backup_catalog_compact AS
    FROM ((pgsnap_catalog c
      JOIN pgsnap_dumpjob j ON ((j.id = c.pgsnap_dumpjob_id)))
      JOIN pgsql_instance p ON ((p.id = j.pgsql_instance_id)))
-  ORDER BY c.starttime DESC;
+  ORDER BY c.starttime;
 
 
 --

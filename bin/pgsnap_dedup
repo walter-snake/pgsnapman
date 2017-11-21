@@ -38,7 +38,7 @@ else
 fi
 
 # Check if MD5PROG, exist, otherwise clean exit.
-if [ `which "${MD5PROG}"` == "" ]; then
+if [ ! -e "${MD5PROG}" ]; then
   exit 0
 fi
 
@@ -46,7 +46,7 @@ fi
 echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_dedup init [${1}]" >> ${PGSNAPMANLOG}
 
 # build md5 index of the specified directory
-find ${1} -type f -name '*.dat.gz' -exec ${MD5PROG} -r {} \; > ${1}.md5
+find ${1} -type f -name '*.dat.gz' -exec ${MD5PROG} ${MD5OPTIONS} {} \; > ${1}.md5
 
 while read line;
 do

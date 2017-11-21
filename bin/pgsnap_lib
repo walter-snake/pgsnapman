@@ -1,46 +1,42 @@
 #!/bin/bash
 
-# pgsnapman shell script tools function library
+# pgsnapman shell script tools common initialization, and function library
 
-# Get a usable timestamp
-INITIMESTAMP=`date '+%Y%m%dT%H%M%S'`
+# Config file location (if not found, script directory will be searched)
+CONFIGFILE=/etc/pgsnapman/pgsnapman.config
 
-# Write tool init log entry
-# $1 tool_name
-function writeloginit {
-  echo "INFO ${INITIMESTAMP} ${1} init" >> ${PGSNAPMANLOG}
+# Write a log entry to the main snapman log
+# $1: log level
+# $2: log message
+function snaplog {
+  echo "$1 `date '+%Y%m%dT%H%M%S'` ${TOOLNAME} ${2}" >> ${PGSNAPMANLOG}
 }
 
-# Try to find the config file, check and read
-function setconfigfile {
-  if [ ! -e ${CONFIGFILE} ]; then
-    CONFIGFILE=${SCRIPTPATH}/pgsnapman.config
-  fi
-  if [ ! -e ${CONFIGFILE} ]; then
-    echo "config file not found: "${CONFIGFILE}
-    exit 1
+# Write a log entry to the tool log
+# $1: log level
+# $2: log message
+# $3: NEW: start new log
+function log {
+  if [ "${3}" == "NEW" ]; then
+    echo "`date '+%Y%m%dT%H%M%S'` $1 ${TOOLNAME} ${2}" > ${TOOL_LOG}
+  else
+    echo "`date '+%Y%m%dT%H%M%S'` $1 ${TOOLNAME} ${2}" >> ${TOOL_LOG}
   fi
 }
 
-# Gets the postgres server version
-# $1 hostname (use local for local pipe connections)
+# Sets the postgres server version
+# $1 hostname ( "-h <hostname>" or "" )
 # $2 port
 # $3 user
 # $4 db name
-function getpgversion {
-  if [ "${1}" == "local" ]; then
-    pghost=""
-  else
-    pghost="-h $1"
-  fi
-  ${PGSCBIN}/psql ${pghost} -p ${2} -U ${3} --dbname=${4} -c "SELECT 1" &> /dev/null
+function setpgversion {
+  ${PGSCBIN}/psql ${1} -p ${2} -U ${3} --dbname=${4} -c "SELECT 1" &> /dev/null
   if [ "$?" == "0" ]; then
-    local result=`${PGSCBIN}/psql ${pghost} -p ${2} -U ${3} --dbname=${4} -A -t -c "show server_version;"`
-    local pgversion=$(echo "${result}" | cut -d '.' -f 1)$(echo "${result}" | cut -d '.' -f 2)
+    local result=`${PGSCBIN}/psql ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "show server_version;"`
+    PGVERSION=$(echo "${result}" | cut -d '.' -f 1)$(echo "${result}" | cut -d '.' -f 2)
   else
-    pgversion=""
+    PGVERSION=""
   fi
-  echo "${pgversion}"
 }
 
 # Own hostname, id (quit on error if requested)
@@ -48,15 +44,55 @@ function getpgversion {
 # $2 EXIT_ON_ERROR or anything else, nothing
 function setworkerid {
   FQDN=`hostname -f`
-  BUWORKERID=`${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
-  if [ "$?" != "0" ]; then
+  BUWORKERID=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
+  if [ "$?" != "0" ] || [ "${BUWORKERID}" == "" ]; then
     if [ "${2}" == "EXIT_ON_ERROR" ]; then
-      echo "ERROR `date '+%Y%m%dT%H%M%S'` ${1} init - could not connect catalog server (fatal)" >> ${PGSNAPMANLOG}
+      snaplog "ERROR" "init - could not connect catalog server (fatal)" >> ${PGSNAPMANLOG}
       exit 2
     else
-      echo "WARNING `date '+%Y%m%dT%H%M%S'` ${1} init - could not connect catalog server (ignored)" >> ${PGSNAPMANLOG}
+      snaplog "WARNING" "init - could not connect catalog server (ignored)" >> ${PGSNAPMANLOG}
     fi
   fi
 }
 
+# =====================================
+# Init actions
+# =====================================
+
+
+# Try to find the config file, check and read
+if [ ! -e ${CONFIGFILE} ]; then
+  CONFIGFILE=${SCRIPTPATH}/pgsnapman.config
+fi
+if [ -e ${CONFIGFILE} ]; then
+  . ${CONFIGFILE}
+else
+  echo "pgsnapman config file not found: "${CONFIGFILE}
+  exit 1
+fi
+
+# Verify user
+if [ "`whoami`" != "${PGSNAPMANUSER}" ]; then
+  echo "ERROR pgsnapman must run as user: ${PGSNAPMANUSER}"
+  exit 4
+fi
+
+# Set toolname
+TOOLNAME=`basename $0`
+
+# Write tool init log entry
+snaplog "INFO" "init - using config: ${CONFIGFILE}"
+
+# Get a timestamp
+INITIMESTAMP=`date '+%Y%m%dT%H%M%S'`
+
+# Set the hostname for the pgsnapman database
+if [ "${PGSCHOST}" == "local" ]; then
+  PGSCHOST=""
+else
+  PGSCHOST="-h ${PGSCHOST}"
+fi
+
+# Catalog db version
+setpgversion "${PGSCHOST}" "${PGSCPORT}" "${PGSCUSER}" "${PGSCDB}"
 

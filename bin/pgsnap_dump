@@ -93,7 +93,7 @@ function isinstanceactive {
 # $3 user
 # $4 db name
 # $5 schema name ('*' represents entire database)
-function getdbsize {
+function setdbsize {
   if [ "$5" == "*" ]; then
   sql="SELECT COALESCE(sum(total_bytes), -1) AS total_bytes FROM ( SELECT *, total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes \
     FROM ( SELECT c.oid,nspname AS table_schema, relname AS TABLE_NAME , c.reltuples AS row_estimate , pg_total_relation_size(c.oid) AS total_bytes , \
@@ -111,11 +111,10 @@ function getdbsize {
     WHERE table_schema LIKE '$5' \
     GROUP BY table_schema;"
   fi
-  dbsize=`${pgbin}/psql -h ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "${sql}"`
-  if [ "${dbsize}" == "" ]; then
-    dbsize=-1
+  DBSIZE=`${pgbin}/psql -h ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "${sql}"`
+  if [ "${DBSIZE}" == "" ]; then
+    DBSIZE=-1
   fi
-  echo "${dbsize}"
 }
 
 # Start a specific dump job 
@@ -153,6 +152,7 @@ function startpgsnapjob {
     fi
     # Display a lot of data in verbose mode
     if  [ "$VERBOSITY" == "VERBOSE" ]; then
+      echo "PgSnapDump job data configuration"
       echo "jobid:          ${jobid}"
       echo "pg id:          ${pgsqlid}"
       echo "pg host:        ${pgsqlhost}"
@@ -237,7 +237,7 @@ function startpgsnapjob {
       # Size on disk
       SIZEONDISK=`du -k ${jobdir}/${buname}${ext} | awk '{print $1 * 1024}'`
       # Db Size
-      DBSIZE=`getdbsize ${pgsqlhost} ${pgsqlport} ${pgsqlsuperuser} ${dbname} ${schema}`
+      setdbsize ${pgsqlhost} ${pgsqlport} ${pgsqlsuperuser} ${dbname} "${schema}"
       if [ "${SIZEONDISK}" == "0" ]; then
         ERRORS=1
       fi
@@ -272,25 +272,25 @@ isinstanceactive $1
 
 # Display information
 if [ "$VERBOSITY" == "VERBOSE" ]; then
-  echo ''
-  echo '+--------------------+'
-  echo '| pgsnap_dump        |'
-  echo '+--------------------+'
-  echo ''
-  echo 'Config file:           '${CONFIGFILE}
-  echo ''
-  echo 'PgSnapman worker fqdn: '${FQDN}
-  echo 'PgSnapman worker id:   '${BUWORKERID}
-  echo 'PgSnapman log:         '${PGSNAPMANLOG}
-  echo ''
-  echo 'Global pgsnapman catalog db'
-  echo '  db:   '${PGSCDB}
-  echo '  host: '${PGSCHOST}
-  echo '  port: '${PGSCPORT}
-  echo '  user: '${PGSCUSER}
-  echo ''
-  echo 'Pgsql instance status: '${INSTANCESTATUS}
-  echo ''
+  echo ""
+  echo "+--------------------+"
+  echo "| pgsnap_dump        |"
+  echo "+--------------------+"
+  echo ""
+  echo "Config file:           ${CONFIGFILE}"
+  echo ""
+  echo "PgSnapman worker fqdn: ${FQDN}"
+  echo "PgSnapman worker id:   ${BUWORKERID}"
+  echo "PgSnapman log:         ${PGSNAPMANLOG}"
+  echo ""
+  echo "Global pgsnapman catalog db"
+  echo "  db:   ${PGSCDB}"
+  echo "  host: ${PGSCHOST}"
+  echo "  port: ${PGSCPORT}"
+  echo "  user: ${PGSCUSER}"
+  echo ""
+  echo "Pgsql instance status: ${INSTANCESTATUS}"
+  echo ""
 fi
 
 if [ "${INSTANCESTATUS}" == "HALTED" ]; then
@@ -308,10 +308,11 @@ if [ "${RETVAL}" == "JOB_NOT_FOUND" ]; then
 fi
 
 if [ "$VERBOSITY" == "VERBOSE" ]; then
-  echo 'Dump location:   '${jobdir}/${buname}
-  echo 'General job log: '${JOBLOG}
-  echo 'pg dump log:     '${jobdir}/${buname}.log
-  echo ''
+  echo "Dump location:   ${jobdir}"
+  echo "Dump name:       ${buname}${ext}"
+  echo "General job log: ${JOBLOG}"
+  echo "pg_dump log:     ${jobdir}/${buname}.log"
+  echo ""
 fi
 
 # File format for database import (using COPY FROM STDIN)

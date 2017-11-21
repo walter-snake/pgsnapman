@@ -14,12 +14,10 @@
 # 
 # Actual backups will be started by cron on this machine, each backup job is one cron entry, starts script: pgsnap_dump.
 
-CONFIGFILE=/etc/pgsnapman/pgsnapman.config
-VERBOSITY=$1
-
 # ======================================
 # Initialization
 # ======================================
+VERBOSITY=$1
 
 # Get the script directory (must do this first)
 SOURCE="${BASH_SOURCE[0]}"
@@ -30,12 +28,8 @@ while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symli
 done
 SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 
-# Load functions
+# Load functions, will also set and source the config file
 . ${SCRIPTPATH}/pgsnap_lib
-
-# Set the config file
-setconfigfile
-. ${CONFIGFILE}
 
 # ======================================
 # Function definitions (script specific)
@@ -44,7 +38,7 @@ setconfigfile
 # Retrieves the worker configuration from the catalog database
 function getworkerconfig {
   # Get worker configuration
-  ${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT id,dns_name,comment, \
+  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT id,dns_name,comment, \
     cron_cacheconfig,cron_singlejob,cron_clean,cron_upload
     FROM vw_worker ORDER BY id" > $ROOTDIR/pgsnap_worker.cron
 }
@@ -55,7 +49,7 @@ function getworkerconfig {
 function getjobs {
   # Get postgres worker information for workers managed by this backup worker (based on hostname) and cache the data
   # Make creating/replacing it an atomic operation, a dump could start while writing this file. 
-  ${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT id,pgsnap_worker_id,pgsql_instance_id,dbname,dumptype,dumpschema, \
+  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT id,pgsnap_worker_id,pgsql_instance_id,dbname,dumptype,dumpschema, \
       cron,keep_daily,keep_weekly,keep_monthly,keep_yearly, \
       comment,status,jobtype, \
       pgsnap_worker_dns_name,pgsql_instance_dns_name,pgsql_instance_port,pgsql_instance_superuser,pgsnap_restorejob_id \
@@ -101,11 +95,18 @@ function preparejobs {
       dumpoptions="--schema="${schema}
       schema_part="."${schema}
     fi
+
+    if [ "${pgsqlhost}" == "local" ]; then
+      pgsqlhost=""
+    else
+      pgsqlhost="-h ${pgsqlhost}"
+    fi
+
     # Display a lot of data in verbose mode
     if  [ "$VERBOSITY" == "VERBOSE" ]; then
       echo "jobid:          ${jobid}"
       echo "pg id:          ${pgsqlid}"
-      echo "pg host:        ${pgsqlhost}"
+      echo "pg host:        ${pgsqlhost:3}"
       echo "pg port:        ${pgsqlport}"
       echo "pg superuser:   ${pgsqlsuperuser}"
       echo "dbname:         ${dbname}"
@@ -123,26 +124,26 @@ function preparejobs {
     # If postgres version could not be determined there was an error, but it will emitted as a warning at this stage.
     # The database may be available at the scheduled time, so the dump tool will repeat this test.
     PRE=""
-    echo "INFO ${INITIMESTAMP} job id ${jobid} - ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}" >> ${ROOTDIR}/pgsnap_cacheconfig.log
+    log "INFO" "job id ${jobid} - ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}"
     echo "# INFO pgsnapman job id ${jobid} - ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}" >> ${ROOTDIR}/cron_snapjobs.temp 
     # For active jobs, try to verify the database connection and postgresql version
     if [ "${jobstatus}" == "ACTIVE" ]; then
       # Check postgres instance version
-      pgversion=`getpgversion ${pgsqlhost} ${pgsqlport} ${pgsqlsuperuser} ${dbname}`
-      if [ "${pgversion}" == "" ]; then
-        echo "WARNING ${INITIMESTAMP} job id ${jobid} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part} - pg_dump version can not be verified, leaving job in place" >> ${ROOTDIR}/pgsnap_cacheconfig.log
+      setpgversion "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${dbname}"
+      if [ "${PGVERSION}" == "" ]; then
+        log "WARNING" "job id ${jobid} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part} - pg_dump version can not be verified, leaving job in place"
       else
         # Get pg bin path for this version
-        eval pgbinvar=PGBIN${pgversion}
+        eval pgbinvar=PGBIN${PGVERSION}
         pgbin=${!pgbinvar}
       fi
       # Verify if pg_dump is available, disable when db connection could be made, version
       # checked and pg_dump not available (this is the only guaranteed problem, databases
       # could become available later).
-      if [ "${pgversion}" != "" ]; then
+      if [ "${PGVERSION}" != "" ]; then
         if [ ! -e ${pgbin}/pg_dump ]; then
           PRE="# "
-          echo "ERROR ${INITIMESTAMP} job id ${jobid} - job is disabled as pg_dump could not be found, check pgbinxx paths in config file ${CONFIGFILE})" >> ${ROOTDIR}/pgsnap_cacheconfig.log
+          log "ERROR" "job id ${jobid} - job is disabled as pg_dump could not be found, check pgbinxx paths in config file ${CONFIGFILE})"
           echo "# ERROR pgsnapman job is disabled as pg_dump could not be found" >> ${ROOTDIR}/cron_snapjobs.temp
         fi
       fi
@@ -150,12 +151,12 @@ function preparejobs {
     # Emit warning on halted jobs
     if [ "${jobstatus}" == "HALTED" ]; then
       PRE="# "
-      echo "WARNING ${INITIMESTAMP} job id ${jobid} - disabled by user (status HALTED): ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}" >> ${ROOTDIR}/pgsnap_cacheconfig.log
+      log "WARNING" "job id ${jobid} - disabled by user (status HALTED): ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}"
       echo "# WARNING pgsnapman job is disabled by user" >> ${ROOTDIR}/cron_snapjobs.temp
     fi
     # Write cron entry
     echo "${PRE}${cron} ${SCRIPTPATH}/pgsnap_dump ${1} ${jobid}" >> ${ROOTDIR}/cron_snapjobs.temp
-    echo "INFO ${INITIMESTAMP} job id ${jobid} - cron entry created: ${PRE}${cron} ${SCRIPTPATH}/pgsnap_dump ${1} ${jobid}" >> ${ROOTDIR}/pgsnap_cacheconfig.log
+    log "INFO" "job id ${jobid} - cron entry created: ${PRE}${cron} ${SCRIPTPATH}/pgsnap_dump ${1} ${jobid}"
   done < $1/dumpjobs.list
 }
 
@@ -163,15 +164,11 @@ function preparejobs {
 # MAIN
 # ===============================================================================
 
+# Tool log
+TOOL_LOG=${ROOTDIR}/pgsnap_cacheconfig.log 
+
 # Retrieve the worker id for this worker instance
 setworkerid `basename ${0}` "EXIT_ON_ERROR"
-if [ "${BUWORKERID}" == "" ]; then
-  echo "WARNING `date '+%Y%m%dT%H%M%S'` pgsnap_cacheconfig init - worker configuration does not exist (quit)" >> ${PGSNAPMANLOG}
-  exit 3
-fi
-
-# Started, write log entry
-writeloginit `basename ${0}`
 
 # Download de worker configuration (based on id)
 getworkerconfig
@@ -204,7 +201,7 @@ echo "${UPLOADCRON} ${SCRIPTPATH}/pgsnap_upload" >> ${ROOTDIR}/cron_snapjobs.tem
 
 # Get postgres instance information for all pgsql instances and cache the data (we need all of them,
 # as a one time backup could also be inserted at any time for any host).
-${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT id,dns_name,pgport,comment,status, \
+${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT id,dns_name,pgport,comment,status, \
   pgsql_superuser,bu_window_start,bu_window_end,pgsql_worker_id_default \
   FROM vw_instance ORDER BY id" > $ROOTDIR/pg_instances.list
 
@@ -236,7 +233,7 @@ if [ "$VERBOSITY" == "VERBOSE" ]; then
 fi
 
 # Create directories for every server listed, write connection info to file, ready to consume
-echo "INFO ${INITIMESTAMP} init" > ${ROOTDIR}/pgsnap_cacheconfig.log
+log "INFO" "init" "NEW"
 while read line; do
   pgid=$(echo "${line}" | cut -d '|' -f 1)
   pgdns=$(echo "${line}" | cut -d '|' -f 2)
@@ -265,7 +262,7 @@ while read line; do
 done < $ROOTDIR/pg_instances.list
 
 # Figure out if there are warnings/errors
-if [ "`cat ${ROOTDIR}/pgsnap_cacheconfig.log | grep -E 'WARNING|ERROR'`" == "" ]; then
+if [ "`cat ${TOOL_LOG} | grep -E 'WARNING|ERROR'`" == "" ]; then
   JOBWARNINGS=" (without warnings)"
 else
   JOBWARNINGS=" (with warnings)"
@@ -276,18 +273,18 @@ crontab -l > ${ROOTDIR}/crontab.previous
 cat ${ROOTDIR}/crontab.previous | grep -v pgsnap | cat - ${ROOTDIR}/cron_snapjobs.temp > ${ROOTDIR}/crontab.latest
 crontab ${ROOTDIR}/crontab.latest
 if [ "$?" == "0" ]; then
-  echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_cacheconfig processing - crontab properly installed${JOBWARNINGS}" >> ${PGSNAPMANLOG}
+  snaplog "INFO" "processing - crontab properly installed${JOBWARNINGS}"
 else
-  echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_cacheconfig processing - crontab failed to install (format errors)" >> ${PGSNAPMANLOG}
+  snaplog "ERROR" "pgsnap_cacheconfig processing - crontab failed to install (format errors)"
 fi
 rm ${ROOTDIR}/cron_snapjobs.temp
 
 
 # Create message log for upload, based on logging 
-cat  ${ROOTDIR}/pgsnap_cacheconfig.log | grep -E 'WARNING|ERROR' | awk '{printf( "pgsnap_cacheconfig\t"); for(i=1;i<=NF;i++) { printf($i); if (i==1 || i==2) {printf("\t")} else { printf(" ")}}; print ""}' > ${ROOTDIR}/pgsnap_cacheconfig.message.dat
+cat  ${TOOL_LOG} | grep -E 'WARNING|ERROR' | awk '{for(i=1;i<=NF;i++) { printf($i); if (i>=1 && i <= 3) {printf("\t")} else { printf(" ")}}; print ""}' > ${ROOTDIR}/pgsnap_cacheconfig.message.dat
 ln -s -f ${ROOTDIR}/pgsnap_cacheconfig.message.dat ${ROOTDIR}/upload
 
-echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_cacheconfig finished" >> ${PGSNAPMANLOG}
+snaplog "INFO" "finished"
 
 exit 0
 
