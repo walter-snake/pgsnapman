@@ -39,3 +39,8 @@ PGSCUSER=postgres
 MD5PROG="/sbin/md5"
 MD5OPTIONS="-r"
 
+# Auto add unlisted database
+DATABASEJOBS=AUTO_ADD
+
+# Maintenance db (must be present on every pgsql instance)
+MAINTDB=postgres

@@ -159,6 +159,41 @@ function preparejobs {
   done < $1/dumpjobs.list
 }
 
+# Retrieves all databases from a postgres server instance, adds all those that are not listed in the dumpjobs table, with defaults
+# - Does not depend on worker, all jobs are checked (a databas could purposely be put on another backup worker).
+# - SINGLE jobs do count
+# $1 = pg instance id
+# $2 = pg dns name
+# $3 = pg port
+# $4 = pg user
+function createdumpjobs {
+  # Resolve host
+  local fqdnhost=${2}
+  local pgsqlhost=$(resolvepghost ${2})
+
+  # Find the databases (exclude templates and all database that you cannot connect to)
+  local DBS=`psql ${pgsqlhost} -p ${3} -U ${4} --dbname=${MAINTDB} -A -t -c "SELECT datname FROM pg_database WHERE datistemplate = false AND datallowconn = true;"` 2> /dev/null
+  if [ "$?" != "0" ]; then
+    echo "ERREUR"
+    return
+  fi
+
+  # Process the database list
+  local c=0
+  for line in ${DBS}; do
+    local HASJOB=`psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT get_hasjob(${1}, '${line}');"`
+    if [ "${HASJOB}" != "YES" ]; then
+      echo "add database: ${fqdnhost}:${3}/${line}"
+      local jobid=`psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT put_dumpjob(${BUWORKERID}, ${1}, '${line}', 'auto added dump job');"`
+      echo "new dump job created with id: ${jobid}"
+      let "c = c + 1"
+    fi
+  done
+  if [ ${c} -gt 0 ]; then 
+    snaplog "INFO" "processing - auto job: added ${c} dump jobs on worker [${BUWORKERID}] for postgres instance [${fqdnhost}:${3}]"
+  fi
+}
+
 # ================================================================================
 # MAIN
 # ===============================================================================
@@ -241,6 +276,7 @@ while read line; do
   comment=$(echo "${line}" | cut -d '|' -f 4)
   pgstatus=$(echo "${line}" | cut -d '|' -f 5)
   pguser=$(echo "${line}" | cut -d '|' -f 6)
+  defworkerid=$(echo "${line}" | cut -d '|' -f 9)
   mkdir -p ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}
   pgconninfo=${DUMPSNAP}/${pgid}_${pgdns}_${pgport}/pgconninfo
   if [ "${pgdns}" == "local" ]; then
@@ -257,7 +293,16 @@ while read line; do
     touch ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}/halted
     rm -f ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}/active
   fi
+
+  # Check the pgsql_instances for unlisted databases, when instance is active and this backup worker is the default backup worker
+  if [ "${DATABASEJOBS}" == "AUTO_ADD" ] && [ "${defworkerid}" == "${BUWORKERID}" ] && [ "$(getinstancestatus ${pgid})" == "ACTIVE" ]; then
+    createdumpjobs ${pgid} ${pgdns} ${pgport} ${pguser}
+  fi
+
+  # Retrieve job list from server
   getjobs ${pgid} ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}
+
+  # Prepare the jobs: create directories, cron entries
   preparejobs ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}
 done < $ROOTDIR/pg_instances.list
 
@@ -275,10 +320,9 @@ crontab ${ROOTDIR}/crontab.latest
 if [ "$?" == "0" ]; then
   snaplog "INFO" "processing - crontab properly installed${JOBWARNINGS}"
 else
-  snaplog "ERROR" "pgsnap_cacheconfig processing - crontab failed to install (format errors)"
+  snaplog "ERROR" "processing - crontab failed to install (format errors)"
 fi
 rm ${ROOTDIR}/cron_snapjobs.temp
-
 
 # Create message log for upload, based on logging 
 cat  ${TOOL_LOG} | grep -E 'WARNING|ERROR' | awk '{for(i=1;i<=NF;i++) { printf($i); if (i>=1 && i <= 3) {printf("\t")} else { printf(" ")}}; print ""}' > ${ROOTDIR}/pgsnap_cacheconfig.message.dat

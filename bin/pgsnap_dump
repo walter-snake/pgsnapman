@@ -65,7 +65,7 @@ function startpgsnapjob {
     if [ "${schema}" == "*" ]; then
       schema_part=""
     else
-      dumpoptions="--schema=${schema} ${dumpoptions}"
+      dumpoptions="--schema=\"${schema}\" ${dumpoptions}"
       schema_part="."${schema}
     fi
 
@@ -106,7 +106,7 @@ function startpgsnapjob {
     buname=${jobid}_${dbname}${schema_part}_${butype}_${INITIMESTAMP}
     log "INFO" "job id ${jobid} - ${jobtype} backup ${buname}"
     # Check postgres server version and binary availability 
-    pgversion=$(getpgversion "${pgsqlhost}" ${pgsqlport} ${pgsqlsuperuser} ${dbname})
+    pgversion=$(getpgversion "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${dbname}")
     if [ "${pgversion}" == "" ]; then
       log "ERROR" "job id ${jobid} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}"
       ERRORS=1
@@ -122,6 +122,7 @@ function startpgsnapjob {
       log "INFO" "job id ${jobid} - ${butype} dump started with options ${dumpoptions}"
       if [ "${butype}" == "CLUSTER_SCHEMA" ]; then
         ext=".sql"
+        snaplog "INFO" "dumping - ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -s -o -f ${jobdir}/${buname}${ext} -v"
         ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -s -o -f ${jobdir}/${buname}${ext} -v 2>> ${jobdir}/${buname}.log
         if [ "$?" == "0" ]; then
           gzip ${jobdir}/${buname}${ext}
@@ -143,6 +144,7 @@ function startpgsnapjob {
          ERRORS=1
         fi
         # db dump (possibly schema-only)
+        snaplog "INFO" "dumping - ${pgbin}/pg_dump ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} -b -o -Fd -f ${jobdir}/${buname} -v ${dbname}"
         ${pgbin}/pg_dump ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} -b -o -Fd -f ${jobdir}/${buname} -v ${dbname} 2>>  ${jobdir}/${buname}.log
         if [ "$?" != "0" ]; then
           log "ERROR" "job id ${jobid} - errors occured during pg_dump for ${buname}"

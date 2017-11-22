@@ -74,9 +74,9 @@ function getinstancestatus {
 # $3 user
 # $4 db name
 function getpgversion {
-  ${PGSCBIN}/psql ${pghost} -p ${2} -U ${3} --dbname=${4} -c "SELECT 1" &> /dev/null
+  ${PGSCBIN}/psql ${1} -p ${2} -U ${3} --dbname=${4} -c "SELECT 1" &> /dev/null
   if [ "$?" == "0" ]; then
-    local result=`${PGSCBIN}/psql ${pghost} -p ${2} -U ${3} --dbname=${4} -A -t -c "show server_version;"`
+    local result=`${PGSCBIN}/psql ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "show server_version;"`
     local pgv=$(echo "${result}" | cut -d '.' -f 1)$(echo "${result}" | cut -d '.' -f 2)
   else
     pgv=""

@@ -26,6 +26,15 @@ COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
 SET search_path = public, pg_catalog;
 
 --
+-- Name: get_hasjob(integer, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION get_hasjob(pgsql_id integer, dbname text) RETURNS text
+    LANGUAGE sql
+    AS $_$select 'YES'::text from pgsnap_dumpjob j join pgsql_instance p on p.id = j.pgsql_instance_id where pgsql_instance_id = $1 and dbname = $2;$_$;
+
+
+--
 -- Name: get_pgsnap_worker_cacheconfigcron(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -80,10 +89,10 @@ CREATE FUNCTION get_pgsql_instance_id(dns_name text, pgport integer) RETURNS int
 
 
 --
--- Name: getrndcron(integer); Type: FUNCTION; Schema: public; Owner: -
+-- Name: get_rndcron(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION getrndcron(pgsql_instance_id integer) RETURNS text
+CREATE FUNCTION get_rndcron(pgsql_instance_id integer) RETURNS text
     LANGUAGE plpgsql
     AS $$
 declare
@@ -96,7 +105,7 @@ begin
   length := extract('hour' from (('20000102T' || pgsqldata.bu_window_end || ':00')::timestamp without time zone - ('20000101T' || pgsqldata.bu_window_start || ':00')::timestamp without time zone)::interval)::integer * 60;
   select (random() * length)::integer into rnd;
   select (pgsqldata.bu_window_start || ':00')::time + (rnd::text || ' min')::interval into crontime;
-  return extract('hour' from crontime) || ' ' || extract('min' from crontime) || ' * * *';
+  return extract('min' from crontime) || ' ' || extract('hour' from crontime) || ' * * *' ;
 end;
 $$;
 
@@ -110,11 +119,20 @@ CREATE FUNCTION insert_set_cron() RETURNS trigger
     AS $$
 begin
   IF NEW.cron IS NULL OR NEW.cron = '' THEN
-    NEW.cron = getrndcron(NEW.pgsql_instance_id);
+    NEW.cron = get_rndcron(NEW.pgsql_instance_id);
   END IF;
   RETURN NEW;
 end;
 $$;
+
+
+--
+-- Name: put_dumpjob(integer, integer, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION put_dumpjob(pgsnapworkerid integer, pgsqlinstanceid integer, dbname text, comment text) RETURNS integer
+    LANGUAGE sql
+    AS $_$insert into pgsnap_dumpjob (pgsnap_worker_id, pgsql_instance_id, dbname, comment) values ($1, $2, $3, $4) returning id;$_$;
 
 
 SET default_tablespace = '';
@@ -142,6 +160,7 @@ CREATE TABLE pgsnap_dumpjob (
     status text DEFAULT 'ACTIVE'::text,
     jobtype text DEFAULT 'CRON'::text,
     pgsnap_restorejob_id integer DEFAULT (-1),
+    date_added timestamp without time zone DEFAULT now(),
     CONSTRAINT pgsnap_dumpjob_jobtype_check CHECK ((jobtype = ANY (ARRAY['CRON'::text, 'SINGLE'::text]))),
     CONSTRAINT pgsnap_dumpjob_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
 );
