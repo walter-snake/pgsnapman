@@ -79,6 +79,44 @@ CREATE FUNCTION get_pgsql_instance_id(dns_name text, pgport integer) RETURNS int
     AS $_$select id from pgsql_instance where dns_name = $1 and pgport = $2;$_$;
 
 
+--
+-- Name: getrndcron(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION getrndcron(pgsql_instance_id integer) RETURNS text
+    LANGUAGE plpgsql
+    AS $$
+declare
+  pgsqldata record;
+  crontime time;
+  length integer;
+  rnd integer;
+begin
+  select * into pgsqldata from pgsql_instance where id = pgsql_instance_id;
+  length := extract('hour' from (('20000102T' || pgsqldata.bu_window_end || ':00')::timestamp without time zone - ('20000101T' || pgsqldata.bu_window_start || ':00')::timestamp without time zone)::interval)::integer * 60;
+  select (random() * length)::integer into rnd;
+  select (pgsqldata.bu_window_start || ':00')::time + (rnd::text || ' min')::interval into crontime;
+  return extract('hour' from crontime) || ' ' || extract('min' from crontime) || ' * * *';
+end;
+$$;
+
+
+--
+-- Name: insert_set_cron(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION insert_set_cron() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+begin
+  IF NEW.cron IS NULL OR NEW.cron = '' THEN
+    NEW.cron = getrndcron(NEW.pgsql_instance_id);
+  END IF;
+  RETURN NEW;
+end;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_with_oids = false;
@@ -100,7 +138,7 @@ CREATE TABLE pgsnap_dumpjob (
     keep_monthly integer DEFAULT 5,
     keep_yearly integer DEFAULT 2,
     comment text,
-    cron text DEFAULT 'CRON'::text,
+    cron text,
     status text DEFAULT 'ACTIVE'::text,
     jobtype text DEFAULT 'CRON'::text,
     pgsnap_restorejob_id integer DEFAULT (-1),
@@ -247,6 +285,81 @@ ALTER SEQUENCE pgsnap_message_id_seq OWNED BY pgsnap_message.id;
 
 
 --
+-- Name: pgsnap_restorejob; Type: TABLE; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE TABLE pgsnap_restorejob (
+    id integer NOT NULL,
+    pgsnap_dumpjob_id integer,
+    dest_pgsql_instance_id integer,
+    dest_dbname text,
+    restoretype text DEFAULT 'FULL'::text,
+    restoreschema text DEFAULT '*'::text,
+    restoreoptions text DEFAULT ''::text,
+    existing_db text DEFAULT 'RENAME'::text,
+    cron text,
+    status text DEFAULT 'ACTIVE'::text,
+    comment text,
+    jobtype text DEFAULT 'SINGLE'::text,
+    CONSTRAINT pgsnap_restorejob_existing_db_check CHECK ((existing_db = ANY (ARRAY['DROP'::text, 'RENAME'::text]))),
+    CONSTRAINT pgsnap_restorejob_jobtype_check CHECK ((jobtype = ANY (ARRAY['SINGLE'::text, 'CRON'::text, 'TRIGGER'::text]))),
+    CONSTRAINT pgsnap_restorejob_restoretype_check CHECK ((restoretype = ANY (ARRAY['FULL'::text, 'DATA'::text, 'SCHEMA'::text]))),
+    CONSTRAINT pgsnap_restorejob_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
+);
+
+
+--
+-- Name: pgsnap_restorejob_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE pgsnap_restorejob_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: pgsnap_restorejob_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE pgsnap_restorejob_id_seq OWNED BY pgsnap_restorejob.id;
+
+
+--
+-- Name: pgsnap_singlerun; Type: TABLE; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE TABLE pgsnap_singlerun (
+    id integer NOT NULL,
+    jobid integer,
+    jobclass text,
+    runtime timestamp without time zone,
+    CONSTRAINT pgsnap_singlerun_jobclass_check CHECK ((jobclass = ANY (ARRAY['DUMP'::text, 'RESTORE'::text])))
+);
+
+
+--
+-- Name: pgsnap_singlerun_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE pgsnap_singlerun_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: pgsnap_singlerun_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE pgsnap_singlerun_id_seq OWNED BY pgsnap_singlerun.id;
+
+
+--
 -- Name: pgsnap_worker_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -354,6 +467,17 @@ CREATE VIEW vw_instance AS
 
 
 --
+-- Name: vw_pgsql_instance_bu_window_length; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW vw_pgsql_instance_bu_window_length AS
+ SELECT pgsql_instance.id,
+    pgsql_instance.bu_window_start AS start_hour,
+    ((date_part('hour'::text, (((('20000102T'::text || pgsql_instance.bu_window_end) || ':00'::text))::timestamp without time zone - ((('20000101T'::text || pgsql_instance.bu_window_start) || ':00'::text))::timestamp without time zone)))::integer * 60) AS length_min
+   FROM pgsql_instance;
+
+
+--
 -- Name: vw_worker; Type: VIEW; Schema: public; Owner: -
 --
 
@@ -387,6 +511,20 @@ ALTER TABLE ONLY pgsnap_dumpjob ALTER COLUMN id SET DEFAULT nextval('pgsnap_dump
 --
 
 ALTER TABLE ONLY pgsnap_message ALTER COLUMN id SET DEFAULT nextval('pgsnap_message_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY pgsnap_restorejob ALTER COLUMN id SET DEFAULT nextval('pgsnap_restorejob_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY pgsnap_singlerun ALTER COLUMN id SET DEFAULT nextval('pgsnap_singlerun_id_seq'::regclass);
 
 
 --
@@ -428,6 +566,22 @@ ALTER TABLE ONLY pgsnap_message
 
 
 --
+-- Name: pgsnap_restorejob_pkey; Type: CONSTRAINT; Schema: public; Owner: -; Tablespace: 
+--
+
+ALTER TABLE ONLY pgsnap_restorejob
+    ADD CONSTRAINT pgsnap_restorejob_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: pgsnap_singlerun_pkey; Type: CONSTRAINT; Schema: public; Owner: -; Tablespace: 
+--
+
+ALTER TABLE ONLY pgsnap_singlerun
+    ADD CONSTRAINT pgsnap_singlerun_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: pgsnap_worker_pkey; Type: CONSTRAINT; Schema: public; Owner: -; Tablespace: 
 --
 
@@ -455,6 +609,13 @@ CREATE UNIQUE INDEX pgsnap_worker_dns_name_idx ON pgsnap_worker USING btree (dns
 --
 
 CREATE UNIQUE INDEX pgsql_instance_dns_name_pgport_idx ON pgsql_instance USING btree (dns_name, pgport);
+
+
+--
+-- Name: set_cron; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_cron BEFORE INSERT ON pgsnap_dumpjob FOR EACH ROW EXECUTE PROCEDURE insert_set_cron();
 
 
 --
