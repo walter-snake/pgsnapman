@@ -94,6 +94,7 @@ CREATE TABLE pgsnap_dumpjob (
     dbname text,
     dumptype text DEFAULT 'FULL'::text,
     dumpschema text DEFAULT '*'::text,
+    dumpoptions text,
     keep_daily integer DEFAULT 14,
     keep_weekly integer DEFAULT 2,
     keep_monthly integer DEFAULT 5,
@@ -328,7 +329,8 @@ CREATE VIEW vw_dumpjob_worker_instance AS
     p.dns_name AS pgsql_instance_dns_name,
     p.pgport AS pgsql_instance_port,
     p.pgsql_superuser AS pgsql_instance_superuser,
-    j.pgsnap_restorejob_id
+    j.pgsnap_restorejob_id,
+    j.dumpoptions
    FROM ((pgsnap_dumpjob j
      JOIN pgsnap_worker b ON ((b.id = j.pgsnap_worker_id)))
      JOIN pgsql_instance p ON ((p.id = j.pgsql_instance_id)));

@@ -66,8 +66,8 @@ function uploaddata {
 # Tool log
 TOOL_LOG=${ROOTDIR}/pgsnap_cacheconfig.log 
 
-# Retrieve the worker id for this worker instance
-setworkerid `basename ${0}` "EXIT_ON_ERROR"
+# Set the worker id for this worker instance
+BUWORKERID=$(getworkerid "EXIT_ON_ERROR")
 
 # Display information
 if [ "$VERBOSITY" == "VERBOSE" ]; then

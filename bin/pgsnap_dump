@@ -14,18 +14,12 @@
 # 
 # Actual backups are usually started by cron on this machine, but you may invoke it with a backup id at any time.
 
-# ============================
-# Init stuff
-# ============================
-
-# Get a usable timestamp
-INITIMESTAMP=`date '+%Y%m%dT%H%M%S'`
-
-# Settings/cmd args
-CONFIGFILE=/etc/pgsnapman/pgsnapman.config
+# ======================================
+# Initialization
+# ======================================
 VERBOSITY=$3
 
-# Get the script directory 
+# Get the script directory (must do this first)
 SOURCE="${BASH_SOURCE[0]}"
 while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
   DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
@@ -34,94 +28,18 @@ while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symli
 done
 SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 
-# Try to find the config file, check and read
-if [ ! -e ${CONFIGFILE} ]; then
-  CONFIGFILE=${SCRIPTPATH}/pgsnapman.config
-fi
-if [ -e ${CONFIGFILE} ]; then
-. ${CONFIGFILE}
-else
-  echo "ERROR ${INITIMESTAMP} init upload failed - config file not found: ${CONFIGFILE}"
-  exit 1
-fi
+# Load functions, will also perform initialization operations
+. ${SCRIPTPATH}/pgsnap_lib
 
 # ============================
 # Functions
 # ============================
 
-# Gets the postgres server version
-# $1 hostname (use local for local pipe connections)
-# $2 port
-# $3 user
-# $4 db name
-function getpgversion {
-  if [ "${1}" == "local" ]; then
-    pghost=""
-  else
-    pghost="-h $1"
-  fi
-  ${PGSCBIN}/psql ${pghost} -p ${2} -U ${3} --dbname=${4} -c "SELECT 1" &> /dev/null
-  if [ "$?" == "0" ]; then
-    local result=`${PGSCBIN}/psql ${pghost} -p ${2} -U ${3} --dbname=${4} -A -t -c "show server_version;"`
-    local pgversion=$(echo "${result}" | cut -d '.' -f 1)$(echo "${result}" | cut -d '.' -f 2)
-  else
-    pgversion=""
-  fi
-  echo "${pgversion}"
-}
-
-# Verify if the pgsql instance is active
-# Check with catalog database (you can turn of dumps immediately), if not available, use cached info
-# Active wins, it will try to do something unless explicitly halted (if both active and halted files are present, active wins).
-# $1 instance name
-function isinstanceactive {
-  INSTANCESTATUS="ACTIVE"
-  instanceid=$(echo `basename "$1"` | cut -d '_' -f 1)
-  INSTANCESTATUS=`${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT status FROM pgsql_instance WHERE id = ${instanceid}"`
-  if [ "$?" != "0" ]; then
-    if [ -e $1/active ]; then
-      INSTANCESTATUS="ACTIVE"
-    else
-      INSTANCESTATUS="HALTED"
-    fi
-  fi  
-}
-
-# Get the actual size of the database, or a specific schema
-# $1 hostname (use local for local pipe connections)
-# $2 port
-# $3 user
-# $4 db name
-# $5 schema name ('*' represents entire database)
-function setdbsize {
-  if [ "$5" == "*" ]; then
-  sql="SELECT COALESCE(sum(total_bytes), -1) AS total_bytes FROM ( SELECT *, total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes \
-    FROM ( SELECT c.oid,nspname AS table_schema, relname AS TABLE_NAME , c.reltuples AS row_estimate , pg_total_relation_size(c.oid) AS total_bytes , \
-    pg_indexes_size(c.oid) AS index_bytes , pg_total_relation_size(reltoastrelid) AS toast_bytes \
-    FROM pg_class c \
-    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace \
-    WHERE relkind = 'r' ) a ) a;"
-  else
-  sql="SELECT COALESCE(sum(total_bytes),-1) AS total_bytes FROM ( SELECT *, total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes \
-    FROM ( SELECT c.oid,nspname AS table_schema, relname AS TABLE_NAME , c.reltuples AS row_estimate , pg_total_relation_size(c.oid) AS total_bytes , \
-    pg_indexes_size(c.oid) AS index_bytes , pg_total_relation_size(reltoastrelid) AS toast_bytes \
-    FROM pg_class c \
-    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace \
-    WHERE relkind = 'r' ) a ) a \
-    WHERE table_schema LIKE '$5' \
-    GROUP BY table_schema;"
-  fi
-  DBSIZE=`${pgbin}/psql -h ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "${sql}"`
-  if [ "${DBSIZE}" == "" ]; then
-    DBSIZE=-1
-  fi
-}
-
 # Start a specific dump job 
 # $1 path to postgres instance snapshot root directory
 # $2 id of job to start
 function startpgsnapjob {
-  echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_dump configuration - reading job info from $1/dumpjobs.list [$2]" >> ${PGSNAPMANLOG}
+  snaplog "INFO" "configuration - reading job info from $1/dumpjobs.list [$2]"
   grep -E "^${2}\|" $1/dumpjobs.list > $1/$$".running"
   jobchk=`cat $1/$$.running | wc -l | sed 's/[ \t]*//g'`
   if [ "${jobchk}" == "0" ]; then
@@ -142,14 +60,18 @@ function startpgsnapjob {
     jobstatus=$(echo "${line}" | cut -d '|' -f 13)
     jobtype=$(echo "${line}" | cut -d '|' -f 14)
     restorejobid=$(echo "${line}" | cut -d '|' -f 19)
+    dumpoptions=$(echo "${line}" | cut -d '|' -f 20)
     # Set schema_part for the dump name
-    dumpoptions=""
     if [ "${schema}" == "*" ]; then
       schema_part=""
     else
-      dumpoptions="--schema="${schema}
+      dumpoptions="--schema=${schema} ${dumpoptions}"
       schema_part="."${schema}
     fi
+
+    # Resolve host
+    pgsqlhost=$(resolvepghost ${pgsqlhost})
+
     # Display a lot of data in verbose mode
     if  [ "$VERBOSITY" == "VERBOSE" ]; then
       echo "PgSnapDump job data configuration"
@@ -178,72 +100,71 @@ function startpgsnapjob {
     mkdir -p ${jobdir}
 
     # Set logfile
-    JOBLOG=${jobdir}.log
+    TOOL_LOG=${jobdir}.log
 
     # Get timestamp, backup name, postgres version
     buname=${jobid}_${dbname}${schema_part}_${butype}_${INITIMESTAMP}
-    echo "INFO `date '+%Y%m%dT%H%M%S'` job id ${jobid} - ${jobtype} backup ${buname}" >> ${JOBLOG}
-    
+    log "INFO" "job id ${jobid} - ${jobtype} backup ${buname}"
     # Check postgres server version and binary availability 
-    pgversion=`getpgversion ${pgsqlhost} ${pgsqlport} ${pgsqlsuperuser} ${dbname}`
+    pgversion=$(getpgversion "${pgsqlhost}" ${pgsqlport} ${pgsqlsuperuser} ${dbname})
     if [ "${pgversion}" == "" ]; then
-      echo "ERROR `date '+%Y%m%dT%H%M%S'` job id ${jobid} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}"  >> ${JOBLOG}
+      log "ERROR" "job id ${jobid} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}"
       ERRORS=1
     else
       eval pgbinvar=PGBIN${pgversion}
       pgbin=${!pgbinvar}
     fi
     if [ ! -e ${pgbin}/pg_dump ]; then
-      echo "ERROR `date '+%Y%m%dT%H%M%S'` job id ${jobid} - job can not run - pg_dump not found, check PGBINxx paths in config file ${CONFIGFILE}" >> ${JOBLOG}
+      log "ERROR" "job id ${jobid} - job can not run - pg_dump not found, check PGBINxx paths in config file ${CONFIGFILE}"
       ERRORS=1
     else
       STARTTIME=`date '+%s'`
-      echo "INFO `date '+%Y%m%dT%H%M%S'` job id ${jobid} - ${butype} dump started with options ${dumpoptions}" >> ${JOBLOG}
+      log "INFO" "job id ${jobid} - ${butype} dump started with options ${dumpoptions}"
       if [ "${butype}" == "CLUSTER_SCHEMA" ]; then
         ext=".sql"
-        ${pgbin}/pg_dumpall -h ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -s -o -f ${jobdir}/${buname}${ext} -v 2>> ${jobdir}/${buname}.log
+        ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -s -o -f ${jobdir}/${buname}${ext} -v 2>> ${jobdir}/${buname}.log
         if [ "$?" == "0" ]; then
           gzip ${jobdir}/${buname}${ext}
           if [ "$?" == "0" ]; then
             ext=".sql.gz"
           else
-            echo "ERROR `date '+%Y%m%dT%H%M%S'` job id ${jobid} - errors occured during gzip for ${jobdir}/${buname}${ext}" >> ${JOBLOG}
+            log "ERROR" "job id ${jobid} - errors occured during gzip for ${jobdir}/${buname}${ext}"
             ERRORS=1
           fi
         else
-          echo "ERROR `date '+%Y%m%dT%H%M%S'` job id ${jobid} - errors occured during pg_dumpall (cluster schema) for ${buname}${ext}" >> ${JOBLOG}
+          log "ERROR" "job id ${jobid} - errors occured during pg_dumpall (cluster schema) for ${buname}${ext}"
           ERRORS=1
         fi
       else 
         # globals (tablespaces, users)
-        ${pgbin}/pg_dumpall -h ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -g -o -f ${jobdir}/${buname}.cluster_globals.sql -v 2>> ${jobdir}/${buname}.log
+        ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -g -o -f ${jobdir}/${buname}.cluster_globals.sql -v 2>> ${jobdir}/${buname}.log
         if [ "$?" != "0" ]; then
-          echo "ERROR `date '+%Y%m%dT%H%M%S'` job id ${jobid} - errors occured during pg_dumpall (globals) for ${buname}" >> ${JOBLOG}
+          log "ERROR" "job id ${jobid} - errors occured during pg_dumpall (globals) for ${buname}"
          ERRORS=1
         fi
         # db dump (possibly schema-only)
-        ${pgbin}/pg_dump -h ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} -b -o -Fd -f ${jobdir}/${buname} -v ${dbname} 2>>  ${jobdir}/${buname}.log
+        ${pgbin}/pg_dump ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} -b -o -Fd -f ${jobdir}/${buname} -v ${dbname} 2>>  ${jobdir}/${buname}.log
         if [ "$?" != "0" ]; then
-          echo "ERROR `date '+%Y%m%dT%H%M%S'` job id ${jobid} - errors occured during pg_dump for ${buname}" >> ${JOBLOG}
+          log "ERROR" "job id ${jobid} - errors occured during pg_dump for ${buname}"
           ERRORS=1
         fi
         # extract schema sql
-        ${pgbin}/pg_restore -h ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} --schema-only -f ${jobdir}/${buname}.schema -v ${jobdir}/${buname} 2>>  ${jobdir}/${buname}.log
+        ${pgbin}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} --schema-only -f ${jobdir}/${buname}.schema -v ${jobdir}/${buname} 2>>  ${jobdir}/${buname}.log
         if [ "$?" != "0" ]; then
-          echo `date '+%Y%m%dT%H%M%S'` "ERROR job id ${jobid} - errors occured during schema creation from dump for ${buname}" >> ${JOBLOG}
+          log "ERROR" "job id ${jobid} - errors occured during schema creation from dump for ${buname}"
           ERRORS=1
         fi
       fi
       # Size on disk
       SIZEONDISK=`du -k ${jobdir}/${buname}${ext} | awk '{print $1 * 1024}'`
       # Db Size
-      setdbsize ${pgsqlhost} ${pgsqlport} ${pgsqlsuperuser} ${dbname} "${schema}"
+      DBSIZE=$(getdbsize "${pgsqlhost}" ${pgsqlport} "${pgsqlsuperuser}" "${dbname}" "${schema}")
       if [ "${SIZEONDISK}" == "0" ]; then
         ERRORS=1
       fi
       ENDTIME=`date '+%s'`
       let "ELAPSEDTIME = $ENDTIME - $STARTTIME"
-      echo "INFO `date '+%Y%m%dT%H%M%S'` job id ${jobid} - dump ended - elapsed time ${ELAPSEDTIME}[s]" >> ${JOBLOG}
+      log "INFO" "job id ${jobid} - dump ended - elapsed time ${ELAPSEDTIME}[s]"
    fi
   done < $1/$$.running
   rm $1/$$.running
@@ -253,22 +174,14 @@ function startpgsnapjob {
 # MAIN
 # ===============================================================================
 
-# Started, write log entry (we can always continue)
-echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_dump init - psql_instance.job: [`basename ${1}`].[${2}]" >> ${PGSNAPMANLOG}
+# Start message
+snaplog "INFO" "init - psql_instance.job: [`basename ${1}`].[${2}]"
 
-# Own hostname, id, give warning when catalog server could not be contacted (not fatal, we only use the cache)
-FQDN=`hostname -f`
-BUWORKERID=`${PGSCBIN}/psql -h ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
-if [ "$?" != "0" ]; then
-  echo "WARNING `date '+%Y%m%dT%H%M%S'` pgsnap_dump init - could not connect catalog server (not fatal, continuing)" >> ${PGSNAPMANLOG}
-else
-  if [ "${BUWORKERID}" == "" ]; then
-    echo "WARNING `date '+%Y%m%dT%H%M%S'` pgsnap_dump init - worker has no jobs (not fatal, continuing)" >> ${PGSNAPMANLOG}
-  fi
-fi
+# Retrieve the worker id for this worker instance (we do not need the catalog db, so we can continue if not found)
+BUWORKERID=$(getworkerid "CONTINUE_ON_ERROR")
 
-# Get instance status
-isinstanceactive $1
+# Get pgsql instance status (the instance that contains the db to be backed up)
+INSTANCESTATUS=$(getinstancestatus ${1})
 
 # Display information
 if [ "$VERBOSITY" == "VERBOSE" ]; then
@@ -294,7 +207,7 @@ if [ "$VERBOSITY" == "VERBOSE" ]; then
 fi
 
 if [ "${INSTANCESTATUS}" == "HALTED" ]; then
-  echo "WARNING `date '+%Y%m%dT%H%M%S'` pgsnap_dump abandon job - psql_instance halted [`basename ${1}`]" >> ${PGSNAPMANLOG}
+  snaplog "WARNING" "abandon job - psql_instance halted [`basename ${1}`]"
   exit 0
 fi
 
@@ -303,14 +216,14 @@ startpgsnapjob $1 $2
 
 # Check results, log status etc.
 if [ "${RETVAL}" == "JOB_NOT_FOUND" ]; then
-  echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_dump configuration - psql_instance.job [`basename ${1}`].[${2}] has no job entry" >> ${PGSNAPMANLOG}
+  snaplog "ERROR" "configuration - psql_instance.job [`basename ${1}`].[${2}] has no job entry"
   exit 1
 fi
 
 if [ "$VERBOSITY" == "VERBOSE" ]; then
   echo "Dump location:   ${jobdir}"
   echo "Dump name:       ${buname}${ext}"
-  echo "General job log: ${JOBLOG}"
+  echo "General job log: ${TOOL_LOG}"
   echo "pg_dump log:     ${jobdir}/${buname}.log"
   echo ""
 fi
@@ -320,10 +233,10 @@ fi
 
 # Write status info for log and catalog
 if [ "${ERRORS}" == "1" ]; then
-  echo "ERROR `date '+%Y%m%dT%H%M%S'` pgsnap_dump finished - psql_instance.job [`basename ${1}`].[${2}] with errors, check: ${JOBLOG}" >> ${PGSNAPMANLOG}
+  snaplog "ERROR" "finished - psql_instance.job [`basename ${1}`].[${2}] with errors, check: ${TOOL_LOG}"
   jobresult="FAILED"
 else
-  echo "INFO `date '+%Y%m%dT%H%M%S'` pgsnap_dump finished - pgsql_instance.job [`basename ${1}`].[${2}]" >> ${PGSNAPMANLOG}
+  snaplog "INFO" "finished - pgsql_instance.job [`basename ${1}`].[${2}]"
   jobresult="SUCCESS"
 fi
 

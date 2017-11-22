@@ -35,12 +35,13 @@ SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 # Function definitions (script specific)
 # ======================================
 
-# Retrieves the worker configuration from the catalog database
+# Retrieves the worker configurations from the catalog database
+# $1 backup worker id (numeric)
 function getworkerconfig {
   # Get worker configuration
   ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT id,dns_name,comment, \
     cron_cacheconfig,cron_singlejob,cron_clean,cron_upload
-    FROM vw_worker ORDER BY id" > $ROOTDIR/pgsnap_worker.cron
+    FROM vw_worker WHERE id = $1" > $ROOTDIR/pgsnap_worker.cron
 }
 
 # Retrieves jobs from the configuration database
@@ -52,7 +53,7 @@ function getjobs {
   ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT id,pgsnap_worker_id,pgsql_instance_id,dbname,dumptype,dumpschema, \
       cron,keep_daily,keep_weekly,keep_monthly,keep_yearly, \
       comment,status,jobtype, \
-      pgsnap_worker_dns_name,pgsql_instance_dns_name,pgsql_instance_port,pgsql_instance_superuser,pgsnap_restorejob_id \
+      pgsnap_worker_dns_name,pgsql_instance_dns_name,pgsql_instance_port,pgsql_instance_superuser,pgsnap_restorejob_id,dumpoptions \
     FROM vw_dumpjob_worker_instance \
     WHERE pgsnap_worker_id = ${BUWORKERID} AND pgsql_instance_id = ${1} \
       AND jobtype = 'CRON' \
@@ -62,7 +63,7 @@ function getjobs {
     echo "Job data for postgres instance id: "$1
     echo "-------------------------------------"
     echo "Snapshot base directory: "$2
-    echo "id|pgsnap_worker_id|pgsql_instance_id|dbname|dumptype|dumpschema|cron|keep_daily|keep_weekly|keep_monthly|keep_yearly|comment|jobstatus|jobtype"
+    echo "id|pgsnap_worker_id|pgsql_instance_id|dbname|dumptype|dumpschema|cron|keep_daily|keep_weekly|keep_monthly|keep_yearly|comment|jobstatus|jobtype|dumpoptions"
     cat ${2}/dumpjobs.list
     echo ""
   fi
@@ -84,6 +85,7 @@ function preparejobs {
     dbname=$(echo "${line}" | cut -d '|' -f 4)
     butype=$(echo "${line}" | cut -d '|' -f 5)
     schema=$(echo "${line}" | cut -d '|' -f 6)
+    dumpoptions=$(echo "${line}" | cut -d '|' -f 20)
     cron=$(echo "${line}" | cut -d '|' -f 7)
     jobstatus=$(echo "${line}" | cut -d '|' -f 13)
     jobtype=$(echo "${line}" | cut -d '|' -f 14)
@@ -92,16 +94,13 @@ function preparejobs {
     if [ "${schema}" == "*" ]; then
       schema_part=""
     else
-      dumpoptions="--schema="${schema}
+      dumpoptions="--schema=${schema} ${dumpoptions}"
       schema_part="."${schema}
     fi
 
-    if [ "${pgsqlhost}" == "local" ]; then
-      pgsqlhost=""
-    else
-      pgsqlhost="-h ${pgsqlhost}"
-    fi
-
+    # Resolve host
+    pgsqlhost=$(resolvepghost ${pgsqlhost})
+    
     # Display a lot of data in verbose mode
     if  [ "$VERBOSITY" == "VERBOSE" ]; then
       echo "jobid:          ${jobid}"
@@ -129,18 +128,18 @@ function preparejobs {
     # For active jobs, try to verify the database connection and postgresql version
     if [ "${jobstatus}" == "ACTIVE" ]; then
       # Check postgres instance version
-      setpgversion "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${dbname}"
-      if [ "${PGVERSION}" == "" ]; then
+      pgversion=$(getpgversion "${pgsqlhost}" ${pgsqlport} ${pgsqlsuperuser} ${dbname})
+      if [ "${pgversion}" == "" ]; then
         log "WARNING" "job id ${jobid} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part} - pg_dump version can not be verified, leaving job in place"
       else
         # Get pg bin path for this version
-        eval pgbinvar=PGBIN${PGVERSION}
+        eval pgbinvar=PGBIN${pgversion}
         pgbin=${!pgbinvar}
       fi
       # Verify if pg_dump is available, disable when db connection could be made, version
       # checked and pg_dump not available (this is the only guaranteed problem, databases
       # could become available later).
-      if [ "${PGVERSION}" != "" ]; then
+      if [ "${pgversion}" != "" ]; then
         if [ ! -e ${pgbin}/pg_dump ]; then
           PRE="# "
           log "ERROR" "job id ${jobid} - job is disabled as pg_dump could not be found, check pgbinxx paths in config file ${CONFIGFILE})"
@@ -167,11 +166,11 @@ function preparejobs {
 # Tool log
 TOOL_LOG=${ROOTDIR}/pgsnap_cacheconfig.log 
 
-# Retrieve the worker id for this worker instance
-setworkerid `basename ${0}` "EXIT_ON_ERROR"
+# Set the worker id for this worker instance
+BUWORKERID=$(getworkerid "EXIT_ON_ERROR")
 
 # Download de worker configuration (based on id)
-getworkerconfig
+getworkerconfig ${BUWORKERID} 
 
 # Create the central pgsnapman dump directory
 mkdir -p ${ROOTDIR}
@@ -184,7 +183,8 @@ echo "# pgsnapman ##############################################################
 echo "# pgsnapman jobs created at ${INITIMESTAMP}" >> ${ROOTDIR}/cron_snapjobs.temp
 echo "# pgsnapman ###################################################################" >> ${ROOTDIR}/cron_snapjobs.temp
 
-# Add crontab entries for own job from worker config
+# Add crontab entries for own cron job from worker config
+# Must be one line, no filtering
 while read line; do
   CACHECONFIGCRON=$(echo "${line}" | cut -d '|' -f 4)
   SINGLEJOBCRON=$(echo "${line}" | cut -d '|' -f 5)

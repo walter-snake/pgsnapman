@@ -9,7 +9,7 @@ CONFIGFILE=/etc/pgsnapman/pgsnapman.config
 # $1: log level
 # $2: log message
 function snaplog {
-  echo "$1 `date '+%Y%m%dT%H%M%S'` ${TOOLNAME} ${2}" >> ${PGSNAPMANLOG}
+  echo "`date '+%Y%m%dT%H%M%S'` $1 ${TOOLNAME} ${2}" >> ${PGSNAPMANLOG}
 }
 
 # Write a log entry to the tool log
@@ -24,41 +24,104 @@ function log {
   fi
 }
 
-# Sets the postgres server version
-# $1 hostname ( "-h <hostname>" or "" )
+# Gets pgsnap_worker id (quit on error if requested)
+# $1 EXIT_ON_ERROR or anything else, nothing
+function getworkerid {
+  local bwid=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
+  if [ "$?" != "0" ] || [ "${bwid}" == "" ]; then
+    if [ "${1}" == "EXIT_ON_ERROR" ]; then
+      snaplog "ERROR" "init - could not connect to catalog database (fatal)"
+      exit 2
+    else
+      snaplog "WARNING" "init - could not connect to catalog database (ignored)"
+    fi
+  fi
+  echo "${bwid}"
+}
+
+# Get the hostname, resolve 'local' connections
+# $1 FQDN psotgres host
+function resolvepghost {
+  if [ "${1}" == "local" ]; then
+    local pgh=""
+  else
+    local pgh="-h ${1}"
+  fi
+  echo "${pgh}"
+}
+
+# Get (catalog) status of the postgres instance
+# Check with catalog database (you can turn of dumps immediately), if not available, use cached info
+# Active wins, it will try to do something unless explicitly halted (if both active and halted files are present, active wins).
+# $1 instance name as formatted in directory <id>_<fqdn>_<port>
+function getinstancestatus {
+  local instancestatus="UNKNOWN"
+  local instanceid=$(echo `basename "$1"` | cut -d '_' -f 1)
+  instancestatus=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT status FROM pgsql_instance WHERE id = ${instanceid}"`
+  if [ "$?" != "0" ]; then
+    if [ -e $1/active ]; then
+      instancestatus="ACTIVE"
+    else
+      instancestatus="HALTED"
+    fi
+  fi
+  echo "${instancestatus}"
+}
+
+# Gets the postgres server version
+# $1 hostname (use local for local pipe connections)
 # $2 port
 # $3 user
 # $4 db name
-function setpgversion {
-  ${PGSCBIN}/psql ${1} -p ${2} -U ${3} --dbname=${4} -c "SELECT 1" &> /dev/null
+function getpgversion {
+  ${PGSCBIN}/psql ${pghost} -p ${2} -U ${3} --dbname=${4} -c "SELECT 1" &> /dev/null
   if [ "$?" == "0" ]; then
-    local result=`${PGSCBIN}/psql ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "show server_version;"`
-    PGVERSION=$(echo "${result}" | cut -d '.' -f 1)$(echo "${result}" | cut -d '.' -f 2)
+    local result=`${PGSCBIN}/psql ${pghost} -p ${2} -U ${3} --dbname=${4} -A -t -c "show server_version;"`
+    local pgv=$(echo "${result}" | cut -d '.' -f 1)$(echo "${result}" | cut -d '.' -f 2)
   else
-    PGVERSION=""
+    pgv=""
   fi
+  echo "${pgv}"
 }
 
-# Own hostname, id (quit on error if requested)
-# $1 tool_name
-# $2 EXIT_ON_ERROR or anything else, nothing
-function setworkerid {
-  FQDN=`hostname -f`
-  BUWORKERID=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
-  if [ "$?" != "0" ] || [ "${BUWORKERID}" == "" ]; then
-    if [ "${2}" == "EXIT_ON_ERROR" ]; then
-      snaplog "ERROR" "init - could not connect catalog server (fatal)" >> ${PGSNAPMANLOG}
-      exit 2
-    else
-      snaplog "WARNING" "init - could not connect catalog server (ignored)" >> ${PGSNAPMANLOG}
-    fi
+
+# Get the actual size of the database, or a specific schema
+# $1 hostname (use local for local pipe connections)
+# $2 port
+# $3 user
+# $4 db name
+# $5 schema name ('*' represents entire database)
+function getdbsize {
+  if [ "$5" == "*" ]; then
+    local sql="SELECT COALESCE(sum(total_bytes), -1) AS total_bytes FROM ( SELECT *, total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes \
+    FROM ( SELECT c.oid,nspname AS table_schema, relname AS TABLE_NAME , c.reltuples AS row_estimate , pg_total_relation_size(c.oid) AS total_bytes , \
+    pg_indexes_size(c.oid) AS index_bytes , pg_total_relation_size(reltoastrelid) AS toast_bytes \
+    FROM pg_class c \
+    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace \
+    WHERE relkind = 'r' ) a ) a;"
+  else
+    local sql="SELECT COALESCE(sum(total_bytes),-1) AS total_bytes FROM ( SELECT *, total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes \
+    FROM ( SELECT c.oid,nspname AS table_schema, relname AS TABLE_NAME , c.reltuples AS row_estimate , pg_total_relation_size(c.oid) AS total_bytes , \
+    pg_indexes_size(c.oid) AS index_bytes , pg_total_relation_size(reltoastrelid) AS toast_bytes \
+    FROM pg_class c \
+    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace \
+    WHERE relkind = 'r' ) a ) a \
+    WHERE table_schema LIKE '$5' \
+    GROUP BY table_schema;"
   fi
+  local dbsize=`${pgbin}/psql ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "${sql}"`
+  if [ "${dbsize}" == "" ]; then
+    dbsize=-1
+  fi
+  echo "${dbsize}"
 }
 
 # =====================================
 # Init actions
 # =====================================
 
+# Set hostname
+FQDN=`hostname -f`
 
 # Try to find the config file, check and read
 if [ ! -e ${CONFIGFILE} ]; then
@@ -87,12 +150,5 @@ snaplog "INFO" "init - using config: ${CONFIGFILE}"
 INITIMESTAMP=`date '+%Y%m%dT%H%M%S'`
 
 # Set the hostname for the pgsnapman database
-if [ "${PGSCHOST}" == "local" ]; then
-  PGSCHOST=""
-else
-  PGSCHOST="-h ${PGSCHOST}"
-fi
-
-# Catalog db version
-setpgversion "${PGSCHOST}" "${PGSCPORT}" "${PGSCUSER}" "${PGSCDB}"
+PGSCHOST=$(resolvepghost ${PGSCHOST})
 
