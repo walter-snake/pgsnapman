@@ -25,15 +25,15 @@ function log {
 }
 
 # Gets pgsnap_worker id (quit on error if requested)
-# $1 EXIT_ON_ERROR or anything else, nothing
+# Requires PGSCDB_REQUIRED to be set (before sourcing this library)
 function getworkerid {
   local bwid=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
   if [ "$?" != "0" ] || [ "${bwid}" == "" ]; then
-    if [ "${1}" == "EXIT_ON_ERROR" ]; then
+    if [ "${PGSCDB_REQUIRED}" == "NO" ]; then
+      snaplog "WARNING" "init - could not connect to catalog database (ignored)"
+    else
       snaplog "ERROR" "init - could not connect to catalog database (fatal)"
       exit 2
-    else
-      snaplog "WARNING" "init - could not connect to catalog database (ignored)"
     fi
   fi
   echo "${bwid}"
@@ -55,17 +55,47 @@ function resolvepghost {
 # Active wins, it will try to do something unless explicitly halted (if both active and halted files are present, active wins).
 # $1 instance name as formatted in directory <id>_<fqdn>_<port>
 function getinstancestatus {
+  # Init/activate by default
+  if [ ! -e ${DUMPSNAP}/${1}/status ]; then
+    echo "ACTIVE" > "${DUMPSNAP}/${1}/status" 
+  fi
+  # Get data from server
   local instancestatus="UNKNOWN"
   local instanceid=$(echo `basename "$1"` | cut -d '_' -f 1)
   instancestatus=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT status FROM pgsql_instance WHERE id = ${instanceid}"`
   if [ "$?" != "0" ]; then
-    if [ -e $1/active ]; then
-      instancestatus="ACTIVE"
-    else
-      instancestatus="HALTED"
+      instancestatus=`cat ${DUMPSNAP}/${1}/status`
+  else
+    # compare with cached version, if different: store the current value
+    if [ "${instancestatus}" != "`cat ${DUMPSNAP}/${1}/status`" ]; then
+      echo "${instancestatus}" > "${DUMPSNAP}/${1}/status"
+      snaplog "INFO" "instance status changed to: ${instancestatus}"
     fi
   fi
+
   echo "${instancestatus}"
+}
+
+# Get (catalog) status of the worker instance
+# Check with catalog database (you can turn of workers immediately), if not available, use cached info
+function getworkerstatus {
+  # Init/activate by default
+  if [ ! -e ${ROOTDIR}/status ]; then
+    echo "ACTIVE" > "${ROOTDIR}/status" 
+  fi
+  # Get data from server
+  local workerstatus="UNKNOWN"
+  workerstatus=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT status FROM pgsnap_worker WHERE id = ${BUWORKERID}"`
+  if [ "$?" != "0" ]; then
+      workerstatus=`cat ${ROOTDIR}/status`
+  else
+    # compare with cached version, if different: store the current value
+    if [ "${workerstatus}" != "`cat ${ROOTDIR}/status`" ]; then
+      echo "${workerstatus}" > "${ROOTDIR}/status"
+      snaplog "INFO" "worker status changed to: ${workerstatus}"
+    fi
+  fi
+  echo "${workerstatus}"
 }
 
 # Gets the postgres server version
@@ -143,12 +173,20 @@ fi
 # Set toolname
 TOOLNAME=`basename $0`
 
-# Write tool init log entry
-snaplog "INFO" "init - using config: ${CONFIGFILE}"
-
 # Get a timestamp
 INITIMESTAMP=`date '+%Y%m%dT%H%M%S'`
 
 # Set the hostname for the pgsnapman database
 PGSCHOST=$(resolvepghost ${PGSCHOST})
+
+# Retrieve the worker id for this worker instance (we do not need the catalog db, so we can continue if not found)
+BUWORKERID=$(getworkerid)
+
+# Get worker status, quit if HALTED (any tool will quit when the worker is halted)
+if [ "$(getworkerstatus)" == "HALTED" ]; then
+  exit 6
+fi
+
+# Write tool init log entry
+snaplog "INFO" "init - using config: ${CONFIGFILE}"
 

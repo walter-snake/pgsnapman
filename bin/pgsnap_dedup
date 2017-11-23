@@ -20,6 +20,9 @@ while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symli
 done
 SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 
+# Catalog database needed?
+PGSCDB_REQUIRED=NO
+
 # Load functions, will also perform initialization operations
 . ${SCRIPTPATH}/pgsnap_lib
 
@@ -27,19 +30,16 @@ SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 # MAIN
 # ===================================
 
-# Check if MD5PROG, exist, otherwise clean exit.
-if [ ! -e "${MD5PROG}" ]; then
+# Check if CHKSUMPROG, exist, otherwise clean exit.
+if [ ! -e "${CHKSUMPROG}" ]; then
   exit 0
 fi
 
 # Start message
 snaplog "INFO" "processing - dump: ${1}"
 
-# Retrieve the worker id for this worker instance (we do not need the catalog db, so we can continue if not found)
-BUWORKERID=$(getworkerid "CONTINUE_ON_ERROR")
-
 # Build md5 index of the specified directory
-find ${1} -type f -name '*.dat.gz' -exec ${MD5PROG} ${MD5OPTIONS} {} \; > ${1}.md5
+find ${1} -type f -name '*.dat.gz' -exec ${CHKSUMPROG} ${CHKSUMPROG_OPTIONS} {} \; > ${1}.chksum
 
 # Init dumpsize, dedupsize
 dumpsize=`stat -f %z ${1}/toc.dat`
@@ -66,7 +66,7 @@ do
     mv ${file} ${fileindex}/${md5}
   fi
   ln -s ${fileindex}/${md5} ${file}
-done < ${1}.md5
+done < ${1}.chksum
 
 sizeperc=`echo "${dumpsize} ${dedupsize}" | awk '{ printf "%.0f", ($2/$1) * 100; }'`
 snaplog "INFO" "finished - `basename ${1}` - exist files ${ec} - remain size ${sizeperc}%"

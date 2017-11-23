@@ -18,6 +18,7 @@
 # Initialization
 # ======================================
 VERBOSITY=$3
+STARTTYPE=$4
 
 # Get the script directory (must do this first)
 SOURCE="${BASH_SOURCE[0]}"
@@ -27,6 +28,9 @@ while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symli
   [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
 done
 SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+
+# Catalog database needed?
+PGSCDB_REQUIRED=NO
 
 # Load functions, will also perform initialization operations
 . ${SCRIPTPATH}/pgsnap_lib
@@ -177,10 +181,7 @@ function startpgsnapjob {
 # ===============================================================================
 
 # Start message
-snaplog "INFO" "init - psql_instance.job: [`basename ${1}`].[${2}]"
-
-# Retrieve the worker id for this worker instance (we do not need the catalog db, so we can continue if not found)
-BUWORKERID=$(getworkerid "CONTINUE_ON_ERROR")
+snaplog "INFO" "init - pgsql_instance.job: [`basename ${1}`].[${2}]"
 
 # Get pgsql instance status (the instance that contains the db to be backed up)
 INSTANCESTATUS=$(getinstancestatus ${1})
@@ -208,8 +209,8 @@ if [ "$VERBOSITY" == "VERBOSE" ]; then
   echo ""
 fi
 
-if [ "${INSTANCESTATUS}" == "HALTED" ]; then
-  snaplog "WARNING" "abandon job - psql_instance halted [`basename ${1}`]"
+if [ "${INSTANCESTATUS}" == "HALTED" ] && [ "${STARTTYPE}" == "CRON" ]; then
+  snaplog "WARNING" "abandon job - pgsql_instance halted [`basename ${1}`]"
   exit 0
 fi
 
@@ -218,7 +219,7 @@ startpgsnapjob $1 $2
 
 # Check results, log status etc.
 if [ "${RETVAL}" == "JOB_NOT_FOUND" ]; then
-  snaplog "ERROR" "configuration - psql_instance.job [`basename ${1}`].[${2}] has no job entry"
+  snaplog "ERROR" "configuration - pgsql_instance.job [`basename ${1}`].[${2}] has no job entry"
   exit 1
 fi
 
@@ -235,10 +236,10 @@ fi
 
 # Write status info for log and catalog
 if [ "${ERRORS}" == "1" ]; then
-  snaplog "ERROR" "finished - psql_instance.job [`basename ${1}`].[${2}] with errors, check: ${TOOL_LOG}"
+  snaplog "ERROR" "finished - pgsql_instance.job [`basename ${1}`].[${2}] with errors, check: ${TOOL_LOG}"
   jobresult="FAILED"
 else
-  snaplog "INFO" "finished - pgsql_instance.job [`basename ${1}`].[${2}]"
+  snaplog "INFO" "finished - pggsql_instance.job [`basename ${1}`].[${2}]"
   jobresult="SUCCESS"
 fi
 
@@ -253,7 +254,7 @@ if [ "${jobresult}" == "SUCCESS" ]; then
     ${SCRIPTPATH}/pgsnap_dedup ${jobdir}/${buname}
   fi
   if [ "${restorejobid}" != "-1" ]; then
-    ${SCRIPTPATH}/pgsnap_restore ${restorejobid} ${jobdir}/${buname}
+    ${SCRIPTPATH}/pgsnap_restore ${restorejobid} ${jobdir}/${buname} TRIGGER
   fi
   exit 0
 else

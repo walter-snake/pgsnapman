@@ -32,15 +32,13 @@ PGSCPORT=5432
 PGSCUSER=postgres
 
 # Miscellaneous
-# Full path to the MD5 program to use (empty turns of deduplication)
-# Miscellaneous
-# Full path to the MD5 program to use (empty turns of deduplication)
-# Could be a script, output must be formatted as md5_checksum<space>full_file_path
-MD5PROG="/sbin/md5"
-MD5OPTIONS="-r"
+# Full path to your checksum program to use (empty turns off deduplication)
+# Could be a script, output must be formatted as <checksum><space><full_file_path>
+CHKSUMPROG="/sbin/md5"
+CHKSUMPROG_OPTIONS="-r"
 
 # Auto add unlisted database
-DATABASEJOBS=AUTO_ADD
+AUTO_DUMPJOB=YES
 
 # Maintenance db (must be present on every pgsql instance)
 MAINTDB=postgres

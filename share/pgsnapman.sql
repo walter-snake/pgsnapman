@@ -26,6 +26,17 @@ COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
 SET search_path = public, pg_catalog;
 
 --
+-- Name: get_defaultworker(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION get_defaultworker(pgsqlinstance integer) RETURNS integer
+    LANGUAGE sql
+    AS $_$
+select pgsnap_worker_id_default from pgsql_instance where id = $1;
+$_$;
+
+
+--
 -- Name: get_hasjob(integer, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -111,28 +122,41 @@ $$;
 
 
 --
--- Name: insert_set_cron(); Type: FUNCTION; Schema: public; Owner: -
+-- Name: insert_dumpjob(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION insert_set_cron() RETURNS trigger
+CREATE FUNCTION insert_dumpjob() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 begin
   IF NEW.cron IS NULL OR NEW.cron = '' THEN
     NEW.cron = get_rndcron(NEW.pgsql_instance_id);
   END IF;
+  IF NEW.pgsnap_worker_id IS NULL THEN
+    NEW.pgsnap_worker_id = get_defaultworker(NEW.pgsql_instance_id);
+  END IF;
+  
   RETURN NEW;
 end;
 $$;
 
 
 --
--- Name: put_dumpjob(integer, integer, text, text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: put_dumpjob(integer, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION put_dumpjob(pgsnapworkerid integer, pgsqlinstanceid integer, dbname text, comment text) RETURNS integer
+CREATE FUNCTION put_dumpjob(pgsqlinstanceid integer, dbname text, comment text) RETURNS integer
     LANGUAGE sql
-    AS $_$insert into pgsnap_dumpjob (pgsnap_worker_id, pgsql_instance_id, dbname, comment) values ($1, $2, $3, $4) returning id;$_$;
+    AS $_$insert into pgsnap_dumpjob (pgsql_instance_id, dbname, comment) values ($1, $2, $3) returning id;$_$;
+
+
+--
+-- Name: put_dumpjob(integer, integer, text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION put_dumpjob(pgsnapworkerid integer, pgsqlinstanceid integer, dbname text, schemaname text, comment text) RETURNS integer
+    LANGUAGE sql
+    AS $_$insert into pgsnap_dumpjob (pgsnap_worker_id, pgsql_instance_id, dbname, dumpschema, comment) values ($1, $2, $3, $4, $5) returning id;$_$;
 
 
 SET default_tablespace = '';
@@ -145,9 +169,9 @@ SET default_with_oids = false;
 
 CREATE TABLE pgsnap_dumpjob (
     id integer NOT NULL,
-    pgsnap_worker_id integer,
-    pgsql_instance_id integer,
-    dbname text,
+    pgsnap_worker_id integer NOT NULL,
+    pgsql_instance_id integer NOT NULL,
+    dbname text NOT NULL,
     dumptype text DEFAULT 'FULL'::text,
     dumpschema text DEFAULT '*'::text,
     dumpoptions text,
@@ -156,7 +180,7 @@ CREATE TABLE pgsnap_dumpjob (
     keep_monthly integer DEFAULT 5,
     keep_yearly integer DEFAULT 2,
     comment text,
-    cron text,
+    cron text NOT NULL,
     status text DEFAULT 'ACTIVE'::text,
     jobtype text DEFAULT 'CRON'::text,
     pgsnap_restorejob_id integer DEFAULT (-1),
@@ -172,12 +196,14 @@ CREATE TABLE pgsnap_dumpjob (
 
 CREATE TABLE pgsnap_worker (
     id integer NOT NULL,
-    dns_name text,
+    dns_name text NOT NULL,
     comment text,
     cron_cacheconfig text DEFAULT '15 20 * * *'::text,
     cron_singlejob text DEFAULT '* * * * *'::text,
     cron_clean text DEFAULT '15 18 * * *'::text,
-    cron_upload text DEFAULT '*/5 * * * *'::text
+    cron_upload text DEFAULT '*/5 * * * *'::text,
+    status text DEFAULT 'ACTIVE'::text,
+    CONSTRAINT pgsnap_worker_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
 );
 
 
@@ -194,7 +220,7 @@ CREATE TABLE pgsql_instance (
     status text DEFAULT 'ACTIVE'::text,
     bu_window_start integer DEFAULT 2,
     bu_window_end integer DEFAULT 6,
-    pgsql_worker_id_default integer,
+    pgsnap_worker_id_default integer,
     CONSTRAINT pgsql_instance_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
 );
 
@@ -481,7 +507,7 @@ CREATE VIEW vw_instance AS
     pgsql_instance.status,
     pgsql_instance.bu_window_start,
     pgsql_instance.bu_window_end,
-    pgsql_instance.pgsql_worker_id_default
+    pgsql_instance.pgsnap_worker_id_default AS pgsql_worker_id_default
    FROM pgsql_instance;
 
 
@@ -617,6 +643,13 @@ ALTER TABLE ONLY pgsql_instance
 
 
 --
+-- Name: fki_pgsnap_dumpjob_pgsnap_worker; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE INDEX fki_pgsnap_dumpjob_pgsnap_worker ON pgsnap_dumpjob USING btree (pgsnap_worker_id);
+
+
+--
 -- Name: pgsnap_worker_dns_name_idx; Type: INDEX; Schema: public; Owner: -; Tablespace: 
 --
 
@@ -631,10 +664,26 @@ CREATE UNIQUE INDEX pgsql_instance_dns_name_pgport_idx ON pgsql_instance USING b
 
 
 --
--- Name: set_cron; Type: TRIGGER; Schema: public; Owner: -
+-- Name: insert_pgsnap_dumpjob; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER set_cron BEFORE INSERT ON pgsnap_dumpjob FOR EACH ROW EXECUTE PROCEDURE insert_set_cron();
+CREATE TRIGGER insert_pgsnap_dumpjob BEFORE INSERT ON pgsnap_dumpjob FOR EACH ROW EXECUTE PROCEDURE insert_dumpjob();
+
+
+--
+-- Name: fk_pgsnap_dumpjob_pgsnap_worker; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY pgsnap_dumpjob
+    ADD CONSTRAINT fk_pgsnap_dumpjob_pgsnap_worker FOREIGN KEY (pgsnap_worker_id) REFERENCES pgsnap_worker(id);
+
+
+--
+-- Name: fk_pgsnap_dumpjob_pgsql_instance; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY pgsnap_dumpjob
+    ADD CONSTRAINT fk_pgsnap_dumpjob_pgsql_instance FOREIGN KEY (pgsql_instance_id) REFERENCES pgsql_instance(id);
 
 
 --

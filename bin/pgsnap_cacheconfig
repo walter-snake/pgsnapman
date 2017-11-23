@@ -28,6 +28,9 @@ while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symli
 done
 SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 
+# Catalog database needed?
+PGSCDB_REQUIRED=YES
+
 # Load functions, will also perform initialization operations
 . ${SCRIPTPATH}/pgsnap_lib
 
@@ -154,8 +157,8 @@ function preparejobs {
       echo "# WARNING pgsnapman job is disabled by user" >> ${ROOTDIR}/cron_snapjobs.temp
     fi
     # Write cron entry
-    echo "${PRE}${cron} ${SCRIPTPATH}/pgsnap_dump ${1} ${jobid}" >> ${ROOTDIR}/cron_snapjobs.temp
-    log "INFO" "job id ${jobid} - cron entry created: ${PRE}${cron} ${SCRIPTPATH}/pgsnap_dump ${1} ${jobid}"
+    echo "${PRE}${cron} ${SCRIPTPATH}/pgsnap_dump ${1} ${jobid} SILENT CRON" >> ${ROOTDIR}/cron_snapjobs.temp
+    log "INFO" "job id ${jobid} - cron entry created: ${PRE}${cron} ${SCRIPTPATH}/pgsnap_dump ${1} ${jobid} SILENT CRON"
   done < $1/dumpjobs.list
 }
 
@@ -172,19 +175,19 @@ function createdumpjobs {
   local pgsqlhost=$(resolvepghost ${2})
 
   # Find the databases (exclude templates and all database that you cannot connect to)
-  local DBS=`psql ${pgsqlhost} -p ${3} -U ${4} --dbname=${MAINTDB} -A -t -c "SELECT datname FROM pg_database WHERE datistemplate = false AND datallowconn = true;"` 2> /dev/null
+  # Too lazy too look for the correct postgres binary version, not really important for this plain simple query 
+  local DBS=`${PGSCBIN}/psql ${pgsqlhost} -p ${3} -U ${4} --dbname=${MAINTDB} -A -t -c "SELECT datname FROM pg_database WHERE datistemplate = false AND datallowconn = true;"` 2> /dev/null
   if [ "$?" != "0" ]; then
-    echo "ERREUR"
     return
   fi
 
   # Process the database list
   local c=0
   for line in ${DBS}; do
-    local HASJOB=`psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT get_hasjob(${1}, '${line}');"`
+    local HASJOB=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT get_hasjob(${1}, '${line}');"`
     if [ "${HASJOB}" != "YES" ]; then
       echo "add database: ${fqdnhost}:${3}/${line}"
-      local jobid=`psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT put_dumpjob(${BUWORKERID}, ${1}, '${line}', 'auto added dump job');"`
+      local jobid=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT put_dumpjob(${1}, '${line}', 'auto added dump job');"`
       echo "new dump job created with id: ${jobid}"
       let "c = c + 1"
     fi
@@ -200,9 +203,6 @@ function createdumpjobs {
 
 # Tool log
 TOOL_LOG=${ROOTDIR}/pgsnap_cacheconfig.log 
-
-# Set the worker id for this worker instance
-BUWORKERID=$(getworkerid "EXIT_ON_ERROR")
 
 # Download de worker configuration (based on id)
 getworkerconfig ${BUWORKERID} 
@@ -286,16 +286,9 @@ while read line; do
   fi
   echo "PGPORT="${pgport} >> ${pgconninfo}
   echo "PGUSER="${pguser} >> ${pgconninfo}
-  if [ "${pgstatus}" == "ACTIVE" ]; then
-    touch ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}/active
-    rm -f ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}/halted
-  else
-    touch ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}/halted
-    rm -f ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}/active
-  fi
 
   # Check the pgsql_instances for unlisted databases, when instance is active and this backup worker is the default backup worker
-  if [ "${DATABASEJOBS}" == "AUTO_ADD" ] && [ "${defworkerid}" == "${BUWORKERID}" ] && [ "$(getinstancestatus ${pgid})" == "ACTIVE" ]; then
+  if [ "${AUTO_DUMPJOB}" == "YES" ] && [ "${defworkerid}" == "${BUWORKERID}" ] && [ "$(getinstancestatus ${pgid}_${pgdns}_${pgport})" == "ACTIVE" ]; then
     createdumpjobs ${pgid} ${pgdns} ${pgport} ${pguser}
   fi
 
