@@ -81,7 +81,7 @@ function getinstancestatus {
 function getworkerstatus {
   # Init/activate by default
   if [ ! -e ${ROOTDIR}/status ]; then
-    echo "ACTIVE" > "${ROOTDIR}/status" 
+    echo "ACTIVE" > ${ROOTDIR}/status 
   fi
   # Get data from server
   local workerstatus="UNKNOWN"
@@ -91,7 +91,7 @@ function getworkerstatus {
   else
     # compare with cached version, if different: store the current value
     if [ "${workerstatus}" != "`cat ${ROOTDIR}/status`" ]; then
-      echo "${workerstatus}" > "${ROOTDIR}/status"
+      echo "${workerstatus}" > ${ROOTDIR}/status
       snaplog "INFO" "worker status changed to: ${workerstatus}"
     fi
   fi
@@ -146,6 +146,14 @@ function getdbsize {
   echo "${dbsize}"
 }
 
+# Mark a single run job as started in the database
+# $1 jobid
+# $2 job class/type [DUMP|RESTORE]
+function setsinglerunstarted {
+  local sql="SELECT put_singlerun($1, '$2')"
+  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" > /dev/null
+}
+
 # =====================================
 # Init actions
 # =====================================
@@ -161,6 +169,16 @@ if [ -e ${CONFIGFILE} ]; then
   . ${CONFIGFILE}
 else
   echo "pgsnapman config file not found: "${CONFIGFILE}
+  exit 1
+fi
+
+# Test for existing root dir
+if [ "`echo "${ROOTDIR}" | grep ' '`" != "" ]; then
+  echo "ERROR PgSnapMan root name contains spaces [${ROOTDIR}]"
+  exit 1
+fi
+if [ ! -d "${ROOTDIR}" ]; then
+  echo "ERROR PgSnapMan root directory does not exist [${ROOTDIR}]"
   exit 1
 fi
 

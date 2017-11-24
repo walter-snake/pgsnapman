@@ -1,7 +1,94 @@
 #!/bin/bash
 
-# Get single jobs that have not run
-# select * from vw_dumpjob_worker_instance where jobtype = 'SINGLE' and id not in (select jobid from pgsnap_singlerun where jobclass = 'DUMP');
+# ======================================
+# Initialization
+# ======================================
+VERBOSITY=$1
 
+# Get the script directory (must do this first)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
+  DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+done
+SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+
+# Catalog database needed?
+PGSCDB_REQUIRED=YES
+
+# Load functions, will also perform initialization operations
+. ${SCRIPTPATH}/pgsnap_lib
+
+# =======================================
+# Script specific functions
+# =======================================
+
+# Start dump jobs
+function startdumpjobs {
+  local jobfile=${TEMPDIR}/$$.singledumpjobs.list
+  while read line; do
+    jobid=$(echo "${line}" | cut -d '|' -f 1)
+    pgsqlid=$(echo "${line}" | cut -d '|' -f 3)
+    pgsqlhost=$(echo "${line}" | cut -d '|' -f 16)
+    pgsqlport=$(echo ${line} | cut -d '|' -f 17)
+    pgsqlsuperuser=$(echo "${line}" | cut -d '|' -f 18)
+    dbname=$(echo "${line}" | cut -d '|' -f 4)
+    butype=$(echo "${line}" | cut -d '|' -f 5)
+    schema=$(echo "${line}" | cut -d '|' -f 6)
+    dumpoptions=$(echo "${line}" | cut -d '|' -f 20)
+    cron=$(echo "${line}" | cut -d '|' -f 7)
+    jobstatus=$(echo "${line}" | cut -d '|' -f 13)
+    jobtype=$(echo "${line}" | cut -d '|' -f 14)
+    restorejobid=$(echo "${line}" | cut -d '|' -f 19)
+    # Set schema_part for the dump name
+    if [ "${schema}" == "*" ]; then
+      schema_part=""
+    else
+      dumpoptions="--schema=${schema} ${dumpoptions}"
+      schema_part="."${schema}
+    fi
+
+    # Display a lot of data in verbose mode
+    if  [ "$VERBOSITY" == "VERBOSE" ]; then
+      echo "job file:       ${jobfile}"
+      echo "jobid:          ${jobid}"
+      echo "pg id:          ${pgsqlid}"
+      echo "pg host:        ${pgsqlhost}"
+      echo "pg port:        ${pgsqlport}"
+      echo "pg superuser:   ${pgsqlsuperuser}"
+      echo "dbname:         ${dbname}"
+      echo "butype:         ${butype}"
+      echo "schema:         ${schema}"
+      echo "cron:           ${cron} (SINGLE mode: ignored)"
+      echo "job status:     ${jobstatus}"
+      echo "job type:       ${jobtype}"
+      echo "dump options:   ${dumpoptions}"
+      echo "restore job id: ${restorejobid}"
+      echo ""
+    fi
+
+    # Start the dump, in the background, and it should not start again, so we immediately mark it in the database
+    # A job might (much) run longer than the interval between checks for jobs
+    ${SCRIPTPATH}/pgsnap_dump ${pgsqlid}_${pgsqlhost}_${pgsqlport} ${jobid} SILENT SINGLE $$ &
+    # Immediately mark it in the database as started
+    setsinglerunstarted ${jobid} "DUMP"
+  done < ${jobfile}
+}
+
+# =======================================
+# MAIN
+# =======================================
+# Check if there are any single dump jobs that have not run
+sql="select count(*) from vw_dumpjob_worker_instance where jobtype = 'SINGLE' and id not in (select jobid from pgsnap_singlerun where jobclass = 'DUMP');"
+c=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}"`
+if [ $c -gt 0 ]; then
+  ${SCRIPTPATH}/pgsnap_cacheconfig SILENT SINGLE $$
+  # Start the dumps
+  startdumpjobs
+fi
+
+# Be carful: do not clean up the dumpjob file, as it will be used by the pgsnap_dump script, and we don't know
+# for sure when they're ready dealing with it. The pgsnap_clean tool will take care of it.
 
 exit 0

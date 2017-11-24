@@ -1,3 +1,44 @@
 #!/bin/bash
 
+# ======================================
+# Initialization
+# ======================================
+
+# Get the script directory (must do this first)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
+  DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+done
+SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+
+# Catalog database needed?
+PGSCDB_REQUIRED=NO
+
+# Load functions, will also perform initialization operations
+. ${SCRIPTPATH}/pgsnap_lib
+
+# =======================================
+# MAIN
+# =======================================
+
+# Clean up temp files from previously running jobs (unclean exit, or just because we have to)
+find ${TEMPDIR} -type f -mtime 1 > ${TEMPDIR}/clean_running.temp
+find ${TEMPDIR} -type f -name '*.running' >> ${TEMPDIR}/clean_running.temp
+find ${DUMPSNAP} -type f -maxdepth 2 -name '*.running' >> ${TEMPDIR}/clean_running.temp
+while read line; do
+  chkpid=$(echo `basename $line` | cut -d '.' -f 1)
+  ps -p $chkpid > /dev/null
+  if [ "$?" == "1" ]; then
+    rm $line
+  fi
+done < ${TEMPDIR}/clean_running.temp
+rm ${TEMPDIR}/clean_running.temp
+
+
+# Retention policy-cleaning...
+
+# TBD!
+
 exit 0

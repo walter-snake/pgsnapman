@@ -159,6 +159,15 @@ CREATE FUNCTION put_dumpjob(pgsnapworkerid integer, pgsqlinstanceid integer, dbn
     AS $_$insert into pgsnap_dumpjob (pgsnap_worker_id, pgsql_instance_id, dbname, dumpschema, comment) values ($1, $2, $3, $4, $5) returning id;$_$;
 
 
+--
+-- Name: put_singlerun(integer, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION put_singlerun(job_id integer, job_class text) RETURNS void
+    LANGUAGE sql
+    AS $_$INSERT INTO pgsnap_singlerun (jobid, jobclass) values ($1, $2);$_$;
+
+
 SET default_tablespace = '';
 
 SET default_with_oids = false;
@@ -378,9 +387,9 @@ ALTER SEQUENCE pgsnap_restorejob_id_seq OWNED BY pgsnap_restorejob.id;
 
 CREATE TABLE pgsnap_singlerun (
     id integer NOT NULL,
-    jobid integer,
-    jobclass text,
-    runtime timestamp without time zone,
+    jobid integer NOT NULL,
+    jobclass text NOT NULL,
+    runtime timestamp without time zone DEFAULT now(),
     CONSTRAINT pgsnap_singlerun_jobclass_check CHECK ((jobclass = ANY (ARRAY['DUMP'::text, 'RESTORE'::text])))
 );
 
@@ -492,6 +501,25 @@ CREATE VIEW vw_dumpjob_worker_instance AS
    FROM ((pgsnap_dumpjob j
      JOIN pgsnap_worker b ON ((b.id = j.pgsnap_worker_id)))
      JOIN pgsql_instance p ON ((p.id = j.pgsql_instance_id)));
+
+
+--
+-- Name: vw_dumpjob_compact; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW vw_dumpjob_compact AS
+ SELECT vw_dumpjob_worker_instance.id,
+    vw_dumpjob_worker_instance.pgsnap_worker_dns_name AS pgs_worker,
+    ((vw_dumpjob_worker_instance.pgsql_instance_dns_name || ':'::text) || vw_dumpjob_worker_instance.pgsql_instance_port) AS pgsql_instance,
+    vw_dumpjob_worker_instance.jobtype,
+    ((vw_dumpjob_worker_instance.dbname || '.'::text) || vw_dumpjob_worker_instance.dumpschema) AS dbname_schema,
+    vw_dumpjob_worker_instance.dumptype,
+    vw_dumpjob_worker_instance.dumpoptions,
+    vw_dumpjob_worker_instance.cron,
+    vw_dumpjob_worker_instance.comment,
+    vw_dumpjob_worker_instance.status,
+    vw_dumpjob_worker_instance.pgsnap_restorejob_id AS restorejob
+   FROM vw_dumpjob_worker_instance;
 
 
 --

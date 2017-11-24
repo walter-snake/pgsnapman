@@ -4,7 +4,7 @@
 #                     must run on a backup node, with passwordless (.pgpass does the job) to all databases
 #                     should be backed up
 #
-# $1 full path to pgsql instance snapshot directory (must contain the job list)
+# $1 pgsql instance snapshot id <pginstanceid_pgdns_pgport>, resolves to snapshot/pgsqlinstance directory (must contain the job list)
 # $2 dump job id
 # $3 verbosity [VERBOSE|empty]
 #
@@ -19,6 +19,7 @@
 # ======================================
 VERBOSITY=$3
 STARTTYPE=$4
+DUMPJOBID=$5
 
 # Get the script directory (must do this first)
 SOURCE="${BASH_SOURCE[0]}"
@@ -43,11 +44,16 @@ PGSCDB_REQUIRED=NO
 # $1 path to postgres instance snapshot root directory
 # $2 id of job to start
 function startpgsnapjob {
-  snaplog "INFO" "configuration - reading job info from $1/dumpjobs.list [$2]"
-  grep -E "^${2}\|" $1/dumpjobs.list > $1/$$".running"
-  jobchk=`cat $1/$$.running | wc -l | sed 's/[ \t]*//g'`
+  if [ "${STARTTYPE}" == "CRON" ]; then
+    local dumpjobs=${DUMPSNAP}/${1}/dumpjobs.list
+  else
+    local dumpjobs=${TEMPDIR}/${DUMPJOBID}.singledumpjobs.list
+  fi
+  snaplog "INFO" "configuration - reading job info from ${dumpjobs} [$2]"
+  grep -E "^${2}\|" ${dumpjobs} > ${DUMPSNAP}/$1/$$".running"
+  jobchk=`cat ${DUMPSNAP}/$1/$$.running | wc -l | sed 's/[ \t]*//g'`
   if [ "${jobchk}" == "0" ]; then
-    rm $1/$$".running"
+    rm ${DUMPSNAP}/$1/$$".running"
     RETVAL="JOB_NOT_FOUND"
     return
   fi
@@ -97,9 +103,9 @@ function startpgsnapjob {
 
     # Determine job type, as naming schema's differ 
     if [ "${butype}" == "CLUSTER_SCHEMA" ]; then
-      jobdir=$1/${jobid}_cluster.schema
+      jobdir=${DUMPSNAP}/${1}/${jobid}_cluster.schema
     else
-      jobdir=$1/${jobid}_${dbname}${schema_part}
+      jobdir=${DUMPSNAP}/${1}/${jobid}_${dbname}${schema_part}
     fi
     mkdir -p ${jobdir}
 
@@ -155,7 +161,7 @@ function startpgsnapjob {
           ERRORS=1
         fi
         # extract schema sql
-        ${pgbin}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} --schema-only -f ${jobdir}/${buname}.schema -v ${jobdir}/${buname} 2>>  ${jobdir}/${buname}.log
+        ${pgbin}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --schema-only -f ${jobdir}/${buname}.schema -v ${jobdir}/${buname} 2>>  ${jobdir}/${buname}.log
         if [ "$?" != "0" ]; then
           log "ERROR" "job id ${jobid} - errors occured during schema creation from dump for ${buname}"
           ERRORS=1
@@ -172,8 +178,8 @@ function startpgsnapjob {
       let "ELAPSEDTIME = $ENDTIME - $STARTTIME"
       log "INFO" "job id ${jobid} - dump ended - elapsed time ${ELAPSEDTIME}[s]"
    fi
-  done < $1/$$.running
-  rm $1/$$.running
+  done < ${DUMPSNAP}/${1}/$$.running
+  rm ${DUMPSNAP}/${1}/$$.running
 }
 
 # ================================================================================
@@ -238,6 +244,8 @@ fi
 if [ "${ERRORS}" == "1" ]; then
   snaplog "ERROR" "finished - pgsql_instance.job [`basename ${1}`].[${2}] with errors, check: ${TOOL_LOG}"
   jobresult="FAILED"
+  DBSIZE=-1
+  SIZEONDISK=-1
 else
   snaplog "INFO" "finished - pggsql_instance.job [`basename ${1}`].[${2}]"
   jobresult="SUCCESS"
