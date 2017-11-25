@@ -8,6 +8,8 @@ ROOTDIR="/data/pgsnapman"
 
 # Global log file
 PGSNAPMANLOG="${ROOTDIR}/pgsnapman.log"
+# Max log size before rotation/gzip (suffixes for size [k|M])
+MAXLOGSIZE=1M
 
 # Temp directory (system files, no data)
 TEMPDIR="${ROOTDIR}/temp"

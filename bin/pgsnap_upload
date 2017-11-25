@@ -32,34 +32,39 @@ PGSCDB_REQUIRED=YES
 # ============================
 
 # Generic upload function, searches for files in upload dir, name pattern: '*.<destination>.dat'
-# $1 log destination [message|catalog], uploads to the catalog database table pgsnap_<destination>
+# $1 *.<destination>.dat file to upload to the catalog database table pgsnap_<destination>
 function uploaddata {
+  local format=`echo "${1}" | awk -F '.' '{print $(NF-1)}'`
   # Set SQL
-  if [ "$1" == "message" ]; then
+  if [ "${format}" == "message" ]; then
     sql="\COPY pgsnap_message (logtime, level, pgsnap_tool,  message) FROM stdin";
-  elif [ "$1" == "catalog" ]; then
+  elif [ "${format}" == "catalog" ]; then
     sql="\COPY pgsnap_catalog (pgsnap_dumpjob_id, starttime, endtime, status, bu_name, bu_location, dbsize, dumpsize) FROM stdin"
+  else
+    snaplog "ERROR" "destination format unknown"
+    return
   fi
-  # Find files
-  find ${ROOTDIR}/upload -name "*.${1}.dat" > ${ROOTDIR}/upload/upload.dat.list
-   while read line; do
-    echo -e "\.\n" | cat ${line} - | ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "${sql}" 2> ${ROOTDIR}/upload/pgsnap_upload.psql.log
-    if [ "$?" == "0" ]; then
-      snaplog "INFO" "processing - finished uploading ${1} data: ${line}"
-      rm -f ${line}
-    else
-      # Inspect log, read first line (makes a difference: without connection, we leave the upload in place, an invalid data file must be removed)
-      if [ "`grep -E '^psql' ${ROOTDIR}/upload/pgsnap_upload.psql.log`" == "" ]; then 
-        snaplog "ERROR" "processing - failed uploading ${1} data (SQL/data error): ${line}"
-        # remove illegal file
-        rm -f ${line}
-      else
-        snaplog echo "ERROR" "processing - failed uploading ${1} data (connection error): ${line}"
-      fi
-    fi
-  done < ${ROOTDIR}/upload/upload.dat.list
-  rm -f ${ROOTDIR}/upload/upload.dat.list
-  rm -f ${ROOTDIR}/upload/pgsnap_upload.psql.log
+
+  # Upload the data
+#  echo -e "\.\n" | cat ${1} - | ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "${sql}" 2> ${TEMPDIR}/pgsnap_upload.psql.log
+  echo -e "\.\n" | cat ${1} - | ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "${sql}" > /dev/null
+  if [ "$?" == "0" ]; then
+    snaplog "INFO" "processing - finished uploading `basename ${1}`"
+    rm -f ${1}
+  else
+    snaplog echo "ERROR" "processing - failed uploading data (connection error): `basename ${1}`"
+  fi
+#  else
+#    # Inspect log, read first line (makes a difference: without connection, we leave the upload in place, an invalid data file must be removed)
+#    if [ "`grep -E '^psql' ${TEMPDIR}/upload/pgsnap_upload.psql.log`" == "" ]; then 
+#      snaplog "ERROR" "processing - failed uploading data (SQL/data error): `basename ${1}` - data `cat ${1}`"
+#      # remove illegal file
+#      rm -f ${1}
+#    else
+#      snaplog echo "ERROR" "processing - failed uploading data (connection error): `basename ${1}`"
+#    fi
+#  fi
+#  rm -f ${TEMPDIR}/pgsnap_upload.psql.log
 }
 
 
@@ -90,8 +95,10 @@ if [ "$VERBOSITY" == "VERBOSE" ]; then
 fi
 
 # Upload the data for the available categories
-uploaddata message
-uploaddata catalog
+files=`find ${ROOTDIR}/upload -name "*.dat"`
+for f in ${files}; do
+  uploaddata "${f}"
+done
 
 exit 0
 

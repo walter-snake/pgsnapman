@@ -29,13 +29,21 @@ find ${TEMPDIR} -type f -name '*.running' >> ${TEMPDIR}/clean_running.temp
 find ${DUMPSNAP} -type f -maxdepth 2 -name '*.running' >> ${TEMPDIR}/clean_running.temp
 while read line; do
   chkpid=$(echo `basename $line` | cut -d '.' -f 1)
-  ps -p $chkpid > /dev/null
+  ps -p $chkpid &> /dev/null
   if [ "$?" == "1" ]; then
     rm $line
   fi
 done < ${TEMPDIR}/clean_running.temp
 rm ${TEMPDIR}/clean_running.temp
 
+# Log file rotation
+rotate=`find ${LOGDIR} -type f -name '*.log' -size +${MAXLOGSIZE}`
+for f in ${rotate}; do
+  if [ "${f}" != "" ]; then
+    mv "${f}" "${LOGDIR}/`basename ${f}`.${INITIMESTAMP}"
+    gzip "${LOGDIR}/`basename ${f}`.${INITIMESTAMP}"
+  fi
+done
 
 # Retention policy-cleaning...
 

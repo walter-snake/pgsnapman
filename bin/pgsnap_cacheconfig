@@ -161,7 +161,6 @@ function updatepgsqlinstanceconfig {
   fi
 
   # Create directories for every server listed, write connection info to file, ready to consume
-  log "INFO" "init" "NEW"
   while read line; do
     pgid=$(echo "${line}" | cut -d '|' -f 1)
     pgdns=$(echo "${line}" | cut -d '|' -f 2)
@@ -388,7 +387,7 @@ function updatesinglejobconfig {
 # ===============================================================================
 
 # Tool log
-TOOL_LOG=${ROOTDIR}/pgsnap_cacheconfig.log 
+TOOL_LOG=${LOGDIR}/$$.pgsnap_cacheconfig.log 
 
 # Check action
 if [  "${ACTION}" == "" ]; then
@@ -438,9 +437,13 @@ else
   JOBWARNINGS=" (with warnings)"
 fi 
 
-# Create message log for upload, based on logging 
-cat  ${TOOL_LOG} | grep -E 'WARNING|ERROR' | awk '{for(i=1;i<=NF;i++) { printf($i); if (i>=1 && i <= 3) {printf("\t")} else { printf(" ")}}; print ""}' > ${ROOTDIR}/pgsnap_cacheconfig.message.dat
-ln -s -f ${ROOTDIR}/pgsnap_cacheconfig.message.dat ${ROOTDIR}/upload
+# Transform message log for upload, based on logging (with an awk one liner)
+# Create the upload data file in upload, we keep the log so we don't have to keep the upload dat file (write it straight to upload dir, then it will be removed)
+preparecatalogdata "`cat  ${TOOL_LOG} | grep -E 'WARNING|ERROR' | awk '{for(i=1;i<=NF;i++) { printf($i); if (i>=1 && i <= 3) {printf("\t")} else { printf(" ")}}; print ""}'`" ${ROOTDIR}/upload/$$.pgsnap_cacheconfig.message.dat NEW
+
+# We also append the session log to the master log, and delete session log
+cat ${TOOL_LOG} >> ${LOGDIR}/pgsnap_cacheconfig.log
+rm -f ${TOOL_LOG}
 
 snaplog "INFO" "finished"
 

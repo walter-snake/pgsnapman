@@ -154,6 +154,42 @@ function setsinglerunstarted {
   ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" > /dev/null
 }
 
+# Verify and write upload data for the catalog database
+# Checks format based on file name pattern (destination table) and regular expression
+# $1 datarow (pgsql copy format)
+# $2 destination file
+# $3 file: [ADD|NEW]
+# $4 optional: UPLOAD (creates link in upload dir)
+function preparecatalogdata {
+  local format=`echo "${2}" | awk -F '.' '{print $(NF-1)}'`
+  # Verify the upload format using regular expression
+  if [ "${format}" == "catalog" ]; then
+    if [ "`echo -e "${1}" | grep -E '^\d+\t\d{8}T\d{6}\t\d{8}T\d{6}\t[A-Z]*\t[a-zA-Z0-9_\./]*\t[a-zA-Z0-9_\./]*\t\d+\t\d+$'`" == "" ]; then
+      snaplog "ERROR" "catalog upload wrong format: $1"
+      return
+    fi
+  elif [ "${format}" == "message" ]; then
+    if [ "`echo -e "${1}" | grep -E '^\d{8}T\d{6}\t[A-Z]*\t[a-zA-Z0-9_\./]*\t.*$'`" == "" ]; then
+      snaplog "ERROR" "message upload wrong format: $1"
+      return
+    fi
+  else
+      snaplog "ERROR" "catalog upload format unknown: $2"
+      return
+  fi
+  
+  # Add to existing file, or overwrite
+  if [ "${3}" == "ADD" ]; then
+    echo -e "${1}" >> ${2}
+  else
+    echo -e "${1}" > ${2}
+  fi
+  # Create link in upload dir
+  if [ "${4}" == "UPLOAD" ]; then
+    ln -s ${2} ${ROOTDIR}/upload/
+  fi
+}
+
 # Table functions
 # -----------------------------------------------------
 

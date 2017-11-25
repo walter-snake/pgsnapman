@@ -4,6 +4,11 @@
 # Initialization
 # ======================================
 VERBOSITY=$1
+if [ "${1}" == "" ]; then
+  VERBOSITY="SILENT"
+else
+  VERBOSITY=$1
+fi
 
 # Get the script directory (must do this first)
 SOURCE="${BASH_SOURCE[0]}"
