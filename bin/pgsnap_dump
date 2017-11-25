@@ -7,6 +7,10 @@
 # $1 pgsql instance snapshot id <pginstanceid_pgdns_pgport>, resolves to snapshot/pgsqlinstance directory (must contain the job list)
 # $2 dump job id
 # $3 verbosity [VERBOSE|empty]
+# $4 startup type [CRON|SINGLE]
+#      CRON will use the cached jobs in <snapshots>/<serverinstance>/dumpjobs.list
+#      SINGLE uses the jobs listed in <temp>/$5.singledumpjobs.list
+# $5 single run process id
 #
 # Actions taken:
 #   1 reads configuration from locally cached data, so it isn't depending on the availability of the central database
@@ -19,7 +23,7 @@
 # ======================================
 VERBOSITY=$3
 STARTTYPE=$4
-DUMPJOBID=$5
+SINGLERUNPID=$5
 
 # Get the script directory (must do this first)
 SOURCE="${BASH_SOURCE[0]}"
@@ -47,7 +51,7 @@ function startpgsnapjob {
   if [ "${STARTTYPE}" == "CRON" ]; then
     local dumpjobs=${DUMPSNAP}/${1}/dumpjobs.list
   else
-    local dumpjobs=${TEMPDIR}/${DUMPJOBID}.singledumpjobs.list
+    local dumpjobs=${TEMPDIR}/${SINGLERUNPID}.singledumpjobs.list
   fi
   snaplog "INFO" "configuration - reading job info from ${dumpjobs} [$2]"
   row="$(findrow ${dumpjobs} ${2})"
@@ -68,8 +72,9 @@ function startpgsnapjob {
   jobtype=$(getfieldvalue "${row}" 14)
   restorejobid=$(getfieldvalue "${row}" 19)
   dumpoptions=$(getfieldvalue "${row}" 20)
-  # Set schema_part for the dump name
-  if [ "${schema}" == "*" ]; then
+  # Set schema_part for the dump name, NOTE special exception:
+  # when butype is set to SCRIPT, we want to ignore the schema field.
+  if [ "${schema}" == "*" ] || [ "${butype}" == "SCRIPT" ]; then
     schema_part=""
   else
     dumpoptions="--schema=\"${schema}\" ${dumpoptions}"
@@ -144,12 +149,22 @@ function startpgsnapjob {
         log "ERROR" "job id ${jobid} - errors occured during pg_dumpall (cluster schema) for ${buname}${ext}"
         ERRORS=1
       fi
+    elif  [ "${butype}" == "SCRIPT" ]; then
+      if [ ! -e "${SCRIPTDIR}/${dumpoptions}" ]; then
+        snaplog "ERROR" "script not found: ${SCRIPTDIR}/${dumpoptions}"
+        exit 1
+      else
+        snaplog "INFO" "script started: ${SCRIPTDIR}/${dumpoptions}"
+        # At a minimum, we create the directory here
+        mkdir ${jobdir}/${buname}
+        ${SCRIPTDIR}/${dumpoptions} ${pgsqlhost} ${pgsqlport} ${pgsqlsuperuser} ${dbname} ${jobdir} ${buname} &
+      fi
     else 
       # globals (tablespaces, users)
       ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -g -o -f ${jobdir}/${buname}.cluster_globals.sql -v 2>> ${jobdir}/${buname}.log
       if [ "$?" != "0" ]; then
         log "ERROR" "job id ${jobid} - errors occured during pg_dumpall (globals) for ${buname}"
-       ERRORS=1
+        ERRORS=1
       fi
       # db dump (possibly schema-only)
       snaplog "INFO" "dumping - ${pgbin}/pg_dump ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} -b -o -Fd -f ${jobdir}/${buname} -v ${dbname}"

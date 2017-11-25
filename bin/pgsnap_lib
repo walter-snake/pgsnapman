@@ -164,12 +164,12 @@ function preparecatalogdata {
   local format=`echo "${2}" | awk -F '.' '{print $(NF-1)}'`
   # Verify the upload format using regular expression
   if [ "${format}" == "catalog" ]; then
-    if [ "`echo -e "${1}" | grep -E '^\d+\t\d{8}T\d{6}\t\d{8}T\d{6}\t[A-Z]*\t[a-zA-Z0-9_\./]*\t[a-zA-Z0-9_\./]*\t\d+\t\d+$'`" == "" ]; then
+    if [ "`echo -e "${1}" | grep -E '^\d+\t\d{8}T\d{6}\t\d{8}T\d{6}\t[A-Z]+\t[a-zA-Z0-9_\.\/]+\t[a-zA-Z0-9_\./]+\t-?\d+\t-?\d+$'`" == "" ]; then
       snaplog "ERROR" "catalog upload wrong format: $1"
       return
     fi
   elif [ "${format}" == "message" ]; then
-    if [ "`echo -e "${1}" | grep -E '^\d{8}T\d{6}\t[A-Z]*\t[a-zA-Z0-9_\./]*\t.*$'`" == "" ]; then
+    if [ "`echo -e "${1}" | grep -E '^\d{8}T\d{6}\t[A-Z]+\t[a-zA-Z0-9_\./]+\t.*$'`" == "" ]; then
       snaplog "ERROR" "message upload wrong format: $1"
       return
     fi
@@ -244,6 +244,12 @@ fi
 
 # Set toolname
 TOOLNAME=`basename $0`
+
+# Set script dir
+SCRIPTDIR=${ROOTDIR}/script
+
+# Set upload dir
+UPLOADDIR=${ROOTDIR}/upload
 
 # Get a timestamp
 INITIMESTAMP=`date '+%Y%m%dT%H%M%S'`

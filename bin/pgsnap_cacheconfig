@@ -34,7 +34,7 @@
 # ======================================
 VERBOSITY=$1
 ACTION=$2
-SINGLEJOBID=$3
+SINGLERUNPID=$3
 
 # Get the script directory (must do this first)
 SOURCE="${BASH_SOURCE[0]}"
@@ -75,6 +75,7 @@ function initrootdir {
   mkdir -p ${DUMPSNAP}
   mkdir -p ${DEDUPDATA}
   mkdir -p ${ROOTDIR}/upload
+  mkdir -p ${ROOTDIR}/script
   mkdir -p ${TEMPDIR}
   mkdir -p ${LOG}
   echo "Done."
@@ -120,10 +121,10 @@ function updateworkerconfig {
   UPLOADCRON=$(getfieldvalue "${row}" 7)
 
   echo "# pgsnapman worker jobs" >> ${TEMPDIR}/cron_snapjobs.temp
-  echo "${CACHECONFIGCRON} ${SCRIPTPATH}/pgsnap_cacheconfig" >> ${TEMPDIR}/cron_snapjobs.temp
-  echo "${CLEANCRON} ${SCRIPTPATH}/pgsnap_clean" >> ${TEMPDIR}/cron_snapjobs.temp
-  echo "${SINGLEJOBCRON} ${SCRIPTPATH}/pgsnap_singlejob" >> ${TEMPDIR}/cron_snapjobs.temp
-  echo "${UPLOADCRON} ${SCRIPTPATH}/pgsnap_upload" >> ${TEMPDIR}/cron_snapjobs.temp
+  echo "${CACHECONFIGCRON} ${SCRIPTPATH}/pgsnap_cacheconfig SILENT CRON" >> ${TEMPDIR}/cron_snapjobs.temp
+  echo "${CLEANCRON} ${SCRIPTPATH}/pgsnap_clean SILENT" >> ${TEMPDIR}/cron_snapjobs.temp
+  echo "${SINGLEJOBCRON} ${SCRIPTPATH}/pgsnap_singlejob SILENT" >> ${TEMPDIR}/cron_snapjobs.temp
+  echo "${UPLOADCRON} ${SCRIPTPATH}/pgsnap_upload SILENT" >> ${TEMPDIR}/cron_snapjobs.temp
 }
 
 function updatepgsqlinstanceconfig {
@@ -162,13 +163,13 @@ function updatepgsqlinstanceconfig {
 
   # Create directories for every server listed, write connection info to file, ready to consume
   while read line; do
-    pgid=$(echo "${line}" | cut -d '|' -f 1)
-    pgdns=$(echo "${line}" | cut -d '|' -f 2)
-    pgport=$(echo "${line}" | cut -d '|' -f 3)
-    comment=$(echo "${line}" | cut -d '|' -f 4)
-    pgstatus=$(echo "${line}" | cut -d '|' -f 5)
-    pguser=$(echo "${line}" | cut -d '|' -f 6)
-    defworkerid=$(echo "${line}" | cut -d '|' -f 9)
+    pgid=$(getfieldvalue "${line}" 1)
+    pgdns=$(getfieldvalue "${line}" 2)
+    pgport=$(getfieldvalue "${line}" 3)
+    comment=$(getfieldvalue "${line}" 4)
+    pgstatus=$(getfieldvalue "${line}" 5)
+    pguser=$(getfieldvalue "${line}" 6)
+    defworkerid=$(getfieldvalue "${line}" 9)
     mkdir -p ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}
     echo ${pgstatus} > ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}/status
   done < $ROOTDIR/pg_instances.list
@@ -178,7 +179,7 @@ function updatepgsqlinstanceconfig {
 # ------------------------------------------------------------------------
 
 # Retrieves all databases from a postgres server instance, adds all those that are not listed in the dumpjobs table, with defaults
-# - Does not depend on worker, all jobs are checked (a databas could purposely be put on another backup worker).
+# - Does not depend on worker, all jobs are checked (a database could purposely be put on another backup worker).
 # - SINGLE jobs do count
 # $1 = pg instance id
 # $2 = pg dns name
@@ -245,19 +246,19 @@ function createcronjobs {
   fi
   echo "# pgsnapman pgsnap_dump jobs for "`basename $1` >> ${TEMPDIR}/cron_snapjobs.temp
   while read line; do
-    jobid=$(echo "${line}" | cut -d '|' -f 1)
-    pgsqlid=$(echo "${line}" | cut -d '|' -f 3)
-    pgsqldns=$(echo "${line}" | cut -d '|' -f 16)
-    pgsqlport=$(echo ${line} | cut -d '|' -f 17)
-    pgsqlsuperuser=$(echo "${line}" | cut -d '|' -f 18)
-    dbname=$(echo "${line}" | cut -d '|' -f 4)
-    butype=$(echo "${line}" | cut -d '|' -f 5)
-    schema=$(echo "${line}" | cut -d '|' -f 6)
-    dumpoptions=$(echo "${line}" | cut -d '|' -f 20)
-    cron=$(echo "${line}" | cut -d '|' -f 7)
-    jobstatus=$(echo "${line}" | cut -d '|' -f 13)
-    jobtype=$(echo "${line}" | cut -d '|' -f 14)
-    restorejobid=$(echo "${line}" | cut -d '|' -f 19)
+    jobid=$(getfieldvalue "${line}" 1)
+    pgsqlid=$(getfieldvalue "${line}" 3)
+    pgsqldns=$(getfieldvalue "${line}" 16)
+    pgsqlport=$(getfieldvalue "${line}" 17)
+    pgsqlsuperuser=$(getfieldvalue "${line}" 18)
+    dbname=$(getfieldvalue "${line}" 4)
+    butype=$(getfieldvalue "${line}" 5)
+    schema=$(getfieldvalue "${line}" 6)
+    dumpoptions=$(getfieldvalue "${line}" 20)
+    cron=$(getfieldvalue "${line}" 7)
+    jobstatus=$(getfieldvalue "${line}" 13)
+    jobtype=$(getfieldvalue "${line}" 14)
+    restorejobid=$(getfieldvalue "${line}" 19)
     # Set schema_part for the dump name
     if [ "${schema}" == "*" ]; then
       schema_part=""
@@ -335,13 +336,13 @@ function updatecronjobconfig {
   log "INFO" "init" "NEW"
   while read line; do
     # Need to collect the pgsql instance data
-    pgid=$(echo "${line}" | cut -d '|' -f 1)
-    pgdns=$(echo "${line}" | cut -d '|' -f 2)
-    pgport=$(echo "${line}" | cut -d '|' -f 3)
-    comment=$(echo "${line}" | cut -d '|' -f 4)
-    pgstatus=$(echo "${line}" | cut -d '|' -f 5)
-    pguser=$(echo "${line}" | cut -d '|' -f 6)
-    defworkerid=$(echo "${line}" | cut -d '|' -f 9)
+    pgid=$(getfieldvalue "${line}" 1)
+    pgdns=$(getfieldvalue "${line}" 2)
+    pgport=$(getfieldvalue "${line}" 3)
+    comment=$(getfieldvalue "${line}" 4)
+    pgstatus=$(getfieldvalue "${line}" 5)
+    pguser=$(getfieldvalue "${line}" 6)
+    defworkerid=$(getfieldvalue "${line}" 9)
 
     # Check the pgsql_instances for unlisted databases, when instance is active and this backup worker is the default backup worker
     if [ "${AUTO_DUMPJOB}" == "YES" ] && [ "${defworkerid}" == "${BUWORKERID}" ] && [ "$(getinstancestatus ${pgid}_${pgdns}_${pgport})" == "ACTIVE" ]; then
@@ -369,11 +370,11 @@ function updatesinglejobconfig {
     AND pgsnap_worker_id = ${BUWORKERID} \
     AND jobtype = 'SINGLE' \
     ORDER BY id;"
-  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}" > ${TEMPDIR}/${SINGLEJOBID}.singledumpjobs.list
+  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}" > ${TEMPDIR}/${SINGLERUNPID}.singledumpjobs.list
   c=0
   while read line; do
     let "c = c + 1"
-  done < ${TEMPDIR}/${SINGLEJOBID}.singledumpjobs.list
+  done < ${TEMPDIR}/${SINGLERUNPID}.singledumpjobs.list
   if [ $c -eq 0 ]; then
     local result=NO
   else
@@ -420,6 +421,10 @@ if [ "${ACTION}" == "CRON" ]; then
   updatepgsqlinstanceconfig
   updatecronjobconfig
   installcrontab
+elif [ "${ACTION}" == "SINGLE" ] &&  [ "${SINGLERUNPID}" == "" ]; then
+  # Error condition
+  snaplog "ERROR" "can not run in SINGLE mode without SINGLERUNPID"
+  exit 1
 elif [ "${ACTION}" == "SINGLE" ]; then
   # First retrieve single jobs
   jobspending=$(updatesinglejobconfig)

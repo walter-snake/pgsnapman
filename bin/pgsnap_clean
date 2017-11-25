@@ -3,6 +3,7 @@
 # ======================================
 # Initialization
 # ======================================
+VERBOSITY=$1
 
 # Get the script directory (must do this first)
 SOURCE="${BASH_SOURCE[0]}"

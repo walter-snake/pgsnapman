@@ -1,9 +1,15 @@
 #!/bin/bash
 
+# pgsnap_singlejob Checks for jobs marked as single run, downloads configuration and starts the jobs.
+#
+# $1 verbosity [VERBOSE|SILENT]
+
 # ======================================
 # Initialization
 # ======================================
 VERBOSITY=$1
+# We must set the verbosity, as otherwise it propagates to the other tools that are started, and
+# then the commandline options would shift.
 if [ "${1}" == "" ]; then
   VERBOSITY="SILENT"
 else
@@ -22,7 +28,7 @@ SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 # Catalog database needed?
 PGSCDB_REQUIRED=YES
 
-# Turn off tool init log
+# Turn off tool init log (otherwise it would flood it, on a minutely check schedule)
 LOGINIT=NO
 
 # Load functions, will also perform initialization operations
