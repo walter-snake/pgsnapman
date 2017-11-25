@@ -4,15 +4,24 @@
 PGSNAPMANUSER=pgsnapman
 
 # Root directory where postgres dumps will be stored
-ROOTDIR=/data/pgsnapman
+ROOTDIR="/data/pgsnapman"
 
 # Global log file
-PGSNAPMANLOG=${ROOTDIR}/pgsnapman.log
+PGSNAPMANLOG="${ROOTDIR}/pgsnapman.log"
+
+# Temp directory (system files, no data)
+TEMPDIR="${ROOTDIR}/temp"
+
+# Log directory
+LOGDIR="${ROOTDIR}/log"
+
+# Global log file
+PGSNAPMANLOG=${LOGDIR}/pgsnapman.log
 
 # Dump directory
-DUMPSNAP=${ROOTDIR}/snapshots
+DUMPSNAP="${ROOTDIR}/snapshots"
 # Directory containing the indexed data files
-DEDUPDATA=${ROOTDIR}/dedupdata
+DEDUPDATA="${ROOTDIR}/dedupdata"
 
 # Postgres binaries
 PGBIN90=/Library/PostgreSQL/9.0/bin
@@ -37,8 +46,12 @@ PGSCUSER=postgres
 CHKSUMPROG="/sbin/md5"
 CHKSUMPROG_OPTIONS="-r"
 
-# Auto add unlisted database
+# Auto add unlisted database [YES|NO]
+# Keep in mind that pgsnap_worker_id_default must be set in the pgsql_instance table,
+# this worker is the one that adds and performs the jobs. You may change the worker
+# and the default worker.
 AUTO_DUMPJOB=YES
 
 # Maintenance db (must be present on every pgsql instance)
 MAINTDB=postgres
+

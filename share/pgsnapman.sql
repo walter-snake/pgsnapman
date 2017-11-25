@@ -194,6 +194,7 @@ CREATE TABLE pgsnap_dumpjob (
     jobtype text DEFAULT 'CRON'::text,
     pgsnap_restorejob_id integer DEFAULT (-1),
     date_added timestamp without time zone DEFAULT now(),
+    CONSTRAINT pgsnap_dumpjob_dumptype_check CHECK ((dumptype = ANY (ARRAY['FULL'::text, 'SCHEMA'::text, 'CLUSTER_SCHEMA'::text, 'SCRIPT'::text]))),
     CONSTRAINT pgsnap_dumpjob_jobtype_check CHECK ((jobtype = ANY (ARRAY['CRON'::text, 'SINGLE'::text]))),
     CONSTRAINT pgsnap_dumpjob_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
 );

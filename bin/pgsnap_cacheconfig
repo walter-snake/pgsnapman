@@ -76,6 +76,7 @@ function initrootdir {
   mkdir -p ${DEDUPDATA}
   mkdir -p ${ROOTDIR}/upload
   mkdir -p ${TEMPDIR}
+  mkdir -p ${LOG}
   echo "Done."
 }
 
@@ -97,15 +98,14 @@ function installcrontab {
 # $1 backup worker id (numeric)
 function getworkerconfig {
   # Get worker configuration
-  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT id,dns_name,comment, \
+  local workercron=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT id,dns_name,comment, \
     cron_cacheconfig,cron_singlejob,cron_clean,cron_upload
-    FROM vw_worker WHERE id = $1" > $ROOTDIR/pgsnap_worker.cron
+    FROM vw_worker WHERE id = $1"`
+  echo "${workercron}"
 }
 
 # Retrieve and set the worker configuration, inclusing creating cron jobs
 function updateworkerconfig {
-  # Download de worker configuration (based on id)
-  getworkerconfig ${BUWORKERID} 
 
   # Create temp cron job file
   echo "# pgsnapman ###################################################################" > ${TEMPDIR}/cron_snapjobs.temp
@@ -113,14 +113,11 @@ function updateworkerconfig {
   echo "# pgsnapman ###################################################################" >> ${TEMPDIR}/cron_snapjobs.temp
 
   # Add crontab entries for own cron job from worker config
-  # Must be one line, no filtering
-  while read line; do
-    CACHECONFIGCRON=$(echo "${line}" | cut -d '|' -f 4)
-    SINGLEJOBCRON=$(echo "${line}" | cut -d '|' -f 5)
-    CLEANCRON=$(echo "${line}" | cut -d '|' -f 6)
-    UPLOADCRON=$(echo "${line}" | cut -d '|' -f 7)
-  done < $ROOTDIR/pgsnap_worker.cron
-  rm  $ROOTDIR/pgsnap_worker.cron
+  row=$(getworkerconfig ${BUWORKERID})
+  CACHECONFIGCRON=$(getfieldvalue "${row}" 4)
+  SINGLEJOBCRON=$(getfieldvalue "${row}" 5)
+  CLEANCRON=$(getfieldvalue "${row}" 6)
+  UPLOADCRON=$(getfieldvalue "${row}" 7)
 
   echo "# pgsnapman worker jobs" >> ${TEMPDIR}/cron_snapjobs.temp
   echo "${CACHECONFIGCRON} ${SCRIPTPATH}/pgsnap_cacheconfig" >> ${TEMPDIR}/cron_snapjobs.temp
@@ -245,7 +242,7 @@ function getcronjobs {
 # $1 full path to a postgres instance snapshot directory
 function createcronjobs {
   if  [ "$VERBOSITY" == "VERBOSE" ]; then
-    echo "Processing: "$1/dumpjobs.list
+    echo "Creating cron jobs, processing: "$1/dumpjobs.list
   fi
   echo "# pgsnapman pgsnap_dump jobs for "`basename $1` >> ${TEMPDIR}/cron_snapjobs.temp
   while read line; do

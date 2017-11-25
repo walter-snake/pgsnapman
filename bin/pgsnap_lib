@@ -154,6 +154,24 @@ function setsinglerunstarted {
   ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" > /dev/null
 }
 
+# Table functions
+# -----------------------------------------------------
+
+# Extract a row from a 'table' by first column
+# $1 file name with | separated fields
+# $2 search value (first field)
+function findrow {
+  local row=`grep -E "^${2}\|" "${1}"`
+  echo "${row}"
+}
+
+# Get field value from a row
+# $1 row with | separated fields
+function getfieldvalue {
+  local val=$(echo "${1}" | cut -d '|' -f ${2})
+  echo "${val}"
+}
+
 # =====================================
 # Init actions
 # =====================================
@@ -206,5 +224,7 @@ if [ "$(getworkerstatus)" == "HALTED" ]; then
 fi
 
 # Write tool init log entry
-snaplog "INFO" "init - using config: ${CONFIGFILE}"
+if [ "${LOGINIT}" != "NO" ]; then
+  snaplog "INFO" "init - using config: ${CONFIGFILE}"
+fi
 

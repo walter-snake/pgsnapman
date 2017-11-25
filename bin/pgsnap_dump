@@ -50,136 +50,132 @@ function startpgsnapjob {
     local dumpjobs=${TEMPDIR}/${DUMPJOBID}.singledumpjobs.list
   fi
   snaplog "INFO" "configuration - reading job info from ${dumpjobs} [$2]"
-  grep -E "^${2}\|" ${dumpjobs} > ${DUMPSNAP}/$1/$$".running"
-  jobchk=`cat ${DUMPSNAP}/$1/$$.running | wc -l | sed 's/[ \t]*//g'`
-  if [ "${jobchk}" == "0" ]; then
-    rm ${DUMPSNAP}/$1/$$".running"
+  row="$(findrow ${dumpjobs} ${2})"
+  if [ "${row}" == "" ]; then
     RETVAL="JOB_NOT_FOUND"
     return
   fi
-  while read line; do
-    jobid=$(echo "${line}" | cut -d '|' -f 1)
-    pgsqlid=$(echo "${line}" | cut -d '|' -f 3)
-    pgsqlhost=$(echo "${line}" | cut -d '|' -f 16)
-    pgsqlport=$(echo ${line} | cut -d '|' -f 17)
-    pgsqlsuperuser=$(echo "${line}" | cut -d '|' -f 18)
-    dbname=$(echo "${line}" | cut -d '|' -f 4)
-    butype=$(echo "${line}" | cut -d '|' -f 5)
-    schema=$(echo "${line}" | cut -d '|' -f 6)
-    cron=$(echo "${line}" | cut -d '|' -f 7)
-    jobstatus=$(echo "${line}" | cut -d '|' -f 13)
-    jobtype=$(echo "${line}" | cut -d '|' -f 14)
-    restorejobid=$(echo "${line}" | cut -d '|' -f 19)
-    dumpoptions=$(echo "${line}" | cut -d '|' -f 20)
-    # Set schema_part for the dump name
-    if [ "${schema}" == "*" ]; then
-      schema_part=""
-    else
-      dumpoptions="--schema=\"${schema}\" ${dumpoptions}"
-      schema_part="."${schema}
-    fi
+  jobid=$(getfieldvalue "${row}" 1)
+  pgsqlid=$(getfieldvalue "${row}" 3)
+  pgsqlhost=$(getfieldvalue "${row}" 16)
+  pgsqlport=$(getfieldvalue "${row}" 17)
+  pgsqlsuperuser=$(getfieldvalue "${row}" 18)
+  dbname=$(getfieldvalue "${row}" 4)
+  butype=$(getfieldvalue "${row}" 5)
+  schema=$(getfieldvalue "${row}" 6)
+  cron=$(getfieldvalue "${row}" 7)
+  jobstatus=$(getfieldvalue "${row}" 13)
+  jobtype=$(getfieldvalue "${row}" 14)
+  restorejobid=$(getfieldvalue "${row}" 19)
+  dumpoptions=$(getfieldvalue "${row}" 20)
+  # Set schema_part for the dump name
+  if [ "${schema}" == "*" ]; then
+    schema_part=""
+  else
+    dumpoptions="--schema=\"${schema}\" ${dumpoptions}"
+    schema_part="."${schema}
+  fi
 
-    # Resolve host
-    pgsqlhost=$(resolvepghost ${pgsqlhost})
+  # Resolve host
+  pgsqlhost=$(resolvepghost ${pgsqlhost})
 
-    # Display a lot of data in verbose mode
-    if  [ "$VERBOSITY" == "VERBOSE" ]; then
-      echo "PgSnapDump job data configuration"
-      echo "jobid:          ${jobid}"
-      echo "pg id:          ${pgsqlid}"
-      echo "pg host:        ${pgsqlhost}"
-      echo "pg port:        ${pgsqlport}"
-      echo "pg superuser:   ${pgsqlsuperuser}"
-      echo "dbname:         ${dbname}"
-      echo "butype:         ${butype}"
-      echo "schema:         ${schema}"
-      echo "cron:           ${cron}"
-      echo "job status:     ${jobstatus}"
-      echo "job type:       ${jobtype}"
-      echo "dump options:   ${dumpoptions}"
-      echo "restore job id: ${restorejobid}"
-      echo ""
-    fi
+  # Display a lot of data in verbose mode
+  if  [ "$VERBOSITY" == "VERBOSE" ]; then
+    echo "PgSnapDump job data configuration"
+    echo "jobid:          ${jobid}"
+    echo "pg id:          ${pgsqlid}"
+    echo "pg host:        ${pgsqlhost}"
+    echo "pg port:        ${pgsqlport}"
+    echo "pg superuser:   ${pgsqlsuperuser}"
+    echo "dbname:         ${dbname}"
+    echo "butype:         ${butype}"
+    echo "schema:         ${schema}"
+    echo "cron:           ${cron}"
+    echo "job status:     ${jobstatus}"
+    echo "job type:       ${jobtype}"
+    echo "dump options:   ${dumpoptions}"
+    echo "restore job id: ${restorejobid}"
+    echo ""
+  fi
 
-    # Determine job type, as naming schema's differ 
+  # Determine job type, as naming schema's differ 
+  if [ "${butype}" == "CLUSTER_SCHEMA" ]; then
+    jobdir=${DUMPSNAP}/${1}/${jobid}_cluster.schema
+  else
+    jobdir=${DUMPSNAP}/${1}/${jobid}_${dbname}${schema_part}
+  fi
+  mkdir -p ${jobdir}
+
+  # Set logfile
+  TOOL_LOG=${jobdir}.log
+
+  # Get timestamp, backup name, postgres version
+  buname=${jobid}_${dbname}${schema_part}_${butype}_${INITIMESTAMP}
+  log "INFO" "job id ${jobid} - ${jobtype} backup ${buname}"
+  # Check postgres server version and binary availability 
+  pgversion=$(getpgversion "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${dbname}")
+  if [ "${pgversion}" == "" ]; then
+    log "ERROR" "job id ${jobid} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}"
+    ERRORS=1
+  else
+    eval pgbinvar=PGBIN${pgversion}
+    pgbin=${!pgbinvar}
+  fi
+  # check if pg dump exists
+  if [ ! -e ${pgbin}/pg_dump ]; then
+    log "ERROR" "job id ${jobid} - job can not run - pg_dump not found, check PGBINxx paths in config file ${CONFIGFILE}"
+    ERRORS=1
+  else
+    STARTTIME=`date '+%s'`
+    log "INFO" "job id ${jobid} - ${butype} dump started with options ${dumpoptions}"
     if [ "${butype}" == "CLUSTER_SCHEMA" ]; then
-      jobdir=${DUMPSNAP}/${1}/${jobid}_cluster.schema
-    else
-      jobdir=${DUMPSNAP}/${1}/${jobid}_${dbname}${schema_part}
-    fi
-    mkdir -p ${jobdir}
-
-    # Set logfile
-    TOOL_LOG=${jobdir}.log
-
-    # Get timestamp, backup name, postgres version
-    buname=${jobid}_${dbname}${schema_part}_${butype}_${INITIMESTAMP}
-    log "INFO" "job id ${jobid} - ${jobtype} backup ${buname}"
-    # Check postgres server version and binary availability 
-    pgversion=$(getpgversion "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${dbname}")
-    if [ "${pgversion}" == "" ]; then
-      log "ERROR" "job id ${jobid} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}"
-      ERRORS=1
-    else
-      eval pgbinvar=PGBIN${pgversion}
-      pgbin=${!pgbinvar}
-    fi
-    if [ ! -e ${pgbin}/pg_dump ]; then
-      log "ERROR" "job id ${jobid} - job can not run - pg_dump not found, check PGBINxx paths in config file ${CONFIGFILE}"
-      ERRORS=1
-    else
-      STARTTIME=`date '+%s'`
-      log "INFO" "job id ${jobid} - ${butype} dump started with options ${dumpoptions}"
-      if [ "${butype}" == "CLUSTER_SCHEMA" ]; then
-        ext=".sql"
-        snaplog "INFO" "dumping - ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -s -o -f ${jobdir}/${buname}${ext} -v"
-        ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -s -o -f ${jobdir}/${buname}${ext} -v 2>> ${jobdir}/${buname}.log
+      ext=".sql"
+      snaplog "INFO" "dumping - ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -s -o -f ${jobdir}/${buname}${ext} -v"
+      ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -s -o -f ${jobdir}/${buname}${ext} -v 2>> ${jobdir}/${buname}.log
+      if [ "$?" == "0" ]; then
+        gzip ${jobdir}/${buname}${ext}
         if [ "$?" == "0" ]; then
-          gzip ${jobdir}/${buname}${ext}
-          if [ "$?" == "0" ]; then
-            ext=".sql.gz"
-          else
-            log "ERROR" "job id ${jobid} - errors occured during gzip for ${jobdir}/${buname}${ext}"
-            ERRORS=1
-          fi
+          ext=".sql.gz"
         else
-          log "ERROR" "job id ${jobid} - errors occured during pg_dumpall (cluster schema) for ${buname}${ext}"
+          log "ERROR" "job id ${jobid} - errors occured during gzip for ${jobdir}/${buname}${ext}"
           ERRORS=1
         fi
-      else 
-        # globals (tablespaces, users)
-        ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -g -o -f ${jobdir}/${buname}.cluster_globals.sql -v 2>> ${jobdir}/${buname}.log
-        if [ "$?" != "0" ]; then
-          log "ERROR" "job id ${jobid} - errors occured during pg_dumpall (globals) for ${buname}"
-         ERRORS=1
-        fi
-        # db dump (possibly schema-only)
-        snaplog "INFO" "dumping - ${pgbin}/pg_dump ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} -b -o -Fd -f ${jobdir}/${buname} -v ${dbname}"
-        ${pgbin}/pg_dump ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} -b -o -Fd -f ${jobdir}/${buname} -v ${dbname} 2>>  ${jobdir}/${buname}.log
-        if [ "$?" != "0" ]; then
-          log "ERROR" "job id ${jobid} - errors occured during pg_dump for ${buname}"
-          ERRORS=1
-        fi
-        # extract schema sql
-        ${pgbin}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --schema-only -f ${jobdir}/${buname}.schema -v ${jobdir}/${buname} 2>>  ${jobdir}/${buname}.log
-        if [ "$?" != "0" ]; then
-          log "ERROR" "job id ${jobid} - errors occured during schema creation from dump for ${buname}"
-          ERRORS=1
-        fi
-      fi
-      # Size on disk
-      SIZEONDISK=`du -k ${jobdir}/${buname}${ext} | awk '{print $1 * 1024}'`
-      # Db Size
-      DBSIZE=$(getdbsize "${pgsqlhost}" ${pgsqlport} "${pgsqlsuperuser}" "${dbname}" "${schema}")
-      if [ "${SIZEONDISK}" == "0" ]; then
+      else
+        log "ERROR" "job id ${jobid} - errors occured during pg_dumpall (cluster schema) for ${buname}${ext}"
         ERRORS=1
       fi
-      ENDTIME=`date '+%s'`
-      let "ELAPSEDTIME = $ENDTIME - $STARTTIME"
-      log "INFO" "job id ${jobid} - dump ended - elapsed time ${ELAPSEDTIME}[s]"
-   fi
-  done < ${DUMPSNAP}/${1}/$$.running
-  rm ${DUMPSNAP}/${1}/$$.running
+    else 
+      # globals (tablespaces, users)
+      ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -g -o -f ${jobdir}/${buname}.cluster_globals.sql -v 2>> ${jobdir}/${buname}.log
+      if [ "$?" != "0" ]; then
+        log "ERROR" "job id ${jobid} - errors occured during pg_dumpall (globals) for ${buname}"
+       ERRORS=1
+      fi
+      # db dump (possibly schema-only)
+      snaplog "INFO" "dumping - ${pgbin}/pg_dump ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} -b -o -Fd -f ${jobdir}/${buname} -v ${dbname}"
+      ${pgbin}/pg_dump ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} -b -o -Fd -f ${jobdir}/${buname} -v ${dbname} 2>>  ${jobdir}/${buname}.log
+      if [ "$?" != "0" ]; then
+        log "ERROR" "job id ${jobid} - errors occured during pg_dump for ${buname}"
+        ERRORS=1
+      fi
+      # extract schema sql
+      ${pgbin}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --schema-only -f ${jobdir}/${buname}.schema -v ${jobdir}/${buname} 2>>  ${jobdir}/${buname}.log
+      if [ "$?" != "0" ]; then
+        log "ERROR" "job id ${jobid} - errors occured during schema creation from dump for ${buname}"
+        ERRORS=1
+      fi
+    fi
+    # Size on disk
+    SIZEONDISK=`du -k ${jobdir}/${buname}${ext} | awk '{print $1 * 1024}'`
+    # Db Size
+    DBSIZE=$(getdbsize "${pgsqlhost}" ${pgsqlport} "${pgsqlsuperuser}" "${dbname}" "${schema}")
+    if [ "${SIZEONDISK}" == "0" ]; then
+      ERRORS=1
+    fi
+    ENDTIME=`date '+%s'`
+    let "ELAPSEDTIME = $ENDTIME - $STARTTIME"
+    log "INFO" "job id ${jobid} - dump ended - elapsed time ${ELAPSEDTIME}[s]"
+ fi # if pg_dump exists
 }
 
 # ================================================================================
@@ -225,7 +221,7 @@ startpgsnapjob $1 $2
 
 # Check results, log status etc.
 if [ "${RETVAL}" == "JOB_NOT_FOUND" ]; then
-  snaplog "ERROR" "configuration - pgsql_instance.job [`basename ${1}`].[${2}] has no job entry"
+  snaplog "ERROR" "configuration - pgsql_instance.job [`basename ${1}`].[${2}] not found in ${STARTTYPE} job list"
   exit 1
 fi
 
