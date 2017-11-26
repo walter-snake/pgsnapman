@@ -34,6 +34,20 @@ while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symli
 done
 SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 
+# Check cmd args
+if [ "${STARTTYPE}" == "" ]; then
+  echo "ERROR pgsnap_dump no startup type provided"
+  exit 1
+fi
+if [ "${STARTTYPE}" == "SINGLE" ] && [ "${SINGLERUNPID}" == "" ]; then
+  echo "ERROR pgsnap_dump needs a process id in SINGLE mode"
+  exit 1
+fi
+# Set a fake PID when running in CRON mode, so we always have a complete set of cmd args when starting other tools
+#if [ "${STARTTYPE}" == "CRON" ]; then
+#  SINGLERUNPID=0
+#fi
+
 # Catalog database needed?
 PGSCDB_REQUIRED=NO
 
@@ -43,6 +57,30 @@ PGSCDB_REQUIRED=NO
 # ============================
 # Functions
 # ============================
+
+# Prepare for starting a custom script
+# Writes out all current variables to a temp file
+function preparescriptrun {
+  echo "JOBID=${jobid}" > ${TEMPDIR}/$$.scriptinit.temp
+  echo "INITIMESTAMP=${INITIMESTAMP}" >> ${TEMPDIR}/$$.scriptinit.temp
+  echo "VERBOSITY=${VERBOSITY}" >> ${TEMPDIR}/$$.scriptinit.temp
+  echo "STARTTYPE=${STARTTYPE}" >> ${TEMPDIR}/$$.scriptinit.temp
+  echo "SINGLERUNPID=${SINGLERUNPID}" >> ${TEMPDIR}/$$.scriptinit.temp
+  echo "JOBDIR=${jobdir}" >> ${TEMPDIR}/$$.scriptinit.temp
+  echo "BUNAME=${buname}" >> ${TEMPDIR}/$$.scriptinit.temp
+  echo "PGSQLHOST=\"${pgsqlhost}\"" >> ${TEMPDIR}/$$.scriptinit.temp
+  echo "PGSQLPORT=${pgsqlport}" >> ${TEMPDIR}/$$.scriptinit.temp
+  echo "PGSQLSUPERUSER=${pgsqlsuperuser}" >> ${TEMPDIR}/$$.scriptinit.temp
+  echo "PGSQLDBNAME=${dbname}" >> ${TEMPDIR}/$$.scriptinit.temp
+  echo "ROOTDIR=${ROOTDIR}" >> ${TEMPDIR}/$$.scriptinit.temp
+  echo "LOGDIR=${LOGDIR}" >> ${TEMPDIR}/$$.scriptinit.temp
+  echo "TEMPDIR=${TEMPDIR}" >> ${TEMPDIR}/$$.scriptinit.temp
+  echo "UPLOADDIR=${UPLOADDIR}" >> ${TEMPDIR}/$$.scriptinit.temp
+  echo "PGBIN=${pgbin}" >> ${TEMPDIR}/$$.scriptinit.temp
+  echo "PGSNAPMANLOG=${PGSNAPMANLOG}" >> ${TEMPDIR}/$$.scriptinit.temp
+  echo "TOOL_LOG=${TOOL_LOG}" >> ${TEMPDIR}/$$.scriptinit.temp
+  mkdir ${jobdir}/${buname}
+}
 
 # Start a specific dump job 
 # $1 path to postgres instance snapshot root directory
@@ -150,14 +188,21 @@ function startpgsnapjob {
         ERRORS=1
       fi
     elif  [ "${butype}" == "SCRIPT" ]; then
-      if [ ! -e "${SCRIPTDIR}/${dumpoptions}" ]; then
-        snaplog "ERROR" "script not found: ${SCRIPTDIR}/${dumpoptions}"
+      local scriptname=`echo "${dumpoptions}" | cut -d ' ' -f 1`
+      if [ ! -e "${SCRIPTDIR}/${scriptname}" ]; then
+        snaplog "ERROR" "script not found: ${SCRIPTDIR}/${scriptname}"
         exit 1
       else
+        preparescriptrun
         snaplog "INFO" "script started: ${SCRIPTDIR}/${dumpoptions}"
-        # At a minimum, we create the directory here
-        mkdir ${jobdir}/${buname}
-        ${SCRIPTDIR}/${dumpoptions} ${pgsqlhost} ${pgsqlport} ${pgsqlsuperuser} ${dbname} ${jobdir} ${buname} &
+        # Separate script name from its own options
+        local scriptoptions=`echo "${dumpoptions}" | awk '{ print substr($0, length($1)+1) }'`
+        ${SCRIPTDIR}/${scriptname} ${TEMPDIR}/$$.scriptinit.temp >> ${jobdir}/${buname}.log
+        local ec=$?
+        if [ "$ec" != "0" ]; then
+          log "ERROR" "job id ${jobid} - script exited with code ${ec} for ${jobdir}/${buname}"
+          ERRORS=1
+        fi
       fi
     else 
       # globals (tablespaces, users)
@@ -258,7 +303,7 @@ if [ "${ERRORS}" == "1" ]; then
   DBSIZE=-1
   SIZEONDISK=-1
 else
-  snaplog "INFO" "finished - pggsql_instance.job [`basename ${1}`].[${2}]"
+  snaplog "INFO" "finished - pgsql_instance.job [`basename ${1}`].[${2}]"
   jobresult="SUCCESS"
 fi
 
@@ -269,7 +314,7 @@ preparecatalogdata "${2}\t${INITIMESTAMP}\t`date +'%Y%m%dT%H%M%S'`\t${jobresult}
 # Next procedures, set exit code
 if [ "${jobresult}" == "SUCCESS" ]; then
   if [ "${butype}" == "FULL" ]; then
-    ${SCRIPTPATH}/pgsnap_dedup ${jobdir}/${buname}
+    ${SCRIPTPATH}/pgsnap_dedup ${jobdir}/${buname} SILENT ${jobid}
   fi
   if [ "${restorejobid}" != "-1" ]; then
     ${SCRIPTPATH}/pgsnap_restore ${restorejobid} ${jobdir}/${buname} TRIGGER

@@ -37,7 +37,7 @@ function uploaddata {
   local format=`echo "${1}" | awk -F '.' '{print $(NF-1)}'`
   # Set SQL
   if [ "${format}" == "message" ]; then
-    sql="\COPY pgsnap_message (logtime, level, pgsnap_tool,  message) FROM stdin";
+    sql="\COPY pgsnap_message (logtime, level, pgsnap_tool,  message, jobclass, jobid) FROM stdin";
   elif [ "${format}" == "catalog" ]; then
     sql="\COPY pgsnap_catalog (pgsnap_dumpjob_id, starttime, endtime, status, bu_name, bu_location, dbsize, dumpsize) FROM stdin"
   else
@@ -72,7 +72,7 @@ function uploaddata {
 # MAIN
 # ===============================================================================
 # Tool log
-TOOL_LOG=${ROOTDIR}/pgsnap_cacheconfig.log 
+TOOL_LOG=${LOGDIR}/pgsnap_upload.log 
 
 # Display information
 if [ "$VERBOSITY" == "VERBOSE" ]; then

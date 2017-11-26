@@ -260,7 +260,7 @@ function createcronjobs {
     jobtype=$(getfieldvalue "${line}" 14)
     restorejobid=$(getfieldvalue "${line}" 19)
     # Set schema_part for the dump name
-    if [ "${schema}" == "*" ]; then
+    if [ "${schema}" == "*" ] || [ "${butype}" == "SCRIPT" ]; then
       schema_part=""
     else
       dumpoptions="--schema=${schema} ${dumpoptions}"
@@ -434,21 +434,24 @@ elif [ "${ACTION}" == "SINGLE" ]; then
   fi
 fi
 
+# If there's log info written, do something sensible
 # Round up with a bit of logging
-# Figure out if there are warnings/errors
-if [ "`cat ${TOOL_LOG} | grep -E 'WARNING|ERROR'`" == "" ]; then
-  JOBWARNINGS=" (without warnings)"
-else
-  JOBWARNINGS=" (with warnings)"
-fi 
+if [ -e ${TOOL_LOG} ]; then
+  # Figure out if there are warnings/errors
+  if [ "`cat ${TOOL_LOG} | grep -E 'WARNING|ERROR'`" == "" ]; then
+    JOBWARNINGS=" (without warnings)"
+  else
+    # With warnings: upload to database (messages)
+    JOBWARNINGS=" (with warnings)"
+    # Transform message log for upload, based on logging (with an awk one liner)
+    # Create the upload data file in upload, we keep the log so we don't have to keep the upload dat file (write it straight to upload dir, then it will be removed)
+    preparecatalogdata "`cat ${TOOL_LOG} | grep -E 'WARNING|ERROR' | awk '{for(i=1;i<=NF;i++) { printf($i); if (i>=1 && i <= 3) {printf("\t")} else { printf(" ")}}; print "\tCACHE_CONFIG\t-1"}'`" ${ROOTDIR}/upload/$$.pgsnap_cacheconfig.message.dat NEW
+  fi 
 
-# Transform message log for upload, based on logging (with an awk one liner)
-# Create the upload data file in upload, we keep the log so we don't have to keep the upload dat file (write it straight to upload dir, then it will be removed)
-preparecatalogdata "`cat  ${TOOL_LOG} | grep -E 'WARNING|ERROR' | awk '{for(i=1;i<=NF;i++) { printf($i); if (i>=1 && i <= 3) {printf("\t")} else { printf(" ")}}; print ""}'`" ${ROOTDIR}/upload/$$.pgsnap_cacheconfig.message.dat NEW
-
-# We also append the session log to the master log, and delete session log
-cat ${TOOL_LOG} >> ${LOGDIR}/pgsnap_cacheconfig.log
-rm -f ${TOOL_LOG}
+  # We also append the session log to the master log, and delete session log
+  cat ${TOOL_LOG} >> ${LOGDIR}/pgsnap_cacheconfig.log
+  rm -f ${TOOL_LOG}
+fi
 
 snaplog "INFO" "finished"
 

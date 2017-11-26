@@ -3,7 +3,8 @@
 # pgsnap_dedup: deduplicate a directory using symlinks
 #
 # $1 full path to directory to dedup
-# $2 verbosity [VERBOSE|empty]
+# $2 verbosity [VERBOSE|SILENT]
+# $3 pgsnap dump job id
 #
 
 # ======================================
@@ -72,6 +73,6 @@ sizeperc=`echo "${dumpsize} ${dedupsize}" | awk '{ printf "%.0f", ($2/$1) * 100;
 snaplog "INFO" "finished - `basename ${1}` - exist files ${ec} - remain size ${sizeperc}%"
 
 # Also put a message in the catalog database (not important enough to keep locally)
-preparecatalogdata "`date '+%Y%m%dT%H%M%S'`\tINFO\tpgsnap_dedup\tfinished - `basename ${1}` - exist files ${ec} - remain size ${sizeperc}%" "${ROOTDIR}/upload/$$.pgsnap_dedup.message.dat" "NEW" ""
+preparecatalogdata "`date '+%Y%m%dT%H%M%S'`\tINFO\tpgsnap_dedup\t`basename ${1}` - reduction: ${ec} existing, ${sizeperc}% remaining\tDUMP\t${3}" "${ROOTDIR}/upload/$$.pgsnap_dedup.message.dat" "NEW" ""
 exit 0;
 

@@ -161,6 +161,10 @@ function setsinglerunstarted {
 # $3 file: [ADD|NEW]
 # $4 optional: UPLOAD (creates link in upload dir)
 function preparecatalogdata {
+  if [ "$1" == "" ]; then
+    return
+  fi
+
   local format=`echo "${2}" | awk -F '.' '{print $(NF-1)}'`
   # Verify the upload format using regular expression
   if [ "${format}" == "catalog" ]; then
@@ -169,7 +173,7 @@ function preparecatalogdata {
       return
     fi
   elif [ "${format}" == "message" ]; then
-    if [ "`echo -e "${1}" | grep -E '^\d{8}T\d{6}\t[A-Z]+\t[a-zA-Z0-9_\./]+\t.*$'`" == "" ]; then
+    if [ "`echo -e "${1}" | grep -E '^\d{8}T\d{6}\t((INFO|WARNING|ERROR|DEBUG))\t.+\t.*\t((CACHE_CONFIG|DUMP|RESTORE))\t-?\d+$'`" == "" ]; then
       snaplog "ERROR" "message upload wrong format: $1"
       return
     fi
@@ -206,6 +210,15 @@ function findrow {
 function getfieldvalue {
   local val=$(echo "${1}" | cut -d '|' -f ${2})
   echo "${val}"
+}
+
+# Scripts/files
+# ------------------------------------------------------
+# Downloads a script, writes it to the script directory
+# $1 script name
+function getscript {
+  local sql="SELECT get_scriptcode('$1')"
+  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "${sql}" > ${SCRIPTDIR}/$1
 }
 
 # =====================================

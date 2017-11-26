@@ -1,0 +1,144 @@
+#!/bin/bash
+
+# Example custom dump script for pgsnapman
+
+# Initialization
+# ============================================
+
+# Source init file
+. $1
+
+# Some vars
+BACKUPDIR=${JOBDIR}/${BUNAME}
+TOOLNAME=`basename $0`
+
+# Environment, list of available vars
+# echo ${JOBID}
+# echo ${VERBOSITY}
+# echo ${STARTTYPE}
+# echo ${SINGLERUNPID}
+# echo ${JOBDIR}
+# echo ${BACKUPDIR}
+# echo ${BUNAME}
+# echo ${PGSQLHOST}
+# echo ${PGSQLPORT}
+# echo ${PGSQLSUPERUSER}
+# echo ${PGSQLDBNAME}
+# echo ${ROOTDIR}
+# echo ${TEMPDIR}
+# echo ${LOGDIR}
+# echo ${UPLOADDIR}
+# echo ${PGBIN}
+# echo ${INITIMESTAMP}
+# echo ${PGSNAPMANLOG}
+# echo ${TOOL_LOG}
+
+# Functions
+# ===========================================
+
+# Write a log entry to the main snapman log
+# $1: log level
+# $2: log message
+function snaplog {
+  echo "`date '+%Y%m%dT%H%M%S'` $1 ${TOOLNAME} ${2}" >> ${PGSNAPMANLOG}
+}
+
+# Write a log entry to the tool log
+# $1: log level
+# $2: log message
+# $3: NEW: start new log
+function log {
+  if [ "${3}" == "NEW" ]; then
+    echo "`date '+%Y%m%dT%H%M%S'` $1 ${TOOLNAME} ${2}" > ${TOOL_LOG}
+  else
+    echo "`date '+%Y%m%dT%H%M%S'` $1 ${TOOLNAME} ${2}" >> ${TOOL_LOG}
+  fi
+}
+
+# Verify and write upload data for the catalog database
+# Checks format based on file name pattern (destination table) and regular expression
+# $1 datarow (pgsql copy format)
+# $2 destination file
+# $3 file: [ADD|NEW]
+# $4 optional: UPLOAD (creates link in upload dir)
+function preparecatalogdata {
+  local format=`echo "${2}" | awk -F '.' '{print $(NF-1)}'`
+  # Verify the upload format using regular expression
+  if [ "${format}" == "message" ]; then
+    if [ "`echo -e "${1}" | grep -E '^\d{8}T\d{6}\t((INFO|WARNING|ERROR|DEBUG))\t.+\t.*\t((CACHE_CONFIG|DUMP|RESTORE))\t-?\d+$'`" == "" ]; then
+      snaplog "ERROR" "message upload wrong format: $1"
+      return
+    fi
+  else
+      snaplog "ERROR" "catalog upload format unknown: $2"
+      return
+  fi
+  
+  # Add to existing file, or overwrite
+  if [ "${3}" == "ADD" ]; then
+    echo -e "${1}" >> ${2}
+  else
+    echo -e "${1}" > ${2}
+  fi
+  # Create link in upload dir
+  if [ "${4}" == "UPLOAD" ]; then
+    ln -s ${2} ${ROOTDIR}/upload/
+  fi
+}
+
+# MAIN
+# =======================================
+
+# Writing Log
+# ---------------------------------------
+# You may log to your own custom log
+echo "Example custom dump script, backing up ${PGSQLHOST}:${PGSQLPORT}/${PGSQLDBNAME} to: ${BACKUPDIR}/mydump.cdmp (job id: ${JOBID})" >> ${LOGDIR}/test-script.log
+
+# Simpy echoing produces log output in <BACKUPDIR>/<BUNAME>.log (stdout will be catched)
+echo "StdOut from example custom dump script"
+
+# Write to the master pgsnapman log
+snaplog "INFO" "A log entry in the master log"
+
+# Write to the tool log (which is the log of the process that called this script)
+log "INFO" "A log entry in the tool log"
+
+# Work to be done
+# As an example, we provide a regular backup using custom dump, instead of directory dump
+${PGBIN}/pg_dump ${PGSQLHOST}x -p ${PGSQLPORT} -U ${PGSQLSUPERUSER} -Fc -f ${BACKUPDIR}/mydump.cdmp ${PGSQLDBNAME}
+ec=$?
+
+# Uploading a message to the database (take good care of the format!)
+# -------------------------------------------------------------------
+# Echo the log entry to a file in the upload directory, or alternatively store it somewhere else and symlink. Name: <something_unique>.message.dat
+# The file or link in the upload directory will be removed after successful upload.
+# Format: TimeStamp<tab>MessageLevel<tab>ToolName<tab>YourMessage<tab>JobClass<tab>JobId
+# TimeStamp: yyyymmddTHHMMSS
+# MessageLevel: [INFO|ERROR|WARNING|DEBUG]
+# Toolname: script name (use ${TOOLNAME} or something else)
+# JobClass: [DUMP|RESTORE|DEDUP|CONFIG]
+# JobId: id of the pgsnapman job (use ${JOBID})
+preparecatalogdata "`date +'%Y%m%dT%H%M%S'`\tINFO\t${TOOLNAME}\tSome information that you want to log\tDUMP\t${JOBID}" "${UPLOADDIR}/$$.test-script.message.dat" NEW ""
+
+# Uploading a catalog entry to the database (take good care of the format!)
+# -------------------------------------------------------------------
+# jobresult must be FAILED or SUCCESS
+if [ "${ec}" == "0" ]; then
+  jobresult=SUCCESS
+else
+  jobresult=FAILED
+  log "ERROR" "pg_dump did not run successfully, or not at all (or some more sensible info)"
+  # Of course, you may also create a message entry in the catalog database: here
+  preparecatalogdata "`date +'%Y%m%dT%H%M%S'`\tERROR\t${TOOLNAME}\tpg_dump has not run (successfully)\tDUMP\t${JOBID}" "${UPLOADDIR}/$$.test-script.message.dat" NEW ""
+fi
+# DBSIZE and SIZEONDISK: set as desired (integer, empty not allowed)
+DBSIZE=-1
+SIZEONDISK=-1
+
+# Remove init file
+rm -f $1
+
+# Exit with the pg_dump exit code (but any logic of your own will do)
+exit ${ec}
+
+
