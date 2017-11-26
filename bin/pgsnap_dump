@@ -72,6 +72,7 @@ function preparescriptrun {
   echo "PGSQLPORT=${pgsqlport}" >> ${TEMPDIR}/$$.scriptinit.temp
   echo "PGSQLSUPERUSER=${pgsqlsuperuser}" >> ${TEMPDIR}/$$.scriptinit.temp
   echo "PGSQLDBNAME=${dbname}" >> ${TEMPDIR}/$$.scriptinit.temp
+  echo "SCHEMA=${schema}" >> ${TEMPDIR}/$$.scriptinit.temp
   echo "ROOTDIR=${ROOTDIR}" >> ${TEMPDIR}/$$.scriptinit.temp
   echo "LOGDIR=${LOGDIR}" >> ${TEMPDIR}/$$.scriptinit.temp
   echo "TEMPDIR=${TEMPDIR}" >> ${TEMPDIR}/$$.scriptinit.temp
@@ -80,6 +81,48 @@ function preparescriptrun {
   echo "PGSNAPMANLOG=${PGSNAPMANLOG}" >> ${TEMPDIR}/$$.scriptinit.temp
   echo "TOOL_LOG=${TOOL_LOG}" >> ${TEMPDIR}/$$.scriptinit.temp
   mkdir ${jobdir}/${buname}
+}
+
+# Get the global ACL's from the database
+# $1 database name
+# $2 store in file (full path)
+function dumpglobalacls {
+  # Check name
+  if [ "${1}" == *";"* ]; then
+    return
+  fi
+  
+  # The nice way, using a function (but that's not present in every database)
+  # local sql="select * from get_globalacl('${1}') as (datname name, acl_role text, acl_rights text);"
+  # Ugly but acceptable: we checked for ; in the name, but probably nothing will work with a weird database name (you'll have to connect in the first place)
+  local sql="with acls as (select datname, split_part(acl, '=', 1) as acl_role \
+  , (regexp_split_to_array(acl, '[=/]'))[2] as acl_rights \
+from (select datname, unnest(datacl)::text as acl \
+  from pg_database) a \
+) \
+select datname,acl_role,acl_rights from acls \
+where datname = '${1}'"
+  local acls=`${pgbin}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname="${1}" -F '|' -A -t -c "${sql}"`
+  if [ "acls" != "" ]; then
+    echo "REVOKE ALL ON DATABASE ${1} FROM public;" > ${2}
+  fi
+  for line in $acls; do
+    local acl="$(getfieldvalue ${line} 3)"
+    local role="$(getfieldvalue ${line} 2)"
+    if [ "${role}" == "" ]; then
+      role="public"
+    fi
+    echo "REVOKE ALL ON DATABASE ${1} FROM ${role};" >> ${2}
+    if [[ "${acl}" =~ "C" ]]; then
+      echo "GRANT CREATE ON DATABASE ${1} TO ${role};" >> ${2}
+    fi
+    if [[ "${acl}" =~ "T" ]]; then
+      echo "GRANT TEMP ON DATABASE ${1} TO ${role};" >> ${2}
+    fi
+    if [[ "${acl}" =~ "c" ]]; then
+      echo "GRANT CONNECT ON DATABASE ${1} TO ${role};" >> ${2}
+    fi
+  done
 }
 
 # Start a specific dump job 
@@ -116,7 +159,7 @@ function startpgsnapjob {
     schema_part=""
   else
     dumpoptions="--schema=\"${schema}\" ${dumpoptions}"
-    schema_part="."${schema}
+    schema_part=".${schema}"
   fi
 
   # Resolve host
@@ -208,20 +251,23 @@ function startpgsnapjob {
       # globals (tablespaces, users)
       ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -g -o -f ${jobdir}/${buname}.cluster_globals.sql -v 2>> ${jobdir}/${buname}.log
       if [ "$?" != "0" ]; then
-        log "ERROR" "job id ${jobid} - errors occured during pg_dumpall (globals) for ${buname}"
+        log "ERROR" "job id ${jobid} - errors occured during pg_dumpall (globals): ${buname}"
         ERRORS=1
       fi
+      # globals (connect rights)
+      dumpglobalacls "${dbname}" ${jobdir}/${buname}.database_globals.sql
       # db dump (possibly schema-only)
       snaplog "INFO" "dumping - ${pgbin}/pg_dump ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} -b -o -Fd -f ${jobdir}/${buname} -v ${dbname}"
       ${pgbin}/pg_dump ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} -b -o -Fd -f ${jobdir}/${buname} -v ${dbname} 2>>  ${jobdir}/${buname}.log
       if [ "$?" != "0" ]; then
-        log "ERROR" "job id ${jobid} - errors occured during pg_dump for ${buname}"
+        log "ERROR" "job id ${jobid} - errors occured during pg_dump: ${buname}"
         ERRORS=1
       fi
-      # extract schema sql
-      ${pgbin}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --schema-only -f ${jobdir}/${buname}.schema -v ${jobdir}/${buname} 2>>  ${jobdir}/${buname}.log
+      # extract schema sql, testing dump
+      #${pgbin}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --schema-only -f ${jobdir}/${buname}.schema -v ${jobdir}/${buname} 2>>  ${jobdir}/${buname}.log
+      ${pgbin}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --schema-only -f /dev/null -v ${jobdir}/${buname} 2>>  ${jobdir}/${buname}.log
       if [ "$?" != "0" ]; then
-        log "ERROR" "job id ${jobid} - errors occured during schema creation from dump for ${buname}"
+        log "ERROR" "job id ${jobid} - errors occured during schema creation from dump: ${buname}"
         ERRORS=1
       fi
     fi

@@ -105,7 +105,7 @@ log "INFO" "A log entry in the tool log"
 
 # Work to be done
 # As an example, we provide a regular backup using custom dump, instead of directory dump
-${PGBIN}/pg_dump ${PGSQLHOST}x -p ${PGSQLPORT} -U ${PGSQLSUPERUSER} -Fc -f ${BACKUPDIR}/mydump.cdmp ${PGSQLDBNAME}
+${PGBIN}/pg_dump ${PGSQLHOST} -p ${PGSQLPORT} -U ${PGSQLSUPERUSER} -Fc -f ${BACKUPDIR}/mydump.cdmp ${PGSQLDBNAME}
 ec=$?
 
 # Uploading a message to the database (take good care of the format!)
@@ -118,7 +118,7 @@ ec=$?
 # Toolname: script name (use ${TOOLNAME} or something else)
 # JobClass: [DUMP|RESTORE|DEDUP|CONFIG]
 # JobId: id of the pgsnapman job (use ${JOBID})
-preparecatalogdata "`date +'%Y%m%dT%H%M%S'`\tINFO\t${TOOLNAME}\tSome information that you want to log\tDUMP\t${JOBID}" "${UPLOADDIR}/$$.test-script.message.dat" NEW ""
+preparecatalogdata "`date +'%Y%m%dT%H%M%S'`\tINFO\t${TOOLNAME}\tSome information that you want to log\tDUMP\t${JOBID}" "${UPLOADDIR}/$$.test-script.message.dat" NEW
 
 # Uploading a catalog entry to the database (take good care of the format!)
 # -------------------------------------------------------------------
@@ -129,7 +129,7 @@ else
   jobresult=FAILED
   log "ERROR" "pg_dump did not run successfully, or not at all (or some more sensible info)"
   # Of course, you may also create a message entry in the catalog database: here
-  preparecatalogdata "`date +'%Y%m%dT%H%M%S'`\tERROR\t${TOOLNAME}\tpg_dump has not run (successfully)\tDUMP\t${JOBID}" "${UPLOADDIR}/$$.test-script.message.dat" NEW ""
+  preparecatalogdata "`date +'%Y%m%dT%H%M%S'`\tERROR\t${TOOLNAME}\tpg_dump has not run (successfully)\tDUMP\t${JOBID}" "${UPLOADDIR}/$$.test-script.message.dat" NEW
 fi
 # DBSIZE and SIZEONDISK: set as desired (integer, empty not allowed)
 DBSIZE=-1

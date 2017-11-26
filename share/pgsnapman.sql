@@ -37,6 +37,23 @@ $_$;
 
 
 --
+-- Name: get_globalacl(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION get_globalacl(dbname text) RETURNS record
+    LANGUAGE sql
+    AS $_$
+with acls as (select datname, split_part(acl, '=', 1) as acl_role
+  , (regexp_split_to_array(acl, '[=/]'))[2] as acl_rights
+from (select datname, unnest(datacl)::text as acl
+  from pg_database) a
+)
+select * from acls
+where datname = $1;
+$_$;
+
+
+--
 -- Name: get_hasjob(integer, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
