@@ -122,6 +122,15 @@ $$;
 
 
 --
+-- Name: get_scriptcode(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION get_scriptcode(script_name text) RETURNS text
+    LANGUAGE sql
+    AS $_$select scriptcode from pgsnap_script where scriptname = $1;$_$;
+
+
+--
 -- Name: insert_dumpjob(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -316,7 +325,9 @@ CREATE TABLE pgsnap_message (
     level text,
     pgsnap_tool text,
     logtime timestamp without time zone,
-    message text
+    message text,
+    jobclass text,
+    jobid integer
 );
 
 
@@ -380,6 +391,36 @@ CREATE SEQUENCE pgsnap_restorejob_id_seq
 --
 
 ALTER SEQUENCE pgsnap_restorejob_id_seq OWNED BY pgsnap_restorejob.id;
+
+
+--
+-- Name: pgsnap_script; Type: TABLE; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE TABLE pgsnap_script (
+    id integer NOT NULL,
+    scriptname text,
+    scriptcode text
+);
+
+
+--
+-- Name: pgsnap_script_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE pgsnap_script_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: pgsnap_script_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE pgsnap_script_id_seq OWNED BY pgsnap_script.id;
 
 
 --
@@ -598,6 +639,13 @@ ALTER TABLE ONLY pgsnap_restorejob ALTER COLUMN id SET DEFAULT nextval('pgsnap_r
 -- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
+ALTER TABLE ONLY pgsnap_script ALTER COLUMN id SET DEFAULT nextval('pgsnap_script_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
+--
+
 ALTER TABLE ONLY pgsnap_singlerun ALTER COLUMN id SET DEFAULT nextval('pgsnap_singlerun_id_seq'::regclass);
 
 
@@ -645,6 +693,14 @@ ALTER TABLE ONLY pgsnap_message
 
 ALTER TABLE ONLY pgsnap_restorejob
     ADD CONSTRAINT pgsnap_restorejob_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: pgsnap_script_pkey; Type: CONSTRAINT; Schema: public; Owner: -; Tablespace: 
+--
+
+ALTER TABLE ONLY pgsnap_script
+    ADD CONSTRAINT pgsnap_script_pkey PRIMARY KEY (id);
 
 
 --
