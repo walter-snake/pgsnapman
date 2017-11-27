@@ -26,6 +26,119 @@ COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
 SET search_path = public, pg_catalog;
 
 --
+-- Name: get_cleancatalog(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION get_cleancatalog(jobid integer) RETURNS SETOF record
+    LANGUAGE plpgsql
+    AS $_$
+declare
+  days integer;
+  weeks integer;
+  months integer;
+  years integer;
+  keep_slicestart timestamp without time zone;
+  keep_sliceend timestamp without time zone;
+  dj record;
+  r record;
+  keep_id record;
+  keep_ids integer[];
+begin
+  -- Get the clean up schedule from the dumpjobs table
+  select * from pgsnap_dumpjob into dj where id = $1;
+  days := dj.keep_daily;
+  weeks := dj.keep_weekly;
+  months := dj.keep_monthly;
+  years := dj.keep_yearly;
+  
+  -- 1 per day older then 'keep slicestart' time
+  keep_slicestart := now()::date;
+  for i in 0..days - 1 loop
+    -- using overlaps, we're going to collect all ids in day intervals for i-days, and then pick the most recent
+    keep_sliceend := keep_slicestart - (i + 1 || ' days')::interval;
+    for r in select id
+      from pgsnap_catalog
+      where (keep_slicestart - (i || ' days')::interval, keep_sliceend)
+        overlaps (starttime, starttime)
+      and pgsnap_dumpjob_id = $1
+      order by starttime desc limit 1
+    loop
+      if NOT r.id IS NULL then
+        keep_ids := array_append(keep_ids, r.id);
+      end if;
+      raise notice 'day % %', i, r.id;
+    end loop;
+  end loop;
+    
+  -- 1 per week older then 'keep slicestart' time
+  keep_slicestart := keep_sliceend;
+  for i in 0..weeks - 1 loop
+    -- using overlaps, we're going to collect all ids in week intervals for i-weeks, and then pick the oldest
+    keep_sliceend := keep_slicestart - (i + 1 || ' weeks')::interval;
+    for r in select id
+      from pgsnap_catalog
+      where (keep_slicestart - (i || ' weeks')::interval, keep_sliceend)
+        overlaps (starttime, starttime)
+      and pgsnap_dumpjob_id = $1
+      order by starttime asc limit 1
+   loop
+      if NOT r.id IS NULL then
+        keep_ids := array_append(keep_ids, r.id);
+      end if;
+      raise notice 'week % %', i, r.id;
+    end loop;
+  end loop;
+
+  -- 1 per month
+  keep_slicestart := keep_sliceend;
+  for i in 0..months - 1 loop
+    -- using overlaps, we're going to collect all ids in week intervals for i-weeks, and then pick the oldest
+    keep_sliceend := keep_slicestart - (i + 1 || ' months')::interval;
+    for r in select id
+      from pgsnap_catalog
+      where (keep_slicestart - (i || ' months')::interval, keep_sliceend)
+        overlaps (starttime, starttime)
+      and pgsnap_dumpjob_id = $1
+      order by starttime asc limit 1
+    loop
+      if NOT r.id IS NULL then
+        keep_ids := array_append(keep_ids, r.id);
+      end if;
+      raise notice 'month % %', i, r.id;
+    end loop;
+  end loop;
+
+  -- 1 per year
+  keep_slicestart := keep_sliceend;
+  for i in 0..years - 1 loop
+    -- using overlaps, we're going to collect all ids in week intervals for i-weeks, and then pick the oldest
+    keep_sliceend := keep_slicestart - (i + 1 || ' years')::interval;
+    for r in select id
+      from pgsnap_catalog
+      where (keep_slicestart - (i || ' years')::interval, keep_sliceend)
+        overlaps (starttime, starttime)
+      and pgsnap_dumpjob_id = $1
+      order by starttime asc limit 1
+    loop
+      if NOT r.id IS NULL then
+        keep_ids := array_append(keep_ids, r.id);
+      end if;
+      raise notice 'year % %', i, r.id;
+    end loop;
+  end loop;
+
+  -- output
+  raise notice 'array size %', array_length(keep_ids, 1);
+  for keep_id in select unnest(keep_ids)
+  loop
+    return next keep_id;
+  end loop;
+  return;
+end;
+$_$;
+
+
+--
 -- Name: get_defaultworker(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 

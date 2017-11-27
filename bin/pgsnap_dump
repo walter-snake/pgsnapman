@@ -184,12 +184,15 @@ function startpgsnapjob {
     echo ""
   fi
 
-  # Determine job type, as naming schema's differ 
+  # Determine job type, as naming schema's differ, also set --schema-only flag if required
   if [ "${butype}" == "CLUSTER_SCHEMA" ]; then
     jobdir=${DUMPSNAP}/${1}/${jobid}_cluster.schema
   else
     jobdir=${DUMPSNAP}/${1}/${jobid}_${dbname}${schema_part}
   fi
+  if [[ "${butype}" =~ .*SCHEMA ]]; then
+    schemaonly="--schema-only"
+  fi 
   mkdir -p ${jobdir}
 
   # Set logfile
@@ -212,12 +215,13 @@ function startpgsnapjob {
     log "ERROR" "job id ${jobid} - job can not run - pg_dump not found, check PGBINxx paths in config file ${CONFIGFILE}"
     ERRORS=1
   else
+  # Cluster schema dump
     STARTTIME=`date '+%s'`
     log "INFO" "job id ${jobid} - ${butype} dump started with options ${dumpoptions}"
     if [ "${butype}" == "CLUSTER_SCHEMA" ]; then
       ext=".sql"
-      snaplog "INFO" "dumping - ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -s -o -f ${jobdir}/${buname}${ext} -v"
-      ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -s -o -f ${jobdir}/${buname}${ext} -v 2>> ${jobdir}/${buname}.log
+      snaplog "INFO" "dumping - ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} ${schemaonly} -f ${jobdir}/${buname}${ext} -v"
+      ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} ${schemaonly} -f ${jobdir}/${buname}${ext} -v 2>> ${jobdir}/${buname}.log
       if [ "$?" == "0" ]; then
         gzip ${jobdir}/${buname}${ext}
         if [ "$?" == "0" ]; then
@@ -231,6 +235,7 @@ function startpgsnapjob {
         ERRORS=1
       fi
     elif  [ "${butype}" == "SCRIPT" ]; then
+    # Script dumps (custom script)
       local scriptname=`echo "${dumpoptions}" | cut -d ' ' -f 1`
       if [ ! -e "${SCRIPTDIR}/${scriptname}" ]; then
         snaplog "ERROR" "script not found: ${SCRIPTDIR}/${scriptname}"
@@ -247,24 +252,24 @@ function startpgsnapjob {
           ERRORS=1
         fi
       fi
-    else 
-      # globals (tablespaces, users)
-      ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} -g -o -f ${jobdir}/${buname}.cluster_globals.sql -v 2>> ${jobdir}/${buname}.log
+    else
+    # Database specific dumps
+      # Tablespaces, users
+      ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} --globals-only -f ${jobdir}/${buname}.cluster_globals.sql -v 2>> ${jobdir}/${buname}.log
       if [ "$?" != "0" ]; then
         log "ERROR" "job id ${jobid} - errors occured during pg_dumpall (globals): ${buname}"
         ERRORS=1
       fi
-      # globals (connect rights)
+      # Connection rights
       dumpglobalacls "${dbname}" ${jobdir}/${buname}.database_globals.sql
-      # db dump (possibly schema-only)
-      snaplog "INFO" "dumping - ${pgbin}/pg_dump ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} -b -o -Fd -f ${jobdir}/${buname} -v ${dbname}"
-      ${pgbin}/pg_dump ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} -b -o -Fd -f ${jobdir}/${buname} -v ${dbname} 2>>  ${jobdir}/${buname}.log
+      # Dump (possibly schema-only, that's included in the dump options)
+      snaplog "INFO" "dumping - ${pgbin}/pg_dump ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} ${schemaonly} -Fd -f ${jobdir}/${buname} -v ${dbname}"
+      ${pgbin}/pg_dump ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} ${schemaonly} -Fd -f ${jobdir}/${buname} -v ${dbname} 2>>  ${jobdir}/${buname}.log
       if [ "$?" != "0" ]; then
         log "ERROR" "job id ${jobid} - errors occured during pg_dump: ${buname}"
         ERRORS=1
       fi
-      # extract schema sql, testing dump
-      #${pgbin}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --schema-only -f ${jobdir}/${buname}.schema -v ${jobdir}/${buname} 2>>  ${jobdir}/${buname}.log
+      # Extract schema sql, as a means of testing the dump
       ${pgbin}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --schema-only -f /dev/null -v ${jobdir}/${buname} 2>>  ${jobdir}/${buname}.log
       if [ "$?" != "0" ]; then
         log "ERROR" "job id ${jobid} - errors occured during schema creation from dump: ${buname}"
@@ -358,16 +363,19 @@ copylog=${jobdir}/${buname}.catalog.dat
 preparecatalogdata "${2}\t${INITIMESTAMP}\t`date +'%Y%m%dT%H%M%S'`\t${jobresult}\t${buname}${ext}\t${jobdir}\t${DBSIZE}\t${SIZEONDISK}" "${copylog}" "NEW" "UPLOAD"
 
 # Next procedures, set exit code
-if [ "${jobresult}" == "SUCCESS" ]; then
+if [ "${jobresult}" == "FAILED" ]; then
+  exit 1
+else
+  # Start dedup for a FULL backup
   if [ "${butype}" == "FULL" ]; then
     ${SCRIPTPATH}/pgsnap_dedup ${jobdir}/${buname} SILENT ${jobid}
   fi
+  # Start a restore job if requested, put it in the background, the dump is ready now
   if [ "${restorejobid}" != "-1" ]; then
-    ${SCRIPTPATH}/pgsnap_restore ${restorejobid} ${jobdir}/${buname} TRIGGER
+    ${SCRIPTPATH}/pgsnap_restore ${restorejobid} ${jobdir}/${buname} TRIGGER &
   fi
   exit 0
-else
-  exit 1
 fi
 
 # EOF
+
