@@ -1,5 +1,16 @@
 #!/bin/bash
 
+# pgsnap_clean various routine maintenance operations for keeping the pgsnapman data directory clean
+# - clean up old temp files
+# - rotate and gzip log files
+# - removing old backups according to retention policy
+# - remove unused files from the dedup store (part of retention based cleaning, or separate full sanitize operation) 
+#
+# $1 VERBOSITY [SILENT|VERBOSE]
+# $2 DEDUPCLEAN (full clean of dedup data store, optional)
+# $3 BATCH (run DEDUPCLEAN in batch mode, optional)
+#
+
 # ======================================
 # Initialization
 # ======================================
@@ -15,39 +26,287 @@ done
 SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 
 # Catalog database needed?
-PGSCDB_REQUIRED=NO
+PGSCDB_REQUIRED=YES
+
+# Check verbosity
+if [[ ! "$1" =~ SILENT|VERBOSE ]]; then
+  echo "ERROR verbosity must be set"
+  exit 1
+fi
 
 # Load functions, will also perform initialization operations
 . ${SCRIPTPATH}/pgsnap_lib
 
 # =======================================
+# Functions
+# =======================================
+
+# Retrieve all jobs with catalog entries, and retention info from the jobs table.
+# writes a temp file ${TEMPDIR}/$$.catalogjobinfo.list
+# (no parameters)
+function getcatalogjobinfo {
+  local sql="select id, keep_daily, keep_weekly, keep_monthly, keep_yearly \
+    from pgsnap_dumpjob \
+    where id in (select pgsnap_dumpjob_id 
+                 from pgsnap_catalog
+                 group by pgsnap_dumpjob_id);"
+  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" -A -t -F '|' > ${TEMPDIR}/$$.catalogjobinfo.list
+}
+
+# Removes an entry from the catalog list
+# $1 id of the catalog entry
+function removefromcatalogdb {
+  local sql="select del_catalog($1)";
+  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" > /dev/null
+}
+
+# Clean up a specific job based on provided retention settings
+# $1 jobid
+# $2 keep_dayly
+# $3 keep_weekly
+# $4 keep_monthly
+# #5 keep_yearly
+function cleanupjob {
+  local line
+  echo "${INITIMESTAMP} Catalog ids to keep for job id: $1" >> ${LOGDIR}/pgsnap_clean.keepcatids.log
+  local sql="select c.id, c.starttime, c.bu_name, c.bu_location || '/' || c.bu_name as full_path, j.dumptype from pgsnap_catalog c join pgsnap_dumpjob j on c.pgsnap_dumpjob_id = j.id where c.pgsnap_dumpjob_id = $1 AND c.id not in (select id from get_keep_catjobid('`date '+%Y%m%dT%H%M%S'`', $1, $2, $3, $4, $5) as (id integer));"
+  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" -A -t -F '|' --output=${TEMPDIR}/$$.removedumps.list 2>> ${LOGDIR}/pgsnap_clean.keepcatids.log
+  # Loop through all catalog entries, and remove them
+  while read line; do
+    if [ "${VERBOSITY}" == "VERBOSE" ]; then
+      echo "INFO remove from catalog: $(getfieldvalue "${line}" 1) $(getfieldvalue "${line}" 2) $(getfieldvalue "${line}" 3)"
+    fi
+    log "INFO" "remove from catalog: $(getfieldvalue "${line}" 1) $(getfieldvalue "${line}" 2) $(getfieldvalue "${line}" 3)"
+    local path="$(getfieldvalue "${line}" 4)"
+    local path=`echo "${path}" | sed -E 's/.sql.gz$//g'`
+    # Remove it from the catalog db altogether
+    removefromcatalogdb $(getfieldvalue "${line}" 1)
+    # Check if the path is safe, if so proceed
+    if [ "$(issafetoremove "${path}")" == "NO" ]; then
+      log "ERROR" "specified path considered unsafe to be removed [${path}]"
+    else
+      local checksumfile=${path}.chksum
+      # Possibly slow when cleaning up tons of backups, as files will be checked multiple times. But, this is
+      # only the case when there are indeed many links, and typically when cleaning on a daily basis, it is the
+      # faster solution, as only a handful of probably non-identical database dumps will be cleaned (one per database).
+      # 1. Clean up dedup store first, as it requires the .chksum file
+      dedupstore_clean ${checksumfile}
+      # 2. Now remove the files
+      rm -rf ${path}*
+    fi
+  done < ${TEMPDIR}/$$.removedumps.list
+  rm -f ${TEMPDIR}/$$.removedumps.list
+}
+
+# Verify if a path can be safely removed
+function issafetoremove {
+  mydir="$1"
+  minlength=6
+  # Many checks on the path, to be sure we're not going to remove something that hurts the server
+  if [ `echo ${#mydir}` -lt ${minlength} ]; then
+    log "ERROR" "path too short [$1]"
+  fi
+
+  if [[ "${mydir}" =~ \/\.\.\/ ]]; then
+    log "ERROR" "path contains /../ [$1]"
+  fi
+
+  if [[ ! "${mydir}" =~ ^${DUMPSNAP}/ ]]; then
+    log "ERROR" "path does not start with: ${DUMPSNAP} [$1]"
+  fi
+  # All in one, go-no-go, echo is function output: 'return' value
+  if [ `echo ${#mydir}` -ge ${minlength} ] && [[ ! "${mydir}" =~ \/\.\.\/ ]] && [[ "${mydir}" =~ ^${DUMPSNAP}/ ]]; then
+    echo "YES"
+  else
+    echo "NO"
+  fi
+}
+
+# Verify a single data file in the dedupstore, check if it can be removed.
+# $1 file with checksums (1st column) to verify and clean if no links are present anymore
+function dedupstore_clean {
+  local line
+  if [ ! -e "${1}" ]; then
+    return
+  fi
+  log "INFO" "processing dedupdata: $1"
+  if [ "${VERBOSITY}" == "VERBOSE" ]; then
+    echo "INFO processing dedupdata: $1"
+    echo "INFO searching for links"
+    echo "* marked for removal"
+  fi
+  while read line; do
+    chksum=`echo "${line}" | cut -d ' ' -f1`
+    local idxpath="$(getdedupindexedpath ${chksum})"
+    ##echo "indexedpath: ${idxpath}"
+    c=`find -L ${DUMPSNAP}/ -samefile ${idxpath} | wc -l | sed 's/ //g'`
+    if [ $c -eq 0 ]; then
+      echo "$line" >> ${TEMPDIR}/$$.datafiles.rm
+    fi
+    if [ "${VERBOSITY}" == "VERBOSE" ]; then
+      if [ $c -eq 0 ]; then
+        echo "* `basename $line` - link count: $c"
+      else
+        echo "  `basename ${line}` - link count: $c"
+      fi
+    fi
+  done < ${1}
+
+  # Go through list of files to remove
+  if [ -e "${TEMPDIR}/$$.datafiles.rm" ]; then
+    while read line; do
+      echo ${line}
+    done < ${TEMPDIR}/$$.datafiles.rm
+    rm -f ${TEMPDIR}/$$.datafiles.rm
+  fi
+}
+
+# Get the full path in the dedup store for a specified checksum
+# $1 checksum
+function getdedupindexedpath {
+  local index1=${line:0:1}
+  local index2=${line:1:1}
+  local fileindex=${DEDUPDATA}/${index1}/${index2}
+  echo ${fileindex}/${1}
+}
+
+# Full catalog clean up, based on retention policy
+# Get the jobs that have catalog entries, together with retention info
+# Calls the subsequent job cleaning operation, which includes dedup store cleaning.
+# (no parameters)
+function cleanupcatalog {
+  local line
+  # Get the jobs that have catalog entries, together with retention info, use temp file with results
+  getcatalogjobinfo
+  # Go through results, clean up
+  while read line; do
+    cleanupjob $(getfieldvalue "${line}" 1) $(getfieldvalue "${line}" 2) $(getfieldvalue "${line}" 3) $(getfieldvalue "${line}" 4) $(getfieldvalue "${line}" 5) 
+  done < ${TEMPDIR}/$$.catalogjobinfo.list
+  rm -f ${TEMPDIR}/$$.catalogjobinfo.list
+}
+
+# Full clean up of the deduplication store, forced by comparing link pointers with
+# available data files.
+function dedupstore_fullclean {
+  local line
+  # Check links to every file, as long as there's one, we leave it in place.
+  find ${DEDUPDATA}/* -type f > ${TEMPDIR}/$$.datafiles.list
+  if [ "$?" != 0 ]; then
+    echo "ERROR find errors occured"
+    return
+  fi
+  tc=0
+  lc=0
+  log "INFO" "searching for links"
+  if [ "${VERBOSITY}" == "VERBOSE" ]; then
+    echo "*=marked for removal"
+  fi
+  while read line; do
+    let "lc = lc + c"
+    c=`find -L ${DUMPSNAP}/ -samefile ${line} | wc -l | sed 's/ //g'`
+    if [ $c -eq 0 ]; then
+      echo "$line" >> ${TEMPDIR}/$$.datafiles.rm
+      let "tc = tc + 1"
+    fi
+    if [ "${VERBOSITY}" == "VERBOSE" ]; then
+      if [ $c -eq 0 ]; then
+        echo "* `basename ${line}` - link count: $c"
+      else
+        echo "  `basename ${line}` - link count: $c"
+      fi
+    fi
+  done < ${TEMPDIR}/$$.datafiles.list
+
+  # An extra check: if no links are found, nothing will be deleted. This makes it impossible
+  # that files will be deleted when someone manually removed the links, 
+  if [ $lc -eq 0 ]; then
+    log "WARNING" "no links are found, we're not deleting anything as a precaution measure"
+    return
+  fi
+
+  # Check if anything to do, depending on batch mode or not asks for confirmation.
+  if [ ! -e ${TEMPDIR}/$$.datafiles.rm ]; then
+    log "INFO" "nothing to do"
+  else
+    if [ "${BATCHMODE}" != "BATCH" ]; then
+      echo "Do you wish to remove $tc files?"
+      select yn in "Yes" "No"; do
+        case $yn in
+          Yes ) break;;
+          No ) exit;;
+        esac
+      done
+    fi
+
+    log "INFO" "removing $tc files"
+    while read line; do
+      rm -f ${line} 
+    done < ${TEMPDIR}/$$.datafiles.rm
+  fi
+
+  # Clean up temp files
+  rm -f ${TEMPDIR}/$$.datafiles.list
+  rm -f ${TEMPDIR}/$$.datafiles.rm
+}
+
+
+
+# =======================================
 # MAIN
 # =======================================
 
-# Clean up temp files from previously running jobs (unclean exit, or just because we have to)
-find ${TEMPDIR} -type f -mtime 1 > ${TEMPDIR}/clean_running.temp
-find ${TEMPDIR} -type f -name '*.running' >> ${TEMPDIR}/clean_running.temp
-find ${DUMPSNAP} -type f -maxdepth 2 -name '*.running' >> ${TEMPDIR}/clean_running.temp
-while read line; do
-  chkpid=$(echo `basename $line` | cut -d '.' -f 1)
-  ps -p $chkpid &> /dev/null
-  if [ "$?" == "1" ]; then
-    rm $line
-  fi
-done < ${TEMPDIR}/clean_running.temp
-rm ${TEMPDIR}/clean_running.temp
+# Validate the DEDUPstore, if it does not exist we'll immediately exist
+# Otherwise we're in trouble (especially the snapshot dir, where we
+# must find the links: no link, data gone). 
+if [ ! -d ${DUMPSNAP} ]; then
+  echo "The snapshot directory does not exist, unsafe to continue."
+  snaplog "ERROR" "init  - the snapshot directory does not exist, unsafe to continue."
+  exit 1
+fi
 
-# Log file rotation
-rotate=`find ${LOGDIR} -type f -name '*.log' -size +${MAXLOGSIZE}`
-for f in ${rotate}; do
-  if [ "${f}" != "" ]; then
-    mv "${f}" "${LOGDIR}/`basename ${f}`.${INITIMESTAMP}"
-    gzip "${LOGDIR}/`basename ${f}`.${INITIMESTAMP}"
-  fi
-done
+# Set the tool log
+TOOL_LOG=${LOGDIR}/pgsnap_clean.log
 
-# Retention policy-cleaning...
+# Batch mode
+BATCHMODE=$3
 
-# TBD!
+# Force full dedup store cleaning
+if [ "$2" == "DEDUPCLEAN" ]; then
+
+  # Normally, cleaning the dedup store occurs while cleaning up the catalog. This may however fail when
+  # someone manually removed a backup, and then the files belonging to that particular backup only will
+  # never be checked again. Thus, it is made possible to perform a full dedupstore clean up, by calling
+  # dedupstore_fullclean.
+  # To be run from the commandline, nothing will be logged (messages all stdout).
+  snaplog "INFO" "init - full dedupstore scan and clean"
+  dedupstore_fullclean
+else 
+  # Normal, scheduled maintenance mode
+
+  # Clean up temp files from previously running jobs (unclean exit, or just because we have to)
+  find ${TEMPDIR} -type f -mtime 1 > ${TEMPDIR}/clean_running.temp
+  find ${TEMPDIR} -type f -name '*.running' >> ${TEMPDIR}/clean_running.temp
+  find ${DUMPSNAP} -type f -maxdepth 2 -name '*.running' >> ${TEMPDIR}/clean_running.temp
+  while read line; do
+    chkpid=$(echo `basename $line` | cut -d '.' -f 1)
+    ps -p $chkpid &> /dev/null
+    if [ "$?" == "1" ]; then
+      rm -f $line
+    fi
+  done < ${TEMPDIR}/clean_running.temp
+  rm -f ${TEMPDIR}/clean_running.temp
+
+  # Log file rotation
+  rotate=`find ${LOGDIR} -type f -name '*.log' -size +${MAXLOGSIZE}`
+  for f in ${rotate}; do
+    if [ "${f}" != "" ]; then
+      mv "${f}" "${LOGDIR}/`basename ${f}`.${INITIMESTAMP}"
+      gzip "${LOGDIR}/`basename ${f}`.${INITIMESTAMP}"
+    fi
+  done
+
+  # Retention policy-cleaning
+  cleanupcatalog
+fi 
 
 exit 0

@@ -1,3 +1,5 @@
 *.swp
 *.cdmp
 *.config
+
+temp/

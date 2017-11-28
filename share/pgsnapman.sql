@@ -26,116 +26,12 @@ COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
 SET search_path = public, pg_catalog;
 
 --
--- Name: get_cleancatalog(integer); Type: FUNCTION; Schema: public; Owner: -
+-- Name: del_catalog(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION get_cleancatalog(jobid integer) RETURNS SETOF record
-    LANGUAGE plpgsql
-    AS $_$
-declare
-  days integer;
-  weeks integer;
-  months integer;
-  years integer;
-  keep_slicestart timestamp without time zone;
-  keep_sliceend timestamp without time zone;
-  dj record;
-  r record;
-  keep_id record;
-  keep_ids integer[];
-begin
-  -- Get the clean up schedule from the dumpjobs table
-  select * from pgsnap_dumpjob into dj where id = $1;
-  days := dj.keep_daily;
-  weeks := dj.keep_weekly;
-  months := dj.keep_monthly;
-  years := dj.keep_yearly;
-  
-  -- 1 per day older then 'keep slicestart' time
-  keep_slicestart := now()::date;
-  for i in 0..days - 1 loop
-    -- using overlaps, we're going to collect all ids in day intervals for i-days, and then pick the most recent
-    keep_sliceend := keep_slicestart - (i + 1 || ' days')::interval;
-    for r in select id
-      from pgsnap_catalog
-      where (keep_slicestart - (i || ' days')::interval, keep_sliceend)
-        overlaps (starttime, starttime)
-      and pgsnap_dumpjob_id = $1
-      order by starttime desc limit 1
-    loop
-      if NOT r.id IS NULL then
-        keep_ids := array_append(keep_ids, r.id);
-      end if;
-      raise notice 'day % %', i, r.id;
-    end loop;
-  end loop;
-    
-  -- 1 per week older then 'keep slicestart' time
-  keep_slicestart := keep_sliceend;
-  for i in 0..weeks - 1 loop
-    -- using overlaps, we're going to collect all ids in week intervals for i-weeks, and then pick the oldest
-    keep_sliceend := keep_slicestart - (i + 1 || ' weeks')::interval;
-    for r in select id
-      from pgsnap_catalog
-      where (keep_slicestart - (i || ' weeks')::interval, keep_sliceend)
-        overlaps (starttime, starttime)
-      and pgsnap_dumpjob_id = $1
-      order by starttime asc limit 1
-   loop
-      if NOT r.id IS NULL then
-        keep_ids := array_append(keep_ids, r.id);
-      end if;
-      raise notice 'week % %', i, r.id;
-    end loop;
-  end loop;
-
-  -- 1 per month
-  keep_slicestart := keep_sliceend;
-  for i in 0..months - 1 loop
-    -- using overlaps, we're going to collect all ids in week intervals for i-weeks, and then pick the oldest
-    keep_sliceend := keep_slicestart - (i + 1 || ' months')::interval;
-    for r in select id
-      from pgsnap_catalog
-      where (keep_slicestart - (i || ' months')::interval, keep_sliceend)
-        overlaps (starttime, starttime)
-      and pgsnap_dumpjob_id = $1
-      order by starttime asc limit 1
-    loop
-      if NOT r.id IS NULL then
-        keep_ids := array_append(keep_ids, r.id);
-      end if;
-      raise notice 'month % %', i, r.id;
-    end loop;
-  end loop;
-
-  -- 1 per year
-  keep_slicestart := keep_sliceend;
-  for i in 0..years - 1 loop
-    -- using overlaps, we're going to collect all ids in week intervals for i-weeks, and then pick the oldest
-    keep_sliceend := keep_slicestart - (i + 1 || ' years')::interval;
-    for r in select id
-      from pgsnap_catalog
-      where (keep_slicestart - (i || ' years')::interval, keep_sliceend)
-        overlaps (starttime, starttime)
-      and pgsnap_dumpjob_id = $1
-      order by starttime asc limit 1
-    loop
-      if NOT r.id IS NULL then
-        keep_ids := array_append(keep_ids, r.id);
-      end if;
-      raise notice 'year % %', i, r.id;
-    end loop;
-  end loop;
-
-  -- output
-  raise notice 'array size %', array_length(keep_ids, 1);
-  for keep_id in select unnest(keep_ids)
-  loop
-    return next keep_id;
-  end loop;
-  return;
-end;
-$_$;
+CREATE FUNCTION del_catalog(cat_id integer) RETURNS void
+    LANGUAGE sql
+    AS $_$delete from pgsnap_catalog where id = $1;$_$;
 
 
 --
@@ -173,6 +69,121 @@ $_$;
 CREATE FUNCTION get_hasjob(pgsql_id integer, dbname text) RETURNS text
     LANGUAGE sql
     AS $_$select 'YES'::text from pgsnap_dumpjob j join pgsql_instance p on p.id = j.pgsql_instance_id where pgsql_instance_id = $1 and dbname = $2;$_$;
+
+
+--
+-- Name: get_keep_catjobid(timestamp without time zone, integer, integer, integer, integer, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION get_keep_catjobid(datenow timestamp without time zone, jobid integer, days integer, weeks integer, months integer, years integer) RETURNS SETOF record
+    LANGUAGE plpgsql
+    AS $_$
+declare
+  keep_slicestart timestamp without time zone;
+  keep_sliceend timestamp without time zone;
+  dj record;
+  r record;
+  keep_id record;
+  keep_ids integer[];
+begin
+
+  -- initialize, end of first slice
+  keep_sliceend := $1::date + ('1 day')::interval;
+
+  -- 1 per day
+  --raise notice 'Daily clean up, end date at start: %', keep_sliceend;
+  for i in 1..days loop
+    -- using overlaps, we're going to collect all ids in day intervals for i-days, and then pick the most recent
+    keep_slicestart := keep_sliceend - (1 || ' days')::interval;
+    for r in select id
+      from pgsnap_catalog
+      where (keep_slicestart, keep_sliceend)
+        overlaps (starttime, starttime)
+      and pgsnap_dumpjob_id = jobid
+      order by starttime desc limit 1
+    loop
+      if NOT r.id IS NULL then
+        keep_ids := array_append(keep_ids, r.id);
+      end if;
+      raise notice 'D % % [%..%]', i, r.id, keep_slicestart, keep_sliceend;    
+    end loop;
+    -- set new slice end date
+    keep_sliceend := keep_slicestart;
+  end loop;
+    
+  -- 1 per week
+  --raise notice 'Weekly clean up, end date at start: %', keep_sliceend;
+  for i in 1..weeks loop
+    -- using overlaps, we're going to collect all ids in day intervals for i-days, and then pick the most recent
+    keep_slicestart := keep_sliceend - (1 || ' weeks')::interval;
+    for r in select id
+      from pgsnap_catalog
+      where (keep_slicestart, keep_sliceend)
+        overlaps (starttime, starttime)
+      and pgsnap_dumpjob_id = jobid
+      order by starttime asc limit 1
+    loop
+      if NOT r.id IS NULL then
+        keep_ids := array_append(keep_ids, r.id);
+      end if;
+      raise notice 'W % % [%..%]', i, r.id, keep_slicestart, keep_sliceend;    
+    end loop;
+    -- set new slice end date
+    keep_sliceend := keep_slicestart;
+  end loop;
+  
+  -- 1 per month
+  --raise notice 'Monthly clean up, end date at start: %', keep_sliceend;
+  for i in 1..months loop
+    -- using overlaps, we're going to collect all ids in day intervals for i-days, and then pick the most recent
+    keep_slicestart := keep_sliceend - (1 || ' months')::interval;
+    for r in select id
+      from pgsnap_catalog
+      where (keep_slicestart, keep_sliceend)
+        overlaps (starttime, starttime)
+       and pgsnap_dumpjob_id = jobid
+     order by starttime asc limit 1
+    loop
+      if NOT r.id IS NULL then
+        keep_ids := array_append(keep_ids, r.id);
+      end if;
+      raise notice 'M % % [%..%]', i, r.id, keep_slicestart, keep_sliceend;    
+    end loop;
+    -- set new slice end date
+    keep_sliceend := keep_slicestart;
+  end loop;
+
+
+  -- 1 per year
+  --raise notice 'Yearly clean up, end date at start: %', keep_sliceend;
+  for i in 1..years loop
+    -- using overlaps, we're going to collect all ids in day intervals for i-days, and then pick the most recent
+    keep_slicestart := keep_sliceend - (1 || ' year')::interval;
+    for r in select id
+      from pgsnap_catalog
+      where (keep_slicestart, keep_sliceend)
+        overlaps (starttime, starttime)
+      and pgsnap_dumpjob_id = jobid
+      order by starttime asc limit 1
+    loop
+      if NOT r.id IS NULL then
+        keep_ids := array_append(keep_ids, r.id);
+      end if;
+      raise notice 'Y % % [%..%]', i, r.id, keep_slicestart, keep_sliceend;    
+    end loop;
+    -- set new slice end date
+    keep_sliceend := keep_slicestart;
+  end loop;
+
+  -- output
+  --raise notice 'Keeping: %', array_length(keep_ids, 1);
+  for keep_id in select unnest(keep_ids)
+  loop
+    return next keep_id;
+  end loop;
+  return;
+end;
+$_$;
 
 
 --
@@ -305,6 +316,226 @@ CREATE FUNCTION put_dumpjob(pgsnapworkerid integer, pgsqlinstanceid integer, dbn
 CREATE FUNCTION put_singlerun(job_id integer, job_class text) RETURNS void
     LANGUAGE sql
     AS $_$INSERT INTO pgsnap_singlerun (jobid, jobclass) values ($1, $2);$_$;
+
+
+--
+-- Name: test_retention_keep(timestamp without time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION test_retention_keep(datenow timestamp without time zone) RETURNS SETOF record
+    LANGUAGE plpgsql
+    AS $_$
+declare
+  days integer;
+  weeks integer;
+  months integer;
+  years integer;
+  keep_slicestart timestamp without time zone;
+  keep_sliceend timestamp without time zone;
+  dj record;
+  r record;
+  keep_id record;
+  keep_ids integer[];
+begin
+  -- Get the clean up schedule from the dumpjobs table
+  select * from pgsnap_dumpjob into dj where id = $1;
+  days := dj.keep_daily;
+  weeks := dj.keep_weekly;
+  months := dj.keep_monthly;
+  years := dj.keep_yearly;
+  
+  -- 1 per day older then 'keep slicestart' time
+  keep_slicestart := $1::date;
+  for i in 0..days - 1 loop
+    -- using overlaps, we're going to collect all ids in day intervals for i-days, and then pick the most recent
+    keep_sliceend := keep_slicestart - (i + 1 || ' days')::interval;
+    for r in select id
+      from test_dates
+      where (keep_slicestart - (i || ' days')::interval, keep_sliceend)
+        overlaps (tijd, tijd)
+      order by tijd desc limit 1
+    loop
+      if NOT r.id IS NULL then
+        keep_ids := array_append(keep_ids, r.id);
+      end if;
+      raise notice 'day % %', i, r.id;
+    end loop;
+  end loop;
+    
+  -- 1 per week older then 'keep slicestart' time
+  keep_slicestart := keep_sliceend;
+  for i in 0..weeks - 1 loop
+    -- using overlaps, we're going to collect all ids in week intervals for i-weeks, and then pick the oldest
+    keep_sliceend := keep_slicestart - (i + 1 || ' weeks')::interval;
+    for r in select id
+      from test_dates
+      where (keep_slicestart - (i || ' weeks')::interval, keep_sliceend)
+        overlaps (tijd, tijd)
+      order by tijd asc limit 1
+   loop
+      if NOT r.id IS NULL then
+        keep_ids := array_append(keep_ids, r.id);
+      end if;
+      raise notice 'week % %', i, r.id;
+    end loop;
+  end loop;
+
+  -- 1 per month
+  keep_slicestart := keep_sliceend;
+  for i in 0..months - 1 loop
+    -- using overlaps, we're going to collect all ids in week intervals for i-weeks, and then pick the oldest
+    keep_sliceend := keep_slicestart - (i + 1 || ' months')::interval;
+    for r in select id
+      from test_dates
+      where (keep_slicestart - (i || ' months')::interval, keep_sliceend)
+        overlaps (tijd, tijd)
+      order by tijd asc limit 1
+    loop
+      if NOT r.id IS NULL then
+        keep_ids := array_append(keep_ids, r.id);
+      end if;
+      raise notice 'month % %', i, r.id;
+    end loop;
+  end loop;
+
+  -- 1 per year
+  keep_slicestart := keep_sliceend;
+  for i in 0..years - 1 loop
+    -- using overlaps, we're going to collect all ids in week intervals for i-weeks, and then pick the oldest
+    keep_sliceend := keep_slicestart - (i + 1 || ' years')::interval;
+    for r in select id
+      from test_dates
+      where (keep_slicestart - (i || ' years')::interval, keep_sliceend)
+        overlaps (tijd, tijd)
+      order by tijd asc limit 1
+    loop
+      if NOT r.id IS NULL then
+        keep_ids := array_append(keep_ids, r.id);
+      end if;
+      raise notice 'year % %', i, r.id;
+    end loop;
+  end loop;
+
+  -- output
+  raise notice 'array size %', array_length(keep_ids, 1);
+  for keep_id in select unnest(keep_ids)
+  loop
+    return next keep_id;
+  end loop;
+  return;
+end;
+$_$;
+
+
+--
+-- Name: test_retention_keep(timestamp without time zone, integer, integer, integer, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION test_retention_keep(datenow timestamp without time zone, days integer, weeks integer, months integer, years integer) RETURNS SETOF record
+    LANGUAGE plpgsql
+    AS $_$
+declare
+  keep_slicestart timestamp without time zone;
+  keep_sliceend timestamp without time zone;
+  dj record;
+  r record;
+  keep_id record;
+  keep_ids integer[];
+begin
+
+  -- initialize, end of first slice
+  keep_sliceend := $1::date + ('1 day')::interval;
+
+  -- 1 per day
+  --raise notice 'Daily clean up, end date at start: %', keep_sliceend;
+  for i in 1..days loop
+    -- using overlaps, we're going to collect all ids in day intervals for i-days, and then pick the most recent
+    keep_slicestart := keep_sliceend - (1 || ' days')::interval;
+    for r in select id
+      from test_dates
+      where (keep_slicestart, keep_sliceend)
+        overlaps (tijd, tijd)
+      order by tijd desc limit 1
+    loop
+      if NOT r.id IS NULL then
+        keep_ids := array_append(keep_ids, r.id);
+      end if;
+      raise notice 'D % % [%..%]', i, r.id, keep_slicestart, keep_sliceend;    
+    end loop;
+    -- set new slice end date
+    keep_sliceend := keep_slicestart;
+  end loop;
+    
+  -- 1 per week
+  --raise notice 'Weekly clean up, end date at start: %', keep_sliceend;
+  for i in 1..weeks loop
+    -- using overlaps, we're going to collect all ids in day intervals for i-days, and then pick the most recent
+    keep_slicestart := keep_sliceend - (1 || ' weeks')::interval;
+    for r in select id
+      from test_dates
+      where (keep_slicestart, keep_sliceend)
+        overlaps (tijd, tijd)
+      order by tijd asc limit 1
+    loop
+      if NOT r.id IS NULL then
+        keep_ids := array_append(keep_ids, r.id);
+      end if;
+      raise notice 'W % % [%..%]', i, r.id, keep_slicestart, keep_sliceend;    
+    end loop;
+    -- set new slice end date
+    keep_sliceend := keep_slicestart;
+  end loop;
+  
+  -- 1 per month
+  --raise notice 'Monthly clean up, end date at start: %', keep_sliceend;
+  for i in 1..months loop
+    -- using overlaps, we're going to collect all ids in day intervals for i-days, and then pick the most recent
+    keep_slicestart := keep_sliceend - (1 || ' months')::interval;
+    for r in select id
+      from test_dates
+      where (keep_slicestart, keep_sliceend)
+        overlaps (tijd, tijd)
+      order by tijd asc limit 1
+    loop
+      if NOT r.id IS NULL then
+        keep_ids := array_append(keep_ids, r.id);
+      end if;
+      raise notice 'M % % [%..%]', i, r.id, keep_slicestart, keep_sliceend;    
+    end loop;
+    -- set new slice end date
+    keep_sliceend := keep_slicestart;
+  end loop;
+
+
+  -- 1 per year
+  --raise notice 'Yearly clean up, end date at start: %', keep_sliceend;
+  for i in 1..years loop
+    -- using overlaps, we're going to collect all ids in day intervals for i-days, and then pick the most recent
+    keep_slicestart := keep_sliceend - (1 || ' year')::interval;
+    for r in select id
+      from test_dates
+      where (keep_slicestart, keep_sliceend)
+        overlaps (tijd, tijd)
+      order by tijd asc limit 1
+    loop
+      if NOT r.id IS NULL then
+        keep_ids := array_append(keep_ids, r.id);
+      end if;
+      raise notice 'Y % % [%..%]', i, r.id, keep_slicestart, keep_sliceend;    
+    end loop;
+    -- set new slice end date
+    keep_sliceend := keep_slicestart;
+  end loop;
+
+  -- output
+  --raise notice 'Keeping: %', array_length(keep_ids, 1);
+  for keep_id in select unnest(keep_ids)
+  loop
+    return next keep_id;
+  end loop;
+  return;
+end;
+$_$;
 
 
 SET default_tablespace = '';
@@ -621,6 +852,16 @@ CREATE SEQUENCE pgsql_instance_id_seq
 --
 
 ALTER SEQUENCE pgsql_instance_id_seq OWNED BY pgsql_instance.id;
+
+
+--
+-- Name: test_dates; Type: TABLE; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE TABLE test_dates (
+    id integer,
+    tijd timestamp without time zone
+);
 
 
 --
