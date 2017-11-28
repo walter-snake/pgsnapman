@@ -128,6 +128,7 @@ function updateworkerconfig {
 }
 
 function updatepgsqlinstanceconfig {
+  local line
   # Get postgres instance information for all pgsql instances and cache the data (we need all of them,
   # as a one time backup could also be inserted at any time for any host).
   ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT id,dns_name,pgport,comment,status, \
@@ -241,6 +242,7 @@ function getcronjobs {
 # Create the cron job entries for the jobs, based on data in the local cache (dumpjobs.list)
 # $1 full path to a postgres instance snapshot directory
 function createcronjobs {
+  local line
   if  [ "$VERBOSITY" == "VERBOSE" ]; then
     echo "Creating cron jobs, processing: "$1/dumpjobs.list
   fi
@@ -333,6 +335,7 @@ function createcronjobs {
 #   retrieve scheduled job information
 #   creates the cron entries
 function updatecronjobconfig {
+  local line
   log "INFO" "init" "NEW"
   while read line; do
     # Need to collect the pgsql instance data
@@ -359,6 +362,7 @@ function updatecronjobconfig {
 
 # Set up the job list for the single jobs that have to be executed (both dump and restore)
 function updatesinglejobconfig {
+  local line
   local sql="SELECT id,pgsnap_worker_id,pgsql_instance_id,dbname,dumptype,dumpschema \
     ,cron,keep_daily,keep_weekly,keep_monthly,keep_yearly \
     ,comment,status \

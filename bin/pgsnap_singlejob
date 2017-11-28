@@ -40,6 +40,7 @@ LOGINIT=NO
 
 # Start dump jobs
 function startdumpjobs {
+  local line
   local jobfile=${TEMPDIR}/$$.singledumpjobs.list
   while read line; do
     jobid=$(getfieldvalue "${line}" 1)
