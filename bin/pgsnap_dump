@@ -377,7 +377,7 @@ else
     oIFS="${IFS}"; IFS=","
     for rid in ${restorejobid}; do
       log "INFO" "job id ${jobid} - triggered start of restore job ${rid}"
-      ${SCRIPTPATH}/pgsnap_restore ${rid} ${jobdir}/${buname} TRIGGER &
+      ${SCRIPTPATH}/pgsnap_restore ${rid} ${jobdir}/${buname} SILENT TRIGGER &
     done
     IFS="${oIFS}"
   fi

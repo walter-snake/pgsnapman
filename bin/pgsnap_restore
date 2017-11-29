@@ -1,5 +1,171 @@
 #!/bin/bash
-echo "restore job:         $1"
-echo "restore from backup: $2"
-echo "startup type:        $3"
+
+# pgsnap_restore: starts postgres restore
+#                     must run on a backup node, with passwordless (.pgpass does the job) to all database servers
+#
+# $1 restore job id
+# $2 restore from backup name
+# $3 verbosity [VERBOSE|SILENT]
+# $4 startup type [CRON|SINGLE|TRIGGER]
+#      
+
+# ======================================
+# Initialization
+# ======================================
+JOBID=$1
+DUMP=$2
+VERBOSITY=$3
+STARTTYPE=$4
+
+# Get the script directory (must do this first)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
+  DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+done
+SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+
+# Check cmd args
+if [ "${STARTTYPE}" == "" ]; then
+  echo "ERROR pgsnap_restore no startup type provided"
+  exit 1
+fi
+
+# Catalog database needed?
+PGSCDB_REQUIRED=YES
+
+# Load functions, will also perform initialization operations
+. ${SCRIPTPATH}/pgsnap_lib
+
+# TOOL_LOG
+TOOL_LOG=${LOGDIR}/pgsnap_restore.log
+
+# ==========================================
+# Functions
+# ==========================================
+
+function verifybackup {
+  local status=`cat "$1" | cut -d $'\t' -f4`
+  echo "${status}"
+}
+
+function getrestorejob {
+  local data
+  local sql="SELECT r.id, pgsnap_catalog_id, r.dest_dbname, r.restoretype, \
+       r.restoreschema, r.restoreoptions, existing_db, r.cron, r.status, r.comment, \
+       r.jobtype, p.dns_name, p.pgport, p.pgsql_superuser \
+  FROM pgsnap_restorejob r \
+  JOIN pgsql_instance p \
+    ON r.dest_pgsql_instance_id = p.id \
+  WHERE r.id = ${1};"
+  data=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" -A -t`
+  echo "${data}"
+}
+
+# ==========================================
+# MAIN
+# ==========================================
+
+# Get restore information from the database, startup specials
+# - should check backup catalog for SUCCESS of the specific dump job, but not in case of a TRIGGER start (catalog entry probably not present)
+# - SINGLE job must register in the pgsnap_singlerun table as soon as it is started (to prevent a new start)
+# We don't want to start a new restore operation while this one is running (same for backups, but there it gives system load/lockup, restore could potentially break integrity).
+
+errcode=0
+errmsg=""
+
+# Verify starttype
+if [[ ! "${STARTTYPE}" =~ ^((CRON|SINGLE|TRIGGER))$ ]]; then
+  snaplog "ERROR" "wrong start type (${STARTTYPE})"
+  exit 4
+fi
+
+# Check if not another restore process is already running (can be only one file, as a new one will only be written when there's no lock file present
+findresult=`find ${TEMPDIR} -name "*.$1.pgsnap_restore.running"`
+if [ "${findresult}" != "" ]; then
+  chkpid=`echo "${findresult}" | cut -d '.' -f1`
+  chkpid=`basename ${chkpid}`
+  ps -p $chkpid &> /dev/null
+  if [ "$?" == "1" ]; then
+    rm -f ${findresult}
+  else
+    errmsg="process with pid ${chkpid} is already running for job id ${JOBID}" 
+    log "WARNING" "${MSG}"
+    errcode=1
+  fi
+fi
+
+# Check status of the backup job
+if [ ! -e ${DUMP}.catalog.dat ] || [ "$(verifybackup ${DUMP}.catalog.dat)" != "SUCCESS" ]; then
+  errmsg="backup ${DUMP} does not exist, or failed, restore not started" 
+  log "ERROR" "${errmsg}" 
+  errcode=2
+fi
+
+# Get restore job information
+restorejob="$(getrestorejob ${JOBID})"
+if [ "${restorejob}" == "" ]; then
+  errmsg="job id ${JOBID} not found or of wrong type (${STARTTYPE})"
+  log "ERROR" "${errmsg}"
+  errcode=3
+fi
+
+if [ ${errcode} -gt 0 ]; then
+  snaplog "ERROR" "initialization errors, exit code: ${errcode} (${errmsg})"
+  exit ${errcode}
+fi
+
+# Write the start markers (lock file, single run in database)
+# Single job: write marker to database
+echo "${DUMP}" > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.running
+if [ "${STARTTYPE}" == "SINGLE" ]; then
+  setsinglerunstarted ${JOBID} 'RESTORE'
+fi
+
+# Log message
+log "INFO" "starting ${STARTTYPE} restore, job id [${JOBID}] from dump [`basename ${DUMP}`]"
+snaplog "INFO" "init - starting ${STARTTYPE} restore, job id [${JOBID}] from dump [`basename ${DUMP}`]"
+
+# Do the work
+# Get the various restore job fields
+echo "${restorejob}"
+
+# Depending on job type, choose restore options
+
+catalogid="$(getfieldvalue "${restorejob}" 2)"
+destdb="$(getfieldvalue "${restorejob}" 3)"
+restoretype="$(getfieldvalue "${restorejob}" 4)"
+restoreschema="$(getfieldvalue "${restorejob}" 5)"
+restoreoptions="$(getfieldvalue "${restorejob}" 6)"
+existingdb="$(getfieldvalue "${restorejob}" 7)"
+status="$(getfieldvalue "${restorejob}" 9)"
+comment="$(getfieldvalue "${restorejob}" 10)"
+jobtype="$(getfieldvalue "${restorejob}" 11)"
+pg_dns_name="$(getfieldvalue "${restorejob}" 12)"
+pg_port="$(getfieldvalue "${restorejob}" 13)"
+pg_superuser="$(getfieldvalue "${restorejob}" 14)"
+
+if [ "${VERBOSITY}" == "VERBOSE" ]; then
+  echo "dump catalog id         ${catalogid}"
+  echo "destination db name:    ${destdb}"
+  echo "restore type:           ${restoretype}"
+  echo "restore schema:         ${restoreschema}"
+  echo "restore options:        ${restoreoptions}"
+  echo "existing db:            ${existingdb}"
+  echo "status:                 ${status}"
+  echo "comment:                ${comment}"
+  echo "job type:               ${jobtype}"
+  echo "dns name destination:   ${pg_dns_name}"
+  echo "server port dest.:      ${pg_port}"
+  echo "superuser:              ${pg_superuser}"
+fi
+
+# ..........
+
+# Remove running marker
+rm ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.running
+
+# 
 exit 0
+
