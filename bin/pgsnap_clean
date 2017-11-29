@@ -45,11 +45,19 @@ fi
 # writes a temp file ${TEMPDIR}/$$.catalogjobinfo.list
 # (no parameters)
 function getcatalogjobinfo {
-  local sql="select id, keep_daily, keep_weekly, keep_monthly, keep_yearly \
-    from pgsnap_dumpjob \
-    where id in (select pgsnap_dumpjob_id 
-                 from pgsnap_catalog
-                 group by pgsnap_dumpjob_id);"
+  # Obtain retention policy values for deleted jobs
+  local sql="select get_default('retention_on_delete');"
+  local defretpol=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" -A -t`
+  if [ "$defretpol" == "" ]; then
+    defretpol="7|1|0|0"
+  fi
+  # Request retention info for all jobs present in the catalog (including those that are deleted from the dumpjob table)
+  sql="select distinct c.pgsnap_dumpjob_id, coalesce(j.keep_daily, $(getfieldvalue $defretpol 1)), coalesce(j.keep_weekly, $(getfieldvalue $defretpol 2)) \
+      , coalesce(j.keep_monthly,$(getfieldvalue $defretpol 3)), coalesce(j.keep_yearly,$(getfieldvalue $defretpol 4)) \
+    from pgsnap_catalog c \
+    left join pgsnap_dumpjob j \
+      on j.id = c.pgsnap_dumpjob_id;"
+  echo "$sql"
   ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" -A -t -F '|' > ${TEMPDIR}/$$.catalogjobinfo.list
 }
 
@@ -57,6 +65,13 @@ function getcatalogjobinfo {
 # $1 id of the catalog entry
 function removefromcatalogdb {
   local sql="select del_catalog($1)";
+  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" > /dev/null
+}
+
+# Removes an entry from the catalog list
+# $1 id of the catalog entry
+function setcatalogdbstatus {
+  local sql="select set_catalogstatus($1, '$2')";
   ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" > /dev/null
 }
 
@@ -69,7 +84,7 @@ function removefromcatalogdb {
 function cleanupjob {
   local line
   echo "${INITIMESTAMP} Catalog ids to keep for job id: $1" >> ${LOGDIR}/pgsnap_clean.keepcatids.log
-  local sql="select c.id, c.starttime, c.bu_name, c.bu_location || '/' || c.bu_name as full_path, j.dumptype from pgsnap_catalog c join pgsnap_dumpjob j on c.pgsnap_dumpjob_id = j.id where c.pgsnap_dumpjob_id = $1 AND c.id not in (select id from get_keep_catjobid('`date '+%Y%m%dT%H%M%S'`', $1, $2, $3, $4, $5) as (id integer));"
+  local sql="select c.id, c.starttime, c.bu_name, c.bu_location || '/' || c.bu_name as full_path from pgsnap_catalog c where c.pgsnap_dumpjob_id = $1 AND c.id not in (select id from get_keep_catjobid('`date '+%Y%m%dT%H%M%S'`', $1, $2, $3, $4, $5) as (id integer));"
   ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" -A -t -F '|' --output=${TEMPDIR}/$$.removedumps.list 2>> ${LOGDIR}/pgsnap_clean.keepcatids.log
   # Loop through all catalog entries, and remove them
   while read line; do
@@ -77,10 +92,10 @@ function cleanupjob {
       echo "INFO remove from catalog: $(getfieldvalue "${line}" 1) $(getfieldvalue "${line}" 2) $(getfieldvalue "${line}" 3)"
     fi
     log "INFO" "remove from catalog: $(getfieldvalue "${line}" 1) $(getfieldvalue "${line}" 2) $(getfieldvalue "${line}" 3)"
+    # Set status to REMOVING, so you know you shouldn't start a restore job from this one.
+    setcatalogdbstatus $(getfieldvalue "${line}" 1) "REMOVING"
     local path="$(getfieldvalue "${line}" 4)"
     local path=`echo "${path}" | sed -E 's/.sql.gz$//g'`
-    # Remove it from the catalog db altogether
-    removefromcatalogdb $(getfieldvalue "${line}" 1)
     # Check if the path is safe, if so proceed
     if [ "$(issafetoremove "${path}")" == "NO" ]; then
       log "ERROR" "specified path considered unsafe to be removed [${path}]"
@@ -94,6 +109,8 @@ function cleanupjob {
       # 2. Now remove the files
       rm -rf ${path}*
     fi
+    # Remove the entry from the catalog db altogether
+    removefromcatalogdb $(getfieldvalue "${line}" 1)
   done < ${TEMPDIR}/$$.removedumps.list
   rm -f ${TEMPDIR}/$$.removedumps.list
 }

@@ -187,6 +187,7 @@ function updatepgsqlinstanceconfig {
 # $3 = pg port
 # $4 = pg user
 function createdumpjobs {
+  local line
   # Resolve host
   local fqdnhost=${2}
   local pgsqlhost=$(resolvepghost ${2})

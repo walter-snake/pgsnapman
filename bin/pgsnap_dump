@@ -87,6 +87,7 @@ function preparescriptrun {
 # $1 database name
 # $2 store in file (full path)
 function dumpglobalacls {
+  local line
   # Check name
   if [ "${1}" == *";"* ]; then
     return
@@ -354,7 +355,7 @@ if [ "${ERRORS}" == "1" ]; then
   DBSIZE=-1
   SIZEONDISK=-1
 else
-  snaplog "INFO" "finished - pgsql_instance.job [`basename ${1}`].[${2}]"
+  snaplog "INFO" "dump completed - pgsql_instance.job [`basename ${1}`].[${2}]"
   jobresult="SUCCESS"
 fi
 
@@ -371,9 +372,16 @@ else
     ${SCRIPTPATH}/pgsnap_dedup ${jobdir}/${buname} SILENT ${jobid}
   fi
   # Start a restore job if requested, put it in the background, the dump is ready now
-  if [ "${restorejobid}" != "-1" ]; then
-    ${SCRIPTPATH}/pgsnap_restore ${restorejobid} ${jobdir}/${buname} TRIGGER &
+  if [ "${restorejobid}" != "" ]; then
+    # Could be multiple restore jobs!
+    oIFS="${IFS}"; IFS=","
+    for rid in ${restorejobid}; do
+      log "INFO" "job id ${jobid} - triggered start of restore job ${rid}"
+      ${SCRIPTPATH}/pgsnap_restore ${rid} ${jobdir}/${buname} TRIGGER &
+    done
+    IFS="${oIFS}"
   fi
+  snaplog "INFO" "finished dedup, restore jobs started when required"
   exit 0
 fi
 

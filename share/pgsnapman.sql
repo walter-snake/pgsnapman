@@ -35,6 +35,15 @@ CREATE FUNCTION del_catalog(cat_id integer) RETURNS void
 
 
 --
+-- Name: get_default(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION get_default(key text) RETURNS text
+    LANGUAGE sql
+    AS $_$select value from pgsnap_default where key = $1;$_$;
+
+
+--
 -- Name: get_defaultworker(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -97,9 +106,9 @@ begin
     keep_slicestart := keep_sliceend - (1 || ' days')::interval;
     for r in select id
       from pgsnap_catalog
-      where (keep_slicestart, keep_sliceend)
-        overlaps (starttime, starttime)
-      and pgsnap_dumpjob_id = jobid
+      where (keep_slicestart, keep_sliceend) overlaps (starttime, starttime)
+        and status = 'SUCCESS'
+        and pgsnap_dumpjob_id = jobid
       order by starttime desc limit 1
     loop
       if NOT r.id IS NULL then
@@ -118,9 +127,9 @@ begin
     keep_slicestart := keep_sliceend - (1 || ' weeks')::interval;
     for r in select id
       from pgsnap_catalog
-      where (keep_slicestart, keep_sliceend)
-        overlaps (starttime, starttime)
-      and pgsnap_dumpjob_id = jobid
+      where (keep_slicestart, keep_sliceend) overlaps (starttime, starttime)
+        and status = 'SUCCESS'
+        and pgsnap_dumpjob_id = jobid
       order by starttime asc limit 1
     loop
       if NOT r.id IS NULL then
@@ -139,9 +148,9 @@ begin
     keep_slicestart := keep_sliceend - (1 || ' months')::interval;
     for r in select id
       from pgsnap_catalog
-      where (keep_slicestart, keep_sliceend)
-        overlaps (starttime, starttime)
-       and pgsnap_dumpjob_id = jobid
+      where (keep_slicestart, keep_sliceend) overlaps (starttime, starttime)
+        and status = 'SUCCESS'
+        and pgsnap_dumpjob_id = jobid
      order by starttime asc limit 1
     loop
       if NOT r.id IS NULL then
@@ -161,10 +170,9 @@ begin
     keep_slicestart := keep_sliceend - (1 || ' year')::interval;
     for r in select id
       from pgsnap_catalog
-      where (keep_slicestart, keep_sliceend)
-        overlaps (starttime, starttime)
-      and pgsnap_dumpjob_id = jobid
-      order by starttime asc limit 1
+      where (keep_slicestart, keep_sliceend) overlaps (starttime, starttime)
+        and pgsnap_dumpjob_id = jobid
+        order by starttime asc limit 1
     loop
       if NOT r.id IS NULL then
         keep_ids := array_append(keep_ids, r.id);
@@ -316,6 +324,24 @@ CREATE FUNCTION put_dumpjob(pgsnapworkerid integer, pgsqlinstanceid integer, dbn
 CREATE FUNCTION put_singlerun(job_id integer, job_class text) RETURNS void
     LANGUAGE sql
     AS $_$INSERT INTO pgsnap_singlerun (jobid, jobclass) values ($1, $2);$_$;
+
+
+--
+-- Name: set_catalogstatus(integer, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION set_catalogstatus(cat_id integer, status text) RETURNS void
+    LANGUAGE sql
+    AS $_$update pgsnap_catalog set status = $2 where id = $1;$_$;
+
+
+--
+-- Name: set_dumpjobstatus(integer, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION set_dumpjobstatus(job_id integer, status text) RETURNS void
+    LANGUAGE sql
+    AS $_$update pgsnap_dumpjob set status = $2 where id = $1;$_$;
 
 
 --
@@ -562,7 +588,7 @@ CREATE TABLE pgsnap_dumpjob (
     cron text NOT NULL,
     status text DEFAULT 'ACTIVE'::text,
     jobtype text DEFAULT 'CRON'::text,
-    pgsnap_restorejob_id integer DEFAULT (-1),
+    pgsnap_restorejob_id text DEFAULT (-1),
     date_added timestamp without time zone DEFAULT now(),
     CONSTRAINT pgsnap_dumpjob_dumptype_check CHECK ((dumptype = ANY (ARRAY['FULL'::text, 'SCHEMA'::text, 'CLUSTER_SCHEMA'::text, 'SCRIPT'::text]))),
     CONSTRAINT pgsnap_dumpjob_jobtype_check CHECK ((jobtype = ANY (ARRAY['CRON'::text, 'SINGLE'::text]))),
@@ -635,7 +661,8 @@ CREATE TABLE pgsnap_catalog (
     bu_name text,
     bu_location text,
     dbsize bigint,
-    dumpsize bigint
+    dumpsize bigint,
+    CONSTRAINT pgsnap_catalog_status_check CHECK ((status = ANY (ARRAY['SUCCESS'::text, 'FAILED'::text, 'REMOVING'::text])))
 );
 
 
@@ -656,6 +683,36 @@ CREATE SEQUENCE pgsnap_catalog_id_seq
 --
 
 ALTER SEQUENCE pgsnap_catalog_id_seq OWNED BY pgsnap_catalog.id;
+
+
+--
+-- Name: pgsnap_default; Type: TABLE; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE TABLE pgsnap_default (
+    id integer NOT NULL,
+    key text,
+    value text
+);
+
+
+--
+-- Name: pgsnap_default_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE pgsnap_default_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: pgsnap_default_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE pgsnap_default_id_seq OWNED BY pgsnap_default.id;
 
 
 --
@@ -983,6 +1040,13 @@ CREATE VIEW vw_worker AS
 --
 
 ALTER TABLE ONLY pgsnap_catalog ALTER COLUMN id SET DEFAULT nextval('pgsnap_catalog_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY pgsnap_default ALTER COLUMN id SET DEFAULT nextval('pgsnap_default_id_seq'::regclass);
 
 
 --
