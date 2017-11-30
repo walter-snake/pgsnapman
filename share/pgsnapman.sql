@@ -785,6 +785,8 @@ CREATE TABLE pgsnap_restorejob (
     jobtype text DEFAULT 'SINGLE'::text,
     cron text DEFAULT '# * * * * *'::text,
     pgsnap_catalog_id integer DEFAULT (-1),
+    role_handling text DEFAULT 'USE_ROLE'::text,
+    tblspc_handling text DEFAULT 'NO_TBLSPC'::text,
     CONSTRAINT pgsnap_restorejob_existing_db_check CHECK ((existing_db = ANY (ARRAY['DROP'::text, 'RENAME'::text]))),
     CONSTRAINT pgsnap_restorejob_jobtype_check CHECK ((jobtype = ANY (ARRAY['SINGLE'::text, 'CRON'::text, 'TRIGGER'::text]))),
     CONSTRAINT pgsnap_restorejob_restoretype_check CHECK ((restoretype = ANY (ARRAY['FULL'::text, 'DATA'::text, 'SCHEMA'::text]))),

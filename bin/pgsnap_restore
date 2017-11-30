@@ -4,7 +4,7 @@
 #                     must run on a backup node, with passwordless (.pgpass does the job) to all database servers
 #
 # $1 restore job id
-# $2 restore from backup name
+# $2 backup path to use, for TRIGGER type: full backup path; for CRON/SINGLE jobs: use 'FROM_JOB' or specify catalog id
 # $3 verbosity [VERBOSE|SILENT]
 # $4 startup type [CRON|SINGLE|TRIGGER]
 #      
@@ -29,7 +29,7 @@ SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 # Check cmd args
 if [ "${STARTTYPE}" == "" ]; then
   echo "ERROR pgsnap_restore no startup type provided"
-  exit 1
+  cleanupexit 1
 fi
 
 # Catalog database needed?
@@ -45,22 +45,213 @@ TOOL_LOG=${LOGDIR}/pgsnap_restore.log
 # Functions
 # ==========================================
 
-function verifybackup {
+# Informational helper functions
+# ------------------------------
+
+# Retrieve selected backup status from local cache
+# $1 path to backup *.catalog.dat file with catalog info (as uploaded)
+function getbackupstatus {
   local status=`cat "$1" | cut -d $'\t' -f4`
   echo "${status}"
 }
 
+# Retrieve the restore job info from the catalog
+# $1 restore job id
 function getrestorejob {
   local data
   local sql="SELECT r.id, pgsnap_catalog_id, r.dest_dbname, r.restoretype, \
        r.restoreschema, r.restoreoptions, existing_db, r.cron, r.status, r.comment, \
-       r.jobtype, p.dns_name, p.pgport, p.pgsql_superuser \
+       r.jobtype, p.dns_name, p.pgport, p.pgsql_superuser, r.role_handling, r.tblspc_handling \
   FROM pgsnap_restorejob r \
   JOIN pgsql_instance p \
     ON r.dest_pgsql_instance_id = p.id \
   WHERE r.id = ${1};"
-  data=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" -A -t`
+  data=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --no-password --dbname=${PGSCDB} -c "$sql" -A -t`
   echo "${data}"
+}
+
+# Get the full dumppath from the backup catalog
+# $1 dump catalog id
+function getdumppathfromcatalog {
+  local data
+  local sql="SELECT bu_location || '/' || bu_name FROM pgsnap_catalog WHERE id = $1 AND status = 'SUCCESS';"
+  data=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --no-password --dbname=${PGSCDB} -c "$sql" -A -t`
+  echo "${data}"
+}
+
+# Set postgres server version variable
+function setpgbinpath {
+  # Check postgres server version and binary availability 
+  PGVERSION=$(getpgversion "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}")
+  if [ "${PGVERSION}" == "" ]; then
+    log "ERROR" "job id ${JOBID} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${MAINTDB}"
+    ERRORS=1
+  else
+    eval pgbinvar=PGBIN${PGVERSION}
+    PGBIN=${!pgbinvar}
+  fi
+  # check if psql exists
+  if [ ! -e ${PGBIN}/psql ]; then
+    log "ERROR" "job id ${JOBID} - job can not run - pg tools not found, check PGBINxx paths in config file ${CONFIGFILE}"
+    ERRORS=1
+  fi
+}
+
+# Db management helper functions
+# ------------------------------
+
+# Lockout all users (except the superuser, of course)
+# $1 database name
+function lockoutusers {
+  # disable connections
+  log "INFO" "prevent new connections to database ${1}"
+  ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "UPDATE pg_catalog.pg_database SET datallowconn=false WHERE datname='${1}'" --output=/dev/null
+
+  # close connections
+  # get list of connected users, loop through and terminate backends
+  log "INFO" "terminate existing connections"
+  ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "select pg_terminate_backend(pid) from pg_stat_activity where datname='${1}'"
+  if [ "$?" != "0" ]; then
+    snaplog "ERROR" "could not successfully terminate clients, impossible to complete DROP and RENAME operations on database ${1}"
+    cleanupexit 1
+  fi
+}
+
+# Set acl and allow connections
+# $1 database name
+function setaclallowconnect {
+  log "INFO" "set acl and allow new connections to database ${1}"
+  if [ -e "${DUMP}.database_acl.sql" ]; then
+    ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -f ${DUMP}.database_acl.sql --output=/dev/null
+  fi
+  ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "UPDATE pg_catalog.pg_database SET datallowconn=true WHERE datname='${1}'" --output=/dev/null
+}
+
+# Drop database
+# $1 database name
+function dropdatabase {
+  # throw everyone out
+  lockoutusers $1
+
+  # drop, this should succeed, as all connections are dead, and no one can be connected any more (well, a superuser)
+  ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "DROP DATABASE IF EXISTS \"${1}\"" 2>&1 /dev/null
+  if [ "$?" == "0" ]; then
+    log "INFO" "database $1 dropped successfully (or did not exist at all)"
+  fi
+}
+
+# Rename database
+# $1 source database name
+# $2 target database name
+function renamedatabase {
+  # throw everyone out
+  lockoutusers $1
+
+  # rename, this should succeed, as all connections are dead, and no one can be connected any more (well, a superuser)
+  ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "ALTER DATABASE \"${1}\" RENAME TO \"${2}\"" 2>&1 /dev/null
+  if [ "$?" == "0" ]; then
+    log "INFO" "database $1 renamed successfully (or did not exist at all)"
+  fi
+}
+
+# Create a role, skips setting password when role already exists
+# $1 role name
+function createrole {
+  local line=`${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -A -t -c "SELECT count(*) from pg_catalog.pg_roles WHERE rolname = '${1}'"`
+  # not present: create from information in globals dump
+  if [ "$line" == "0" ]; then
+    echo "create role: ${1}"
+    # cat line into psql
+    cat "${DUMP}.cluster_globals.sql" | grep -E "\ ROLE\ ${1}[;\ ]" | ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} --no-password
+  fi
+}
+
+# Set the DBSETTINGS datarow, with database global settings
+#   datname, owner, encoding, collate, ctype, acl_rights, dattablespace
+function setDBSETTINGS {
+  DBSETTINGS=`cat "${DUMP}.database_settings.list"`
+}
+
+# Create temp database
+# $1 target database name
+# $2 use tablespace [USE_TBLSPC|NO_TBLSPC]
+function createtempdb {
+  # create the database
+  if [ "$2" == "USE_TBLSPC" ] &&  [ "$(getfieldvalue "${DBSETTINGS}" 7)" != "" ]; then
+    local tblspc="--tablespace=$(getfieldvalue "${DBSETTINGS}" 7)"
+  fi
+  ${PGBIN}/createdb ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --maintenance-db=${MAINTDB} -E $(getfieldvalue "${DBSETTINGS}" 3) --lc-collate=$(getfieldvalue "${DBSETTINGS}" 4) --lc-ctype=$(getfieldvalue "${DBSETTINGS}" 5) --template=template0 ${tblspc} "$1" 2> /dev/null
+  echo $?
+}
+
+# Create the roles, neccessary for this database
+function prepareroles {
+  # check and create database owner
+  createrole $(getfieldvalue "${DBSETTINGS}" 2)
+  # check and create other roles
+  # a bit more complex: read schema, and find all alter owner, grant and revoke rows
+  echo "TBD prepare roles"
+}
+
+# Restore procedures
+# --------------------------
+
+# SQL restore
+function run_sql_restore {
+  #${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} ${restoreoptions} < gunzip -c ${DUMP}
+  echo ugh
+}
+
+# DIR dump restore
+function run_dir_restore {
+  # Load the settings for this dump
+  setDBSETTINGS
+
+  # temp name, we always run restore in a temp database
+  TEMPDB="${dbname}_$$"
+  
+  # prepare roles
+  if [ "${role_handling}" == "USE_ROLE" ]; then
+    prepareroles
+  fi
+
+  # create database
+  local ec=$(createtempdb ${TEMPDB} ${tblspc_handling})
+  # if this fails, we'll bail out
+  if [ "$ec" != "0" ]; then
+    snaplog "ERROR" "database creation failed for database ${TEMPDB}"
+    echo "$ec"
+    return
+  fi
+
+  # drop before (risky, but possible)
+  if [ "${existingdb}" == "DROP_BEFORE" ]; then
+    ec="$(dropdatabase "${dbname}")"
+  fi 
+
+  # restore
+  ${PGBIN}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -no-password --dbname=${TEMPDB} ${restoreoptions} "${DUMP}"
+  if [ "$?" != "0" ]; then
+    snaplog "ERROR" "restore to temp database ${TEMPDB} failed, abort restore, trying to drop temp database"
+    ec=$(dropdatabase "${TEMPDB}")
+    echo "1"
+    return
+  fi
+  existingdb="RENAME"
+  # drop/move original after restore
+  if [ "${existingdb}" == "DROP" ]; then
+    ec="$(dropdatabase "${dbname}")"
+  elif  [ "${existingdb}" == "RENAME" ]; then
+    # always drop existing backup in rename scenario
+    ec="$(dropdatabase "${dbname}_pgsnapman_rs_bak")"
+    ec="$(renamedatabase "${dbname}" "${dbname}_pgsnapman_rs_bak")"
+  fi
+  
+  # move in place
+  ec="$(renamedatabase "${TEMPDB}" "${dbname}")"
+
+  # set global acl and allow connections
+  setaclallowconnect ${dbname}
 }
 
 # ==========================================
@@ -78,7 +269,7 @@ errmsg=""
 # Verify starttype
 if [[ ! "${STARTTYPE}" =~ ^((CRON|SINGLE|TRIGGER))$ ]]; then
   snaplog "ERROR" "wrong start type (${STARTTYPE})"
-  exit 4
+  cleanupexit 1
 fi
 
 # Check if not another restore process is already running (can be only one file, as a new one will only be written when there's no lock file present
@@ -92,15 +283,8 @@ if [ "${findresult}" != "" ]; then
   else
     errmsg="process with pid ${chkpid} is already running for job id ${JOBID}" 
     log "WARNING" "${MSG}"
-    errcode=1
+    errcode=2
   fi
-fi
-
-# Check status of the backup job
-if [ ! -e ${DUMP}.catalog.dat ] || [ "$(verifybackup ${DUMP}.catalog.dat)" != "SUCCESS" ]; then
-  errmsg="backup ${DUMP} does not exist, or failed, restore not started" 
-  log "ERROR" "${errmsg}" 
-  errcode=2
 fi
 
 # Get restore job information
@@ -111,9 +295,98 @@ if [ "${restorejob}" == "" ]; then
   errcode=3
 fi
 
+# Get the various restore job fields
+catalogid="$(getfieldvalue "${restorejob}" 2)"
+dbname="$(getfieldvalue "${restorejob}" 3)"
+restoretype="$(getfieldvalue "${restorejob}" 4)"
+restoreschema="$(getfieldvalue "${restorejob}" 5)"
+restoreoptions="$(getfieldvalue "${restorejob}" 6)"
+existingdb="$(getfieldvalue "${restorejob}" 7)"
+cron="$(getfieldvalue "${restorejob}" 8)"
+status="$(getfieldvalue "${restorejob}" 9)"
+comment="$(getfieldvalue "${restorejob}" 10)"
+jobtype="$(getfieldvalue "${restorejob}" 11)"
+pgsqlhost="$(getfieldvalue "${restorejob}" 12)"
+pgsqlport="$(getfieldvalue "${restorejob}" 13)"
+pgsqlsuperuser="$(getfieldvalue "${restorejob}" 14)"
+role_handling="$(getfieldvalue "${restorejob}" 15)"
+tblspc_handling="$(getfieldvalue "${restorejob}" 16)"
+
+# Depending on job type, choose restore options
+# TRIGGER: all information available
+# SINGLE/CRON: need to get the path
+if [ "${STARTTYPE}" != "TRIGGER" ]; then
+  if [[ "${DUMP}" =~ ^[0-9]+$ ]]; then
+    catalogid=${DUMP}
+  fi
+  DUMP=$(getdumppathfromcatalog ${catalogid})
+fi
+
+# Figure out type (cluster/sql or database/directory dump)
+if [[ "${DUMP}" =~ .sql.gz$ ]]; then
+  dumptype=SQL
+  DUMP=`echo "${DUMP}" | sed -E 's/.sql.gz$//g'`
+else
+  dumptype=DIR
+fi
+
+# Check status of the backup job
+if [ ! -e ${DUMP}.catalog.dat ] || [ "$(getbackupstatus ${DUMP}.catalog.dat)" != "SUCCESS" ]; then
+  errmsg="backup ${DUMP} does not exist, or failed, restore not started" 
+  log "ERROR" "${errmsg}" 
+  errcode=4
+fi
+
+pgsqlhost=$(resolvepghost ${pgsqlhost})
+
+# Set postgres destination server version (also connection test)
+setpgbinpath
+if [ "${ERRORS}" != "" ]; then
+  snaplog "ERROR" "could not connect to target database"
+  cleanupexit 1
+fi
+
+# Set the options
+if [ "${restoretype}" == "DATA" ]; then 
+  restoreoptions="${restoreoptions} --data-only"
+fi
+if [ "${restoretype}" == "SCHEMA" ]; then 
+  restoreoptions="${restoreoptions} --schema-only"
+fi
+if [ "${restoreschema}" != "*" ]; then
+  restoreoptions="${restoreoptions} --schema=\"${restoreschema}\""
+fi
+
+# Be talkative
+if [ "${VERBOSITY}" == "VERBOSE" ]; then
+  echo "dump catalog id         ${catalogid}"
+  echo "destination host:       ${pgsqlhost} (version: $PGVERSION)"
+  echo "destination port:       ${pgsqlport}"
+  echo "destination db name:    ${dbname}"
+  echo "destination superuser:  ${pgsqlsuperuser}"
+  echo "restore type:           ${restoretype}"
+  echo "restore schema:         ${restoreschema}"
+  echo "full restore options:   ${restoreoptions}"
+  echo "existing db:            ${existingdb}"
+  echo "cron:                   ${cron}"
+  echo "status:                 ${status}"
+  echo "comment:                ${comment}"
+  echo "job type:               ${jobtype}"
+  echo "role handling:          ${role_handling}"
+  echo "tablespace handling:    ${tblspc_handling}"
+  echo ""
+  echo "full dump path:         ${DUMP}"
+  echo "dump type:              ${dumptype}"
+  echo ""
+  if [ "${errmsg}" != "" ]; then
+    echo "ERROR: ${errmsg}"
+  fi
+fi
+
+# Ready to go or not?
 if [ ${errcode} -gt 0 ]; then
   snaplog "ERROR" "initialization errors, exit code: ${errcode} (${errmsg})"
-  exit ${errcode}
+  cleanupexit ${errcode}
 fi
 
 # Write the start markers (lock file, single run in database)
@@ -127,45 +400,14 @@ fi
 log "INFO" "starting ${STARTTYPE} restore, job id [${JOBID}] from dump [`basename ${DUMP}`]"
 snaplog "INFO" "init - starting ${STARTTYPE} restore, job id [${JOBID}] from dump [`basename ${DUMP}`]"
 
-# Do the work
-# Get the various restore job fields
-echo "${restorejob}"
-
-# Depending on job type, choose restore options
-
-catalogid="$(getfieldvalue "${restorejob}" 2)"
-destdb="$(getfieldvalue "${restorejob}" 3)"
-restoretype="$(getfieldvalue "${restorejob}" 4)"
-restoreschema="$(getfieldvalue "${restorejob}" 5)"
-restoreoptions="$(getfieldvalue "${restorejob}" 6)"
-existingdb="$(getfieldvalue "${restorejob}" 7)"
-status="$(getfieldvalue "${restorejob}" 9)"
-comment="$(getfieldvalue "${restorejob}" 10)"
-jobtype="$(getfieldvalue "${restorejob}" 11)"
-pg_dns_name="$(getfieldvalue "${restorejob}" 12)"
-pg_port="$(getfieldvalue "${restorejob}" 13)"
-pg_superuser="$(getfieldvalue "${restorejob}" 14)"
-
-if [ "${VERBOSITY}" == "VERBOSE" ]; then
-  echo "dump catalog id         ${catalogid}"
-  echo "destination db name:    ${destdb}"
-  echo "restore type:           ${restoretype}"
-  echo "restore schema:         ${restoreschema}"
-  echo "restore options:        ${restoreoptions}"
-  echo "existing db:            ${existingdb}"
-  echo "status:                 ${status}"
-  echo "comment:                ${comment}"
-  echo "job type:               ${jobtype}"
-  echo "dns name destination:   ${pg_dns_name}"
-  echo "server port dest.:      ${pg_port}"
-  echo "superuser:              ${pg_superuser}"
+# Start psql or pg_restore operation
+if [ "${dumptype}" == "DIR" ]; then
+  run_dir_restore
+elif  [ "${dumptype}" == "SQL" ]; then
+  run_sql_restore
 fi
 
-# ..........
 
-# Remove running marker
-rm ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.running
-
-# 
-exit 0
+# Normal end
+cleanupexit 0
 

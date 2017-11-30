@@ -5,6 +5,14 @@
 # Config file location (if not found, script directory will be searched)
 CONFIGFILE=/etc/pgsnapman/pgsnapman.config
 
+# Exit, but with clean up
+# $1 error code
+function cleanupexit {
+  # Remove running marker
+  rm -f ${TEMPDIR}/$$.*
+  exit $1
+}
+
 # Write a log entry to the main snapman log
 # $1: log level
 # $2: log message

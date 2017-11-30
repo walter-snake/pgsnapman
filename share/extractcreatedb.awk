@@ -6,7 +6,7 @@
 #   cat yourschema.sql | awk -v INCLUDETS="Y" extractcreatedb.awk or straight from a dump
 #   pg_restore --create --schema-only yourdump | awk -v INCLUDETS="Y" extractcreatedb.awk
 
-{ T=0;
+{ T=0
   P=0
   if ($1=="CREATE" && $2=="DATABASE") {
     if ( INCLUDETS == "Y" )
