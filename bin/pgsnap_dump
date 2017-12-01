@@ -211,6 +211,8 @@ function startpgsnapjob {
   # Determine job type, as naming schema's differ, also set --schema-only flag if required
   if [ "${butype}" == "CLUSTER_SCHEMA" ]; then
     jobdir=${DUMPSNAP}/${1}/${jobid}_cluster.schema
+  elif [ "${butype}" == "CLUSTER" ]; then
+    jobdir=${DUMPSNAP}/${1}/${jobid}_cluster.full
   else
     jobdir=${DUMPSNAP}/${1}/${jobid}_${dbname}${schema_part}
   fi
@@ -242,18 +244,12 @@ function startpgsnapjob {
   # Cluster schema dump
     STARTTIME=`date '+%s'`
     log "INFO" "job id ${jobid} - ${butype} dump started with options ${dumpoptions}"
-    if [ "${butype}" == "CLUSTER_SCHEMA" ]; then
-      ext=".sql"
+    if [[ "${butype}" =~ ^CLUSTER ]]; then
+      ext=".sql.gz"
       snaplog "INFO" "dumping - ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} ${schemaonly} -f ${jobdir}/${buname}${ext} -v"
-      ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} ${schemaonly} -f ${jobdir}/${buname}${ext} -v 2>> ${jobdir}/${buname}.log
+      ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} ${schemaonly} -f /dev/stdout -v 2>> ${jobdir}/${buname}.log | gzip -c > ${jobdir}/${buname}${ext}
       if [ "$?" == "0" ]; then
-        gzip ${jobdir}/${buname}${ext}
-        if [ "$?" == "0" ]; then
-          ext=".sql.gz"
-        else
-          log "ERROR" "job id ${jobid} - errors occured during gzip for ${jobdir}/${buname}${ext}"
-          ERRORS=1
-        fi
+        log "INFO" "job id ${jobid} - finished pg_dumpall (cluster schema) for ${buname}${ext}"
       else
         log "ERROR" "job id ${jobid} - errors occured during pg_dumpall (cluster schema) for ${buname}${ext}"
         ERRORS=1
@@ -386,7 +382,7 @@ fi
 
 # Write catalog data file for upload, symlink in central upload dir
 copylog=${jobdir}/${buname}.catalog.dat
-preparecatalogdata "${2}\t${INITIMESTAMP}\t`date +'%Y%m%dT%H%M%S'`\t${jobresult}\t${buname}${ext}\t${jobdir}\t${DBSIZE}\t${SIZEONDISK}" "${copylog}" "NEW" "UPLOAD"
+preparecatalogdata "${2}\t${INITIMESTAMP}\t`date +'%Y%m%dT%H%M%S'`\t${jobresult}\t${buname}${ext}\t${jobdir}\t${DBSIZE}\t${SIZEONDISK}\t${dbname}\t${butype}\t${schema}" "${copylog}" "NEW" "UPLOAD"
 
 # Next procedures, set exit code
 if [ "${jobresult}" == "FAILED" ]; then
@@ -395,6 +391,7 @@ else
   # Start dedup for a FULL backup
   if [ "${butype}" == "FULL" ]; then
     ${SCRIPTPATH}/pgsnap_dedup ${jobdir}/${buname} SILENT ${jobid}
+    snaplog "INFO" "finished deduplication of table data"
   fi
   # Start a restore job if requested, put it in the background, the dump is ready now
   if [ "${restorejobid}" != "" ]; then
@@ -406,7 +403,7 @@ else
     done
     IFS="${oIFS}"
   fi
-  snaplog "INFO" "finished dedup, restore jobs started when required"
+  snaplog "INFO" "finished dump process"
   exit 0
 fi
 

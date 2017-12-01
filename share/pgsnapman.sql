@@ -588,9 +588,9 @@ CREATE TABLE pgsnap_dumpjob (
     cron text NOT NULL,
     status text DEFAULT 'ACTIVE'::text,
     jobtype text DEFAULT 'CRON'::text,
-    pgsnap_restorejob_id text DEFAULT (-1),
+    pgsnap_restorejob_id text,
     date_added timestamp without time zone DEFAULT now(),
-    CONSTRAINT pgsnap_dumpjob_dumptype_check CHECK ((dumptype = ANY (ARRAY['FULL'::text, 'SCHEMA'::text, 'CLUSTER_SCHEMA'::text, 'SCRIPT'::text]))),
+    CONSTRAINT pgsnap_dumpjob_dumptype_check CHECK ((dumptype = ANY (ARRAY['FULL'::text, 'SCHEMA'::text, 'CLUSTER_SCHEMA'::text, 'SCRIPT'::text, 'CLUSTER'::text]))),
     CONSTRAINT pgsnap_dumpjob_jobtype_check CHECK ((jobtype = ANY (ARRAY['CRON'::text, 'SINGLE'::text]))),
     CONSTRAINT pgsnap_dumpjob_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
 );
@@ -662,6 +662,9 @@ CREATE TABLE pgsnap_catalog (
     bu_location text,
     dbsize bigint,
     dumpsize bigint,
+    dbname text,
+    dumpschema text,
+    dumptype text,
     CONSTRAINT pgsnap_catalog_status_check CHECK ((status = ANY (ARRAY['SUCCESS'::text, 'FAILED'::text, 'REMOVING'::text])))
 );
 
@@ -787,7 +790,7 @@ CREATE TABLE pgsnap_restorejob (
     pgsnap_catalog_id integer DEFAULT (-1),
     role_handling text DEFAULT 'USE_ROLE'::text,
     tblspc_handling text DEFAULT 'NO_TBLSPC'::text,
-    CONSTRAINT pgsnap_restorejob_existing_db_check CHECK ((existing_db = ANY (ARRAY['DROP'::text, 'RENAME'::text]))),
+    CONSTRAINT pgsnap_restorejob_existing_db_check CHECK ((existing_db = ANY (ARRAY['DROP'::text, 'RENAME'::text, 'DROP_BEFORE'::text]))),
     CONSTRAINT pgsnap_restorejob_jobtype_check CHECK ((jobtype = ANY (ARRAY['SINGLE'::text, 'CRON'::text, 'TRIGGER'::text]))),
     CONSTRAINT pgsnap_restorejob_restoretype_check CHECK ((restoretype = ANY (ARRAY['FULL'::text, 'DATA'::text, 'SCHEMA'::text]))),
     CONSTRAINT pgsnap_restorejob_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
@@ -928,11 +931,12 @@ CREATE TABLE test_dates (
 --
 
 CREATE VIEW vw_catalog_compact AS
- SELECT p.dns_name,
+ SELECT c.id,
+    p.dns_name,
     p.pgport,
-    j.dbname,
-    j.dumpschema,
-    j.dumptype,
+    c.dbname,
+    c.dumpschema,
+    c.dumptype,
     c.bu_name,
     c.starttime,
     (c.endtime - c.starttime) AS duration,

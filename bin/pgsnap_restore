@@ -109,7 +109,7 @@ function lockoutusers {
 
   # close connections
   # get list of connected users, loop through and terminate backends
-  log "INFO" "terminate existing connections"
+  log "INFO" "terminate existing connections on database $1"
   ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "select pg_terminate_backend(pid) from pg_stat_activity where datname='${1}'"
   if [ "$?" != "0" ]; then
     snaplog "ERROR" "could not successfully terminate clients, impossible to complete DROP and RENAME operations on database ${1}"
@@ -133,10 +133,13 @@ function dropdatabase {
   # throw everyone out
   lockoutusers $1
 
+  log "INFO" "dropping database $1"
   # drop, this should succeed, as all connections are dead, and no one can be connected any more (well, a superuser)
   ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "DROP DATABASE IF EXISTS \"${1}\"" 2>&1 /dev/null
   if [ "$?" == "0" ]; then
     log "INFO" "database $1 dropped successfully (or did not exist at all)"
+  else
+    log "ERROR" "error while dropping database $1"
   fi
 }
 
@@ -147,22 +150,27 @@ function renamedatabase {
   # throw everyone out
   lockoutusers $1
 
+  log "INFO" "rename database $1->$2"
   # rename, this should succeed, as all connections are dead, and no one can be connected any more (well, a superuser)
   ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "ALTER DATABASE \"${1}\" RENAME TO \"${2}\"" 2>&1 /dev/null
   if [ "$?" == "0" ]; then
     log "INFO" "database $1 renamed successfully (or did not exist at all)"
+  else
+    log "ERROR" "error while renaming database $1->$2"
   fi
 }
 
 # Create a role, skips setting password when role already exists
-# $1 role name
+# $1 role name (should be sanitized, without double quotes)
 function createrole {
   local line=`${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -A -t -c "SELECT count(*) from pg_catalog.pg_roles WHERE rolname = '${1}'"`
   # not present: create from information in globals dump
-  if [ "$line" == "0" ]; then
-    echo "create role: ${1}"
-    # cat line into psql
-    cat "${DUMP}.cluster_globals.sql" | grep -E "\ ROLE\ ${1}[;\ ]" | ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} --no-password
+  if [ "$line" == "1" ]; then
+    if [ "${VERBOSITY}" == "VERBOSE" ]; then echo "skip existing role: ${1}"; fi
+  else
+    if [ "${VERBOSITY}" == "VERBOSE" ]; then echo "create role:        ${1}"; fi
+    # load cluster globals dump into psql, filtered for this role
+    cat "${DUMP}.cluster_globals.sql" | grep -E "^((ALTER\ ROLE|CREATE\ ROLE))\ \"?${1}.*" | ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} --no-password
   fi
 }
 
@@ -175,22 +183,76 @@ function setDBSETTINGS {
 # Create temp database
 # $1 target database name
 # $2 use tablespace [USE_TBLSPC|NO_TBLSPC]
-function createtempdb {
+function createdatabase {
   # create the database
   if [ "$2" == "USE_TBLSPC" ] &&  [ "$(getfieldvalue "${DBSETTINGS}" 7)" != "" ]; then
     local tblspc="--tablespace=$(getfieldvalue "${DBSETTINGS}" 7)"
   fi
+  log "INFO" "creating database $1"
   ${PGBIN}/createdb ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --maintenance-db=${MAINTDB} -E $(getfieldvalue "${DBSETTINGS}" 3) --lc-collate=$(getfieldvalue "${DBSETTINGS}" 4) --lc-ctype=$(getfieldvalue "${DBSETTINGS}" 5) --template=template0 ${tblspc} "$1" 2> /dev/null
   echo $?
 }
 
+# Set database owner
+# $1 target database name
+function setdatabaseowner {
+  log "INFO" "setting owner on database $1 to $(getfieldvalue "${DBSETTINGS}" 2)"
+  # Set owner (failure does not produce an error)
+  echo "ALTER DATABASE \"$1\" OWNER TO \"$(getfieldvalue "${DBSETTINGS}" 2)\";" | ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} --no-password > /dev/null
+}
+
 # Create the roles, neccessary for this database
 function prepareroles {
+  log "INFO" "preparing roles for restore job ${JOBID} (original database: ${dbname})"
   # check and create database owner
   createrole $(getfieldvalue "${DBSETTINGS}" 2)
   # check and create other roles
   # a bit more complex: read schema, and find all alter owner, grant and revoke rows
-  echo "TBD prepare roles"
+  # use pg_restore to read the schema, and grep relevant records
+  ${PGBIN}/pg_restore --schema-only ${restoreoptions} "${DUMP}" | grep -E '^((GRANT|REVOKE|ALTER.*OWNER\ TO))' | awk '{if ($1 == "ALTER") print $6; else print $7;}' | grep -iv 'PUBLIC' | sed 's/;//'| sort > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles
+  # read user names, create
+  local line
+  local linetrim
+  local previous
+  while read line; do
+    if [ "${line}" != "${previous}" ]; then
+      linetrim=`echo ${line} | sed 's/"//g'`
+      createrole "${linetrim}"
+    fi
+    previous=${line}
+  done < ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles
+}
+
+# Checks every required tablespace
+function checktablespaces {
+  log "INFO" "verifying tablespaces for restore job ${JOBID} (original database: ${dbname})"
+  ${PGBIN}/pg_restore --schema-only ${restoreoptions} "${DUMP}" | grep -E "^SET\ default_tablespace\ \=\ .*[^'];" | awk '{print $4}' | sed 's/;//'| sort > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.tablespaces
+  # read user names, create
+  local line
+  local linetrim
+  local previous
+  while read line; do
+    if [ "${line}" != "${previous}" ]; then
+      linetrim=`echo ${line} | sed 's/"//g'`
+      hastablespace "${linetrim}"
+    fi
+    previous=${line}
+  done < ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.tablespaces
+}
+
+# Checks if a tablespace exists
+# $1 tablespace name (should be sanitized, without double quotes)
+function hastablespace {
+  local line=`${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -A -t -c "SELECT count(*) from pg_catalog.pg_tablespace WHERE spcname = '${1}'"`
+  # not present: create from information in globals dump
+  if [ "$line" == "0" ]; then
+    if [ "${VERBOSITY}" == "VERBOSE" ]; then echo "required tablespace does not exist: ${1}"; fi
+    log "ERROR" "required tablespace $1 does not exist, quit"
+    snaplog "ERROR" "required tablespace $1 does not exist, quit"
+    cleanupexit 1
+  else
+    if [ "${VERBOSITY}" == "VERBOSE" ]; then echo "required tablespace found: ${1}"; fi
+  fi
 }
 
 # Restore procedures
@@ -198,8 +260,13 @@ function prepareroles {
 
 # SQL restore
 function run_sql_restore {
-  #${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} ${restoreoptions} < gunzip -c ${DUMP}
-  echo ugh
+  snaplog "INFO" "starting cluster dump restore"; 
+  gunzip -c ${DUMP} | ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} ${restoreoptions}
+   if [ "$?" == "0" ]; then
+     snaplog "INFO" "finished restoring cluster dump"; 
+   else
+     snaplog "ERROR" "errors while restoring cluster dump"; 
+   fi
 }
 
 # DIR dump restore
@@ -207,51 +274,76 @@ function run_dir_restore {
   # Load the settings for this dump
   setDBSETTINGS
 
-  # temp name, we always run restore in a temp database
-  TEMPDB="${dbname}_$$"
+  # restore type DATA: no database manipulation
+  if [ "${restoretype}" == "DATA" ]; then
+    RESTOREDB="${dbname}"
+  else
+    # temp name, we always run restore in a temp database
+    RESTOREDB="${dbname}_$$"
   
-  # prepare roles
-  if [ "${role_handling}" == "USE_ROLE" ]; then
-    prepareroles
+    # prepare roles
+    if [ "${rolehandling}" == "USE_ROLE" ]; then
+      prepareroles
+    fi
+
+    # tablespaces
+    if [ "${tblspchandling}" == "USE_TBLSPC" ]; then
+      checktablespaces
+    fi
+
+    # create database
+    local ec=$(createdatabase ${RESTOREDB} ${tblspchandling})
+    # if this fails, we'll bail out
+    if [ "$ec" != "0" ]; then
+      snaplog "ERROR" "database creation failed for temp database ${RESTOREDB}"
+      echo "$ec"
+      return
+    fi
+
+    # drop before (risky, but possible, could come in handy when space is restricted)
+    if [ "${existingdb}" == "DROP_BEFORE" ]; then
+      ec="$(dropdatabase "${dbname}")"
+    fi
   fi
+  # end DATA exlusion
 
-  # create database
-  local ec=$(createtempdb ${TEMPDB} ${tblspc_handling})
-  # if this fails, we'll bail out
-  if [ "$ec" != "0" ]; then
-    snaplog "ERROR" "database creation failed for database ${TEMPDB}"
-    echo "$ec"
-    return
-  fi
-
-  # drop before (risky, but possible)
-  if [ "${existingdb}" == "DROP_BEFORE" ]; then
-    ec="$(dropdatabase "${dbname}")"
-  fi 
-
-  # restore
-  ${PGBIN}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -no-password --dbname=${TEMPDB} ${restoreoptions} "${DUMP}"
-  if [ "$?" != "0" ]; then
-    snaplog "ERROR" "restore to temp database ${TEMPDB} failed, abort restore, trying to drop temp database"
-    ec=$(dropdatabase "${TEMPDB}")
+  # restore, depends on DATA/SCHEMA/FULL
+  log "INFO" "processing - restore to temp database ${RESTOREDB} started"
+  ${PGBIN}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${RESTOREDB} ${restoreoptions} "${DUMP}"
+  if [ "$?" == "0" ]; then
+    log "INFO" "processing - restore to temp database ${RESTOREDB} completed"
+  else
+    log "ERROR" "processing - restore to temp database ${RESTOREDB} failed, abort restore, trying to drop temp database"
+    snaplog "ERROR" "processing - restore to temp database ${RESTOREDB} failed, abort restore, trying to drop temp database"
+    ec=$(dropdatabase "${RESTOREDB}")
     echo "1"
     return
   fi
-  existingdb="RENAME"
-  # drop/move original after restore
-  if [ "${existingdb}" == "DROP" ]; then
-    ec="$(dropdatabase "${dbname}")"
-  elif  [ "${existingdb}" == "RENAME" ]; then
-    # always drop existing backup in rename scenario
-    ec="$(dropdatabase "${dbname}_pgsnapman_rs_bak")"
-    ec="$(renamedatabase "${dbname}" "${dbname}_pgsnapman_rs_bak")"
-  fi
   
-  # move in place
-  ec="$(renamedatabase "${TEMPDB}" "${dbname}")"
-
-  # set global acl and allow connections
-  setaclallowconnect ${dbname}
+  # restore type DATA: no database manipulation
+  if [ "${restoretype}" != "DATA" ]; then
+   # drop/move original after restore
+    if [ "${existingdb}" == "DROP" ]; then
+      ec="$(dropdatabase "${dbname}")"
+    elif  [ "${existingdb}" == "RENAME" ]; then
+      # always drop existing backup in rename scenario
+      ec="$(dropdatabase "${dbname}_pgsnapman_rs_bak")"
+      ec="$(renamedatabase "${dbname}" "${dbname}_pgsnapman_rs_bak")"
+    fi
+  
+    # move in place
+    ec="$(renamedatabase "${RESTOREDB}" "${dbname}")"
+  
+    # Only when USE_ROLE
+    if [ "${rolehandling}" == "USE_ROLE" ]; then
+      # set owner
+      setdatabaseowner ${dbname}
+      # set global acl and allow connections
+      setaclallowconnect ${dbname}
+    fi
+  fi  
+  # end DATA exclusion
+  snaplog "INFO" "finished restore of database $(getfieldvalue "${DBSETTINGS}" 1) -> ${dbname}"
 }
 
 # ==========================================
@@ -309,8 +401,8 @@ jobtype="$(getfieldvalue "${restorejob}" 11)"
 pgsqlhost="$(getfieldvalue "${restorejob}" 12)"
 pgsqlport="$(getfieldvalue "${restorejob}" 13)"
 pgsqlsuperuser="$(getfieldvalue "${restorejob}" 14)"
-role_handling="$(getfieldvalue "${restorejob}" 15)"
-tblspc_handling="$(getfieldvalue "${restorejob}" 16)"
+rolehandling="$(getfieldvalue "${restorejob}" 15)"
+tblspchandling="$(getfieldvalue "${restorejob}" 16)"
 
 # Depending on job type, choose restore options
 # TRIGGER: all information available
@@ -347,14 +439,23 @@ if [ "${ERRORS}" != "" ]; then
 fi
 
 # Set the options
-if [ "${restoretype}" == "DATA" ]; then 
-  restoreoptions="${restoreoptions} --data-only"
-fi
-if [ "${restoretype}" == "SCHEMA" ]; then 
-  restoreoptions="${restoreoptions} --schema-only"
-fi
-if [ "${restoreschema}" != "*" ]; then
-  restoreoptions="${restoreoptions} --schema=\"${restoreschema}\""
+if [ "${restoretype}" != "SQL" ]; then
+  log "INFO" "schema, tablespace and owner/privilege options are ignored in SQL mode"
+  if [ "${restoretype}" == "DATA" ]; then 
+    restoreoptions="${restoreoptions} --data-only"
+  fi
+  if [ "${restoretype}" == "SCHEMA" ]; then 
+    restoreoptions="${restoreoptions} --schema-only"
+  fi
+  if [ "${restoreschema}" != "*" ]; then
+    restoreoptions="${restoreoptions} --schema=\"${restoreschema}\""
+  fi
+  if [ "${rolehandling}" == "NO_ROLE" ]; then
+    restoreoptions="${restoreoptions} --no-owner --no-privileges"
+  fi
+  if [ "${tblspchandling}" == "NO_TBLSPC" ]; then
+    restoreoptions="${restoreoptions} --no-tablespaces"
+  fi
 fi
 
 # Be talkative
@@ -372,8 +473,8 @@ if [ "${VERBOSITY}" == "VERBOSE" ]; then
   echo "status:                 ${status}"
   echo "comment:                ${comment}"
   echo "job type:               ${jobtype}"
-  echo "role handling:          ${role_handling}"
-  echo "tablespace handling:    ${tblspc_handling}"
+  echo "role handling:          ${rolehandling}"
+  echo "tablespace handling:    ${tblspchandling}"
   echo ""
   echo "full dump path:         ${DUMP}"
   echo "dump type:              ${dumptype}"
@@ -406,7 +507,6 @@ if [ "${dumptype}" == "DIR" ]; then
 elif  [ "${dumptype}" == "SQL" ]; then
   run_sql_restore
 fi
-
 
 # Normal end
 cleanupexit 0
