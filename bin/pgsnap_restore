@@ -61,7 +61,7 @@ function getrestorejob {
   local data
   local sql="SELECT r.id, pgsnap_catalog_id, r.dest_dbname, r.restoretype, \
        r.restoreschema, r.restoreoptions, existing_db, r.cron, r.status, r.comment, \
-       r.jobtype, p.dns_name, p.pgport, p.pgsql_superuser, r.role_handling, r.tblspc_handling \
+       r.jobtype, p.dns_name, p.pgport, p.pgsql_superuser, r.role_handling, r.tblspc_handling, p.status \
   FROM pgsnap_restorejob r \
   JOIN pgsql_instance p \
     ON r.dest_pgsql_instance_id = p.id \
@@ -387,6 +387,7 @@ if [ "${restorejob}" == "" ]; then
   errcode=3
 fi
 
+
 # Get the various restore job fields
 catalogid="$(getfieldvalue "${restorejob}" 2)"
 dbname="$(getfieldvalue "${restorejob}" 3)"
@@ -403,6 +404,19 @@ pgsqlport="$(getfieldvalue "${restorejob}" 13)"
 pgsqlsuperuser="$(getfieldvalue "${restorejob}" 14)"
 rolehandling="$(getfieldvalue "${restorejob}" 15)"
 tblspchandling="$(getfieldvalue "${restorejob}" 16)"
+pgsqlstatus="$(getfieldvalue "${restorejob}" 17)"
+
+# Check active status
+# Always stop when pgsql set to inactive
+if [ "${pgsqlstatus}" == "HALTED" ]; then
+  snaplog "ERROR" "restore job ${JOBID} requested on an inactive postgres instance [${pgsqlhost}:${pgsqlport}]"
+  cleanupexit 1
+fi
+# When scheduled (CRON), quit when job is halted
+if [ "${status}" == "HALTED" ]; then
+  snaplog "ERROR" "scheduled restore job ${JOBID} requested which is is on halt (hint: manual start works)"
+  cleanupexit 1
+fi
 
 # Depending on job type, choose restore options
 # TRIGGER: all information available
@@ -460,11 +474,15 @@ fi
 
 # Be talkative
 if [ "${VERBOSITY}" == "VERBOSE" ]; then
+  echo ""
   echo "dump catalog id         ${catalogid}"
+  echo ""
   echo "destination host:       ${pgsqlhost} (version: $PGVERSION)"
   echo "destination port:       ${pgsqlport}"
   echo "destination db name:    ${dbname}"
   echo "destination superuser:  ${pgsqlsuperuser}"
+  echo "destination status:     ${pgsqlstatus}"
+  echo ""
   echo "restore type:           ${restoretype}"
   echo "restore schema:         ${restoreschema}"
   echo "full restore options:   ${restoreoptions}"
