@@ -1,0 +1,67 @@
+#! /bin/bash
+
+# Verify existing backups (directory format)
+# Gets a random selection of non verified but successful backups from the catalog, and runs them through pg_restore.
+
+# ======================================
+# Initialization
+# ======================================
+VERBOSITY=$1
+
+# Get the script directory (must do this first)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
+  DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+done
+SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+
+# Catalog database needed?
+PGSCDB_REQUIRED=YES
+
+# Load functions, will also perform initialization operations
+. ${SCRIPTPATH}/pgsnap_lib
+
+# ========================================
+# Functions
+# ========================================
+
+# Gets a random selection from the catalog, and verifies
+# $1 percentage to check (retrieve)
+function verifybackupselection {
+  local sql="select id, random() as rnd, bu_location || '/' || bu_name as bu_path from pgsnap_catalog where bu_name not like '%.sql.gz' and status = 'SUCCESS' and verified NOT LIKE 'YES' order by rnd limit (select round((count(*) * ${1}/100)::numeric)::int from pgsnap_catalog where status = 'SUCCESS' and verified NOT LIKE 'YES');"
+  local lines=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}"`
+  local id
+  local bupath
+  for line in ${lines}; do
+    # start restore, check for errors
+    id=$(getfieldvalue "${line}" 1)
+    bupath=$(getfieldvalue "${line}" 3)
+    # run pg_restore, but without output (we use the pg_restore version of the catalog db)
+    ${PGSCBIN}/pg_restore -f /dev/null "${bupath}" 2>> ${TEMPDIR}/$$.0.pgsnap_verify.log
+    if [ "$?" == "0" ]; then
+      setcatalogstatus "${id}" "SUCCESS"
+    else
+      setcatalogstatus "${id}" "FAILED"
+    fi
+  done
+}
+
+# $1 catalog id
+# $2 verification status
+function setcatalogstatus {
+  local sql
+  if [ "${2}" == "FAILED" ]; then 
+    sql="update pgsnap_catalog set status='FAILED', verified='FAILED' where id = ${1};"
+  else
+    sql="update pgsnap_catalog set verified='YES' where id = ${1};"
+  fi
+  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}" --output=/dev/null 2> /dev/null
+}
+
+# ========================================
+# MAIN
+# ========================================
+
+verifybackupselection 25

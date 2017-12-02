@@ -71,6 +71,15 @@ function uploaddata {
 # ================================================================================
 # MAIN
 # ===============================================================================
+
+# Check if already running, quit if so, exit code 0 (its not an error).
+JOBID=0
+if [ "$(isjobrunning ${JOBID})" == "0" ]; then
+  lock ${JOBID} "${0} ${1} ${2} ${3} ${4} ${5}"
+else
+  cleanupexit 0
+fi
+
 # Tool log
 TOOL_LOG=${LOGDIR}/pgsnap_upload.log 
 
@@ -100,5 +109,5 @@ for f in ${files}; do
   uploaddata "${f}"
 done
 
-exit 0
+cleanupexit 0
 

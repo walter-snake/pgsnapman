@@ -31,7 +31,7 @@ PGSCDB_REQUIRED=YES
 # Check verbosity
 if [[ ! "$1" =~ SILENT|VERBOSE ]]; then
   echo "ERROR verbosity must be set"
-  exit 1
+  cleanupexit 1
 fi
 
 # Load functions, will also perform initialization operations
@@ -57,7 +57,6 @@ function getcatalogjobinfo {
     from pgsnap_catalog c \
     left join pgsnap_dumpjob j \
       on j.id = c.pgsnap_dumpjob_id;"
-  echo "$sql"
   ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" -A -t -F '|' > ${TEMPDIR}/$$.catalogjobinfo.list
 }
 
@@ -85,6 +84,9 @@ function cleanupjob {
   local line
   echo "${INITIMESTAMP} Catalog ids to keep for job id: $1" >> ${LOGDIR}/pgsnap_clean.keepcatids.log
   local sql="select c.id, c.starttime, c.bu_name, c.bu_location || '/' || c.bu_name as full_path from pgsnap_catalog c where c.pgsnap_dumpjob_id = $1 AND c.id not in (select id from get_keep_catjobid('`date '+%Y%m%dT%H%M%S'`', $1, $2, $3, $4, $5) as (id integer));"
+# FOR DEBUGGING
+#  local sql="select c.id, c.starttime, c.bu_name, c.bu_location || '/' || c.bu_name as full_path from pgsnap_catalog c where c.pgsnap_dumpjob_id = $1 AND c.id not in (select id from get_keep_catjobid('`date '+%Y%m%dT%H%M%S'`', $1, 0, 0, 0, 0) as (id integer));"
+# END DEBUGGING
   ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" -A -t -F '|' --output=${TEMPDIR}/$$.removedumps.list 2>> ${LOGDIR}/pgsnap_clean.keepcatids.log
   # Loop through all catalog entries, and remove them
   while read line; do
@@ -98,7 +100,10 @@ function cleanupjob {
     local path=`echo "${path}" | sed -E 's/.sql.gz$//g'`
     # Check if the path is safe, if so proceed
     if [ "$(issafetoremove "${path}")" == "NO" ]; then
-      log "ERROR" "specified path considered unsafe to be removed [${path}]"
+      log "WARNING" "path unsafe to remove or restore job running [${path}]"
+    elif [ "$(isrestorerunning "${path}")" == "YES" ]; then
+        echo "WARNING" "restore job running [${path}]"
+        log "WARNING" "restore job running [${path}]"
     else
       local checksumfile=${path}.chksum
       # Possibly slow when cleaning up tons of backups, as files will be checked multiple times. But, this is
@@ -137,6 +142,22 @@ function issafetoremove {
   else
     echo "NO"
   fi
+}
+
+# Check if a restore job is running
+# $1 full path (without extension) of the dump to verify if no restore is running
+# checked through the detour of using the lock files instead of a dedicated restore
+# lock in the dump dir, as this stuff gets cleaned up automatically
+function isrestorerunning {
+  # Loop through all pgsnap_restore files, read contents and compare
+  local restorejobs=`find ${TEMPDIR} -name '*.pgsnap_restore.lock'`
+  for rj in ${restorejobs}; do
+    if [ "`cat ${rj}`" == "${1}" ]; then
+      echo "YES"
+    else
+      echo "NO"
+    fi
+  done
 }
 
 # Verify a single data file in the dedupstore, check if it can be removed.
@@ -250,7 +271,7 @@ function dedupstore_fullclean {
       select yn in "Yes" "No"; do
         case $yn in
           Yes ) break;;
-          No ) exit;;
+          No ) cleanupexit;;
         esac
       done
     fi
@@ -272,13 +293,21 @@ function dedupstore_fullclean {
 # MAIN
 # =======================================
 
+# Check if already running, quit if so, exit code 0 (its not an error).
+JOBID=0
+if [ "$(isjobrunning ${JOBID})" == "0" ]; then
+  lock ${JOBID} "${0} ${1} ${2} ${3} ${4} ${5}"
+else
+  cleanupexit 0
+fi
+
 # Validate the DEDUPstore, if it does not exist we'll immediately exist
 # Otherwise we're in trouble (especially the snapshot dir, where we
 # must find the links: no link, data gone). 
 if [ ! -d ${DUMPSNAP} ]; then
   echo "The snapshot directory does not exist, unsafe to continue."
   snaplog "ERROR" "init  - the snapshot directory does not exist, unsafe to continue."
-  exit 1
+  cleanupexit 1
 fi
 
 # Set the tool log
@@ -301,9 +330,7 @@ else
   # Normal, scheduled maintenance mode
 
   # Clean up temp files from previously running jobs (unclean exit, or just because we have to)
-  find ${TEMPDIR} -type f -mtime 1 > ${TEMPDIR}/clean_running.temp
-  find ${TEMPDIR} -type f -name '*.running' >> ${TEMPDIR}/clean_running.temp
-  find ${DUMPSNAP} -type f -maxdepth 2 -name '*.running' >> ${TEMPDIR}/clean_running.temp
+  find ${TEMPDIR} -type f -name '*' | grep -v crontab >> ${TEMPDIR}/clean_running.temp
   while read line; do
     chkpid=$(echo `basename $line` | cut -d '.' -f 1)
     ps -p $chkpid &> /dev/null
@@ -324,6 +351,6 @@ else
 
   # Retention policy-cleaning
   cleanupcatalog
-fi 
+fi
 
-exit 0
+cleanupexit 0

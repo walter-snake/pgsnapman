@@ -5,12 +5,55 @@
 # Config file location (if not found, script directory will be searched)
 CONFIGFILE=/etc/pgsnapman/pgsnapman.config
 
+# Run/lock management
+# ------------------------------------------------
+
+# Write lock file
+# $1 job id
+# $2 commandline or other useful info (optional)
+function lock {
+  echo -n "${2}" > "${TEMPDIR}/$$.$1.${TOOLNAME}.lock"
+}
+
 # Exit, but with clean up
 # $1 error code
 function cleanupexit {
-  # Remove running marker
+  # Remove temp files, including lock
   rm -f ${TEMPDIR}/$$.*
   exit $1
+}
+
+# Checks lock files for running job
+# $1 job id
+function isjobrunning {
+  local ec=0
+  local findresult=`find ${TEMPDIR} -name "*.$1.${TOOLNAME}.lock"`
+  if [ "${findresult}" != "" ]; then
+    for fr in ${findresult}; do
+      local chkpid=`echo "${findresult}" | cut -d '.' -f1`
+      chkpid=`basename ${chkpid}`
+      ps -p $chkpid &> /dev/null
+      if [ "$?" == "1" ]; then
+        rm -f ${findresult}
+      else
+        local msg="exit: job id ${1}.${TOOLNAME} appears to be running - pid ${chkpid}" 
+        snaplog "WARNING" "${msg}"
+        ec=1
+      fi
+    done
+  fi
+  echo ${ec}
+}
+
+# Messages
+# ------------------------------------------------------------------
+
+# Echo, depending on verbosity
+# $1 the message
+function talk {
+  if [ "${VERBOSITY}" == "VERBOSE" ]; then
+    echo "$1"
+  fi
 }
 
 # Write a log entry to the main snapman log
@@ -32,6 +75,9 @@ function log {
   fi
 }
 
+# Status info
+# -------------------------------------------------------------------
+
 # Gets pgsnap_worker id (quit on error if requested)
 # Requires PGSCDB_REQUIRED to be set (before sourcing this library)
 function getworkerid {
@@ -41,7 +87,7 @@ function getworkerid {
       snaplog "WARNING" "init - could not connect to catalog database (ignored)"
     else
       snaplog "ERROR" "init - could not connect to catalog database (fatal)"
-      exit 2
+      cleanupexit 2
     fi
   fi
   echo "${bwid}"
@@ -106,6 +152,9 @@ function getworkerstatus {
   echo "${workerstatus}"
 }
 
+# Catalog database
+# -----------------------------------------
+
 # Gets the postgres server version
 # $1 hostname (use local for local pipe connections)
 # $2 port
@@ -121,7 +170,6 @@ function getpgversion {
   fi
   echo "${pgv}"
 }
-
 
 # Get the actual size of the database, or a specific schema
 # $1 hostname (use local for local pipe connections)
@@ -244,23 +292,23 @@ if [ -e ${CONFIGFILE} ]; then
   . ${CONFIGFILE}
 else
   echo "pgsnapman config file not found: "${CONFIGFILE}
-  exit 1
+  cleanupexit 1
 fi
 
 # Test for existing root dir
 if [ "`echo "${ROOTDIR}" | grep ' '`" != "" ]; then
   echo "ERROR PgSnapMan root name contains spaces [${ROOTDIR}]"
-  exit 1
+  cleanupexit 1
 fi
 if [ ! -d "${ROOTDIR}" ]; then
   echo "ERROR PgSnapMan root directory does not exist [${ROOTDIR}]"
-  exit 1
+  cleanupexit 1
 fi
 
 # Verify user
 if [ "`whoami`" != "${PGSNAPMANUSER}" ]; then
   echo "ERROR pgsnapman must run as user: ${PGSNAPMANUSER}"
-  exit 4
+  cleanupexit 4
 fi
 
 # Set toolname
@@ -275,7 +323,7 @@ UPLOADDIR=${ROOTDIR}/upload
 # Get a timestamp
 INITIMESTAMP=`date '+%Y%m%dT%H%M%S'`
 
-# Set the hostname for the pgsnapman database
+# Set the hostname for the pgsnapman database (put '-h ' in front of it for non local connections)
 PGSCHOST=$(resolvepghost ${PGSCHOST})
 
 # Retrieve the worker id for this worker instance (we do not need the catalog db, so we can continue if not found)
@@ -283,7 +331,7 @@ BUWORKERID=$(getworkerid)
 
 # Get worker status, quit if HALTED (any tool will quit when the worker is halted)
 if [ "$(getworkerstatus)" == "HALTED" ]; then
-  exit 6
+  cleanupexit 6
 fi
 
 # Write tool init log entry

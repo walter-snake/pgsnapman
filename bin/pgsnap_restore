@@ -261,7 +261,7 @@ function hastablespace {
 # SQL restore
 function run_sql_restore {
   snaplog "INFO" "starting cluster dump restore"; 
-  gunzip -c ${DUMP} | ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} ${restoreoptions}
+  gunzip -c ${DUMP}.sql | ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} ${restoreoptions}
    if [ "$?" == "0" ]; then
      snaplog "INFO" "finished restoring cluster dump"; 
    else
@@ -364,20 +364,7 @@ if [[ ! "${STARTTYPE}" =~ ^((CRON|SINGLE|TRIGGER))$ ]]; then
   cleanupexit 1
 fi
 
-# Check if not another restore process is already running (can be only one file, as a new one will only be written when there's no lock file present
-findresult=`find ${TEMPDIR} -name "*.$1.pgsnap_restore.running"`
-if [ "${findresult}" != "" ]; then
-  chkpid=`echo "${findresult}" | cut -d '.' -f1`
-  chkpid=`basename ${chkpid}`
-  ps -p $chkpid &> /dev/null
-  if [ "$?" == "1" ]; then
-    rm -f ${findresult}
-  else
-    errmsg="process with pid ${chkpid} is already running for job id ${JOBID}" 
-    log "WARNING" "${MSG}"
-    errcode=2
-  fi
-fi
+# Check if already running after obtaining full path information, as we'll write this info to the lock file
 
 # Get restore job information
 restorejob="$(getrestorejob ${JOBID})"
@@ -386,7 +373,6 @@ if [ "${restorejob}" == "" ]; then
   log "ERROR" "${errmsg}"
   errcode=3
 fi
-
 
 # Get the various restore job fields
 catalogid="$(getfieldvalue "${restorejob}" 2)"
@@ -420,15 +406,14 @@ fi
 
 # Depending on job type, choose restore options
 # TRIGGER: all information available
-# SINGLE/CRON: need to get the path
+# SINGLE/CRON: we might need to get the path
 if [ "${STARTTYPE}" != "TRIGGER" ]; then
   if [[ "${DUMP}" =~ ^[0-9]+$ ]]; then
     catalogid=${DUMP}
+    DUMP=$(getdumppathfromcatalog ${catalogid})
   fi
-  DUMP=$(getdumppathfromcatalog ${catalogid})
 fi
-
-# Figure out type (cluster/sql or database/directory dump)
+# Figure out type (cluster/sql or database/directory dump), strip of .sql.gz
 if [[ "${DUMP}" =~ .sql.gz$ ]]; then
   dumptype=SQL
   DUMP=`echo "${DUMP}" | sed -E 's/.sql.gz$//g'`
@@ -453,7 +438,7 @@ if [ "${ERRORS}" != "" ]; then
 fi
 
 # Set the options
-if [ "${restoretype}" != "SQL" ]; then
+if [ "${dumptype}" != "SQL" ]; then
   log "INFO" "schema, tablespace and owner/privilege options are ignored in SQL mode"
   if [ "${restoretype}" == "DATA" ]; then 
     restoreoptions="${restoreoptions} --data-only"
@@ -508,9 +493,14 @@ if [ ${errcode} -gt 0 ]; then
   cleanupexit ${errcode}
 fi
 
-# Write the start markers (lock file, single run in database)
+# Check if already running, quit if so, exit code 0 (its not an error).
+if [ "$(isjobrunning ${JOBID})" == "0" ]; then
+  lock ${JOBID} "${DUMP}"
+else
+  cleanupexit 0
+fi
+
 # Single job: write marker to database
-echo "${DUMP}" > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.running
 if [ "${STARTTYPE}" == "SINGLE" ]; then
   setsinglerunstarted ${JOBID} 'RESTORE'
 fi

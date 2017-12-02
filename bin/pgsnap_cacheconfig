@@ -67,7 +67,7 @@ function initrootdir {
   touch "${ROOTDIR}/status"
   if [ "$?" != "0" ]; then
     echo "ERROR PgSnapMan root directory not writable [${ROOTDIR}]"
-    exit 1
+    cleanupexit 1
   fi
   
   echo "  creating work directories"
@@ -392,13 +392,21 @@ function updatesinglejobconfig {
 # MAIN
 # ===============================================================================
 
+# Check if already running, quit if so, exit code 0 (its not an error).
+JOBID=0
+if [ "$(isjobrunning ${JOBID})" == "0" ]; then
+  lock ${JOBID} "${0} ${1} ${2} ${3} ${4} ${5}"
+else
+  cleanupexit 0
+fi
+
 # Tool log
 TOOL_LOG=${LOGDIR}/$$.pgsnap_cacheconfig.log 
 
 # Check action
 if [  "${ACTION}" == "" ]; then
   echo "ERROR no action provided"
-  exit 1
+  cleanupexit 1
 elif [ "${ACTION}" == "INIT" ]; then
   initrootdir
 
@@ -412,7 +420,7 @@ elif [ "${ACTION}" == "INIT" ]; then
   installcrontab
 
   # And done
-  exit 0
+  cleanupexit 0
 fi
 
 # Before running any other action, always update the worker and psql instance configuration, as
@@ -429,7 +437,7 @@ if [ "${ACTION}" == "CRON" ]; then
 elif [ "${ACTION}" == "SINGLE" ] &&  [ "${SINGLERUNPID}" == "" ]; then
   # Error condition
   snaplog "ERROR" "can not run in SINGLE mode without SINGLERUNPID"
-  exit 1
+  cleanupexit 1
 elif [ "${ACTION}" == "SINGLE" ]; then
   # First retrieve single jobs
   jobspending=$(updatesinglejobconfig)
@@ -460,5 +468,5 @@ fi
 
 snaplog "INFO" "finished"
 
-exit 0
+cleanupexit 0
 

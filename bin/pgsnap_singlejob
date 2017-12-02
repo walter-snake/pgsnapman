@@ -98,6 +98,14 @@ function startdumpjobs {
 # =======================================
 # Check if there are any single dump jobs that have not run
 
+JOBID=0
+# Check if already running, quit if so, exit code 0 (its not an error).
+if [ "$(isjobrunning ${JOBID})" == "0" ]; then
+  lock ${JOBID} "${0} ${1} ${2} ${3} ${4} ${5}"
+else
+  cleanupexit 0
+fi
+
 # Display information
 if [ "$VERBOSITY" == "VERBOSE" ]; then
   echo ""
@@ -145,4 +153,4 @@ fi
 # Be careful: do not clean up the dumpjob file, as it will be used by the pgsnap_dump script, and we don't know
 # for sure when they're ready dealing with it. The pgsnap_clean tool will take care of it.
 
-exit 0
+cleanupexit 0

@@ -183,6 +183,17 @@ begin
     keep_sliceend := keep_slicestart;
   end loop;
 
+  -- all catalog entries marked as keep, or linked to a restore job
+  for r in select id
+    from pgsnap_catalog
+    where keep = true
+    or id in (select pgsnap_catalog_id from pgsnap_restorejob)
+  loop
+      if NOT keep_ids @> ARRAY[r.id] then
+        keep_ids := array_append(keep_ids, r.id);
+      end if;
+  end loop;
+     
   -- output
   --raise notice 'Keeping: %', array_length(keep_ids, 1);
   for keep_id in select unnest(keep_ids)
@@ -665,7 +676,10 @@ CREATE TABLE pgsnap_catalog (
     dbname text,
     dumpschema text,
     dumptype text,
-    CONSTRAINT pgsnap_catalog_status_check CHECK ((status = ANY (ARRAY['SUCCESS'::text, 'FAILED'::text, 'REMOVING'::text])))
+    verified text DEFAULT 'NO'::text,
+    keep boolean DEFAULT false,
+    CONSTRAINT pgsnap_catalog_status_check CHECK ((status = ANY (ARRAY['SUCCESS'::text, 'FAILED'::text, 'REMOVING'::text]))),
+    CONSTRAINT pgsnap_catalog_verified_check CHECK ((verified = ANY (ARRAY['YES'::text, 'FAILED'::text, 'NO'::text])))
 );
 
 

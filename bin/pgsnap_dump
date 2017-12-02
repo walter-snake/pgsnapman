@@ -21,6 +21,8 @@
 # ======================================
 # Initialization
 # ======================================
+PGSQLID=$1
+JOBID=$2
 VERBOSITY=$3
 STARTTYPE=$4
 SINGLERUNPID=$5
@@ -37,16 +39,12 @@ SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 # Check cmd args
 if [ "${STARTTYPE}" == "" ]; then
   echo "ERROR pgsnap_dump no startup type provided"
-  exit 1
+  cleanupexit 1
 fi
 if [ "${STARTTYPE}" == "SINGLE" ] && [ "${SINGLERUNPID}" == "" ]; then
   echo "ERROR pgsnap_dump needs a process id in SINGLE mode"
-  exit 1
+  cleanupexit 1
 fi
-# Set a fake PID when running in CRON mode, so we always have a complete set of cmd args when starting other tools
-#if [ "${STARTTYPE}" == "CRON" ]; then
-#  SINGLERUNPID=0
-#fi
 
 # Catalog database needed?
 PGSCDB_REQUIRED=NO
@@ -259,7 +257,7 @@ function startpgsnapjob {
       local scriptname=`echo "${dumpoptions}" | cut -d ' ' -f 1`
       if [ ! -e "${SCRIPTDIR}/${scriptname}" ]; then
         snaplog "ERROR" "script not found: ${SCRIPTDIR}/${scriptname}"
-        exit 1
+        cleanupexit 1
       else
         preparescriptrun
         snaplog "INFO" "script started: ${SCRIPTDIR}/${dumpoptions}"
@@ -315,11 +313,18 @@ function startpgsnapjob {
 # MAIN
 # ===============================================================================
 
+# Check if already running, quit if so, exit code 0 (its not an error).
+if [ "$(isjobrunning ${JOBID})" == "0" ]; then
+  lock ${JOBID} "${0} ${1} ${2} ${3} ${4} ${5}"
+else
+  cleanupexit 0
+fi
+
 # Start message
-snaplog "INFO" "init - pgsql_instance.job: [`basename ${1}`].[${2}]"
+snaplog "INFO" "init - pgsql_instance.job: [`basename ${PGSQLID}`].[${JOBID}]"
 
 # Get pgsql instance status (the instance that contains the db to be backed up)
-INSTANCESTATUS=$(getinstancestatus ${1})
+INSTANCESTATUS=$(getinstancestatus ${PGSQLID})
 
 # Display information
 if [ "$VERBOSITY" == "VERBOSE" ]; then
@@ -345,17 +350,17 @@ if [ "$VERBOSITY" == "VERBOSE" ]; then
 fi
 
 if [ "${INSTANCESTATUS}" == "HALTED" ] && [ "${STARTTYPE}" == "CRON" ]; then
-  snaplog "WARNING" "abandon job - pgsql_instance halted [`basename ${1}`]"
-  exit 0
+  snaplog "WARNING" "abandon job - pgsql_instance halted [`basename ${PGSQLID}`]"
+  cleanupexit 0
 fi
 
 # Start the dumpjob
-startpgsnapjob $1 $2
+startpgsnapjob ${PGSQLID} ${JOBID}
 
 # Check results, log status etc.
 if [ "${RETVAL}" == "JOB_NOT_FOUND" ]; then
-  snaplog "ERROR" "configuration - pgsql_instance.job [`basename ${1}`].[${2}] not found in ${STARTTYPE} job list"
-  exit 1
+  snaplog "ERROR" "configuration - pgsql_instance.job [`basename ${PGSQLID}`].[${JOBID}] not found in ${STARTTYPE} job list"
+  cleanupexit 1
 fi
 
 if [ "$VERBOSITY" == "VERBOSE" ]; then
@@ -371,22 +376,22 @@ fi
 
 # Write status info for log and catalog
 if [ "${ERRORS}" == "1" ]; then
-  snaplog "ERROR" "finished - pgsql_instance.job [`basename ${1}`].[${2}] with errors, check: ${TOOL_LOG}"
+  snaplog "ERROR" "finished - pgsql_instance.job [`basename ${PGSQLID}`].[${JOBID}] with errors, check: ${TOOL_LOG}"
   jobresult="FAILED"
   DBSIZE=-1
   SIZEONDISK=-1
 else
-  snaplog "INFO" "dump completed - pgsql_instance.job [`basename ${1}`].[${2}]"
+  snaplog "INFO" "dump completed - pgsql_instance.job [`basename ${PGSQLID}`].[${JOBID}]"
   jobresult="SUCCESS"
 fi
 
 # Write catalog data file for upload, symlink in central upload dir
 copylog=${jobdir}/${buname}.catalog.dat
-preparecatalogdata "${2}\t${INITIMESTAMP}\t`date +'%Y%m%dT%H%M%S'`\t${jobresult}\t${buname}${ext}\t${jobdir}\t${DBSIZE}\t${SIZEONDISK}\t${dbname}\t${butype}\t${schema}" "${copylog}" "NEW" "UPLOAD"
+preparecatalogdata "${2}\t${INITIMESTAMP}\t`date +'%Y%m%dT%H%M%S'`\t${jobresult}\t${buname}${ext}\t${jobdir}\t${DBSIZE}\t${SIZEONDISK}\t${dbname}\t${schema}\t${butype}" "${copylog}" "NEW" "UPLOAD"
 
 # Next procedures, set exit code
 if [ "${jobresult}" == "FAILED" ]; then
-  exit 1
+  cleanupexit 1
 else
   # Start dedup for a FULL backup
   if [ "${butype}" == "FULL" ]; then
@@ -396,15 +401,15 @@ else
   # Start a restore job if requested, put it in the background, the dump is ready now
   if [ "${restorejobid}" != "" ]; then
     # Could be multiple restore jobs!
-    oIFS="${IFS}"; IFS=","
+    OIFS="${IFS}"; IFS=","
     for rid in ${restorejobid}; do
       log "INFO" "job id ${jobid} - triggered start of restore job ${rid}"
       ${SCRIPTPATH}/pgsnap_restore ${rid} ${jobdir}/${buname} SILENT TRIGGER &
     done
-    IFS="${oIFS}"
+    IFS="${OIFS}"
   fi
   snaplog "INFO" "finished dump process"
-  exit 0
+  cleanupexit 0
 fi
 
 # EOF
