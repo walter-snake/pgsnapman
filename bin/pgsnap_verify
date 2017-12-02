@@ -7,6 +7,7 @@
 # Initialization
 # ======================================
 VERBOSITY=$1
+PERCENTAGE=$2
 
 # Get the script directory (must do this first)
 SOURCE="${BASH_SOURCE[0]}"
@@ -39,10 +40,13 @@ function verifybackupselection {
     id=$(getfieldvalue "${line}" 1)
     bupath=$(getfieldvalue "${line}" 3)
     # run pg_restore, but without output (we use the pg_restore version of the catalog db)
+    talk "verifying: [$id] [${bupath}]"
     ${PGSCBIN}/pg_restore -f /dev/null "${bupath}" 2>> ${TEMPDIR}/$$.0.pgsnap_verify.log
     if [ "$?" == "0" ]; then
+      talk "-> SUCCESS"
       setcatalogstatus "${id}" "SUCCESS"
     else
+      talk "-> FAILED"
       setcatalogstatus "${id}" "FAILED"
     fi
   done
@@ -64,4 +68,9 @@ function setcatalogstatus {
 # MAIN
 # ========================================
 
-verifybackupselection 25
+if [ "$2" == "" ]; then
+  PERCENTAGE=25
+fi
+talk "Percentage to verify: ${PERCENTAGE}"
+verifybackupselection ${PERCENTAGE}
+
