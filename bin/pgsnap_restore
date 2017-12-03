@@ -85,7 +85,6 @@ function setpgbinpath {
   PGVERSION=$(getpgversion "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}")
   if [ "${PGVERSION}" == "" ]; then
     log "ERROR" "job id ${JOBID} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${MAINTDB}"
-    ERRORS=1
   else
     eval pgbinvar=PGBIN${PGVERSION}
     PGBIN=${!pgbinvar}
@@ -93,8 +92,28 @@ function setpgbinpath {
   # check if psql exists
   if [ ! -e ${PGBIN}/psql ]; then
     log "ERROR" "job id ${JOBID} - job can not run - pg tools not found, check PGBINxx paths in config file ${CONFIGFILE}"
-    ERRORS=1
   fi
+}
+
+# Inserts job id and dump name
+function logstart {
+  local sql="select put_restorelog(${JOBID}, '${DUMP}');"
+  LOGID=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --no-password --dbname=${PGSCDB} -c "$sql" -A -t`
+}
+
+# Update with result, also write snaplog and log essage
+# $1 status
+# $2 message
+function logend {
+  local bupath=${DUMP}
+  if [[ "${DUMP}" =~ ^[0-9]+$ ]]; then
+    bupath="cat_id=${DUMP}"
+  fi
+  local sql="select upd_restorelog(${LOGID}, '${1}', '${2}', '${bupath}');"
+  log "${1}" "${2}"
+  snaplog "${1}" "${2}"
+  talk "${1} ${2}"
+  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --no-password --dbname=${PGSCDB} -c "$sql" > /dev/null
 }
 
 # Db management helper functions
@@ -112,7 +131,7 @@ function lockoutusers {
   log "INFO" "terminate existing connections on database $1"
   ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "select pg_terminate_backend(pid) from pg_stat_activity where datname='${1}'"
   if [ "$?" != "0" ]; then
-    snaplog "ERROR" "could not successfully terminate clients, impossible to complete DROP and RENAME operations on database ${1}"
+    logend "ERROR" "could not successfully terminate clients, impossible to complete DROP and RENAME operations on database ${1}"
     cleanupexit 1
   fi
 }
@@ -166,9 +185,9 @@ function createrole {
   local line=`${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -A -t -c "SELECT count(*) from pg_catalog.pg_roles WHERE rolname = '${1}'"`
   # not present: create from information in globals dump
   if [ "$line" == "1" ]; then
-    if [ "${VERBOSITY}" == "VERBOSE" ]; then echo "skip existing role: ${1}"; fi
+    talk "skip existing role: ${1}"
   else
-    if [ "${VERBOSITY}" == "VERBOSE" ]; then echo "create role:        ${1}"; fi
+    talk "create role:        ${1}"
     # load cluster globals dump into psql, filtered for this role
     cat "${DUMP}.cluster_globals.sql" | grep -E "^((ALTER\ ROLE|CREATE\ ROLE))\ \"?${1}.*" | ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} --no-password
   fi
@@ -251,12 +270,11 @@ function hastablespace {
   local line=`${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -A -t -c "SELECT count(*) from pg_catalog.pg_tablespace WHERE spcname = '${1}'"`
   # not present: create from information in globals dump
   if [ "$line" == "0" ]; then
-    if [ "${VERBOSITY}" == "VERBOSE" ]; then echo "required tablespace does not exist: ${1}"; fi
-    log "ERROR" "required tablespace $1 does not exist, quit"
-    snaplog "ERROR" "required tablespace $1 does not exist, quit"
+    talk "required tablespace does not exist: ${1}"
+    logend "ERROR" "required tablespace $1 does not exist, quit"
     cleanupexit 1
   else
-    if [ "${VERBOSITY}" == "VERBOSE" ]; then echo "required tablespace found: ${1}"; fi
+    talk "required tablespace found: ${1}"
   fi
 }
 
@@ -267,11 +285,12 @@ function hastablespace {
 function run_sql_restore {
   snaplog "INFO" "starting cluster dump restore"; 
   gunzip -c ${DUMP}.sql | ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} ${restoreoptions}
-   if [ "$?" == "0" ]; then
-     snaplog "INFO" "finished restoring cluster dump"; 
-   else
-     snaplog "ERROR" "errors while restoring cluster dump"; 
-   fi
+  if [ "$?" == "0" ]; then
+    snaplog "INFO" "finished restoring cluster dump"; 
+    RESULT="COMPLETED"
+  else
+    snaplog "ERROR" "errors while restoring cluster dump"; 
+  fi
 }
 
 # DIR dump restore
@@ -309,8 +328,8 @@ function run_dir_restore {
     local ec=$(createdatabase ${RESTOREDB} ${tblspchandling})
     # if this fails, we'll bail out
     if [ "$ec" != "0" ]; then
-      snaplog "ERROR" "database creation failed for temp database ${RESTOREDB}"
-      echo "$ec"
+      errmsg="database creation failed for temp database ${RESTOREDB}"
+      RESULT="ERROR"
       return
     fi
 
@@ -327,10 +346,9 @@ function run_dir_restore {
   if [ "$?" == "0" ]; then
     log "INFO" "processing - restore to temp database ${RESTOREDB} completed"
   else
-    log "ERROR" "processing - restore to temp database ${RESTOREDB} failed, abort restore, trying to drop temp database"
-    snaplog "ERROR" "processing - restore to temp database ${RESTOREDB} failed, abort restore, trying to drop temp database"
+    errmsg="processing - restore to temp database ${RESTOREDB} failed, abort restore, trying to drop temp database"
+    RESULT="ERROR"
     ec=$(dropdatabase "${RESTOREDB}")
-    echo "1"
     return
   fi
   
@@ -357,7 +375,8 @@ function run_dir_restore {
     fi
   fi  
   # end DATA exclusion
-  snaplog "INFO" "finished restore of database $(getfieldvalue "${DBSETTINGS}" 1) -> ${dbname}"
+  errmsg="finished restore of database $(getfieldvalue "${DBSETTINGS}" 1) -> ${dbname}"
+  RESULT="COMPLETED"
 }
 
 # ==========================================
@@ -371,10 +390,11 @@ function run_dir_restore {
 
 errcode=0
 errmsg=""
+logstart 
 
 # Verify starttype
 if [[ ! "${STARTTYPE}" =~ ^((CRON|SINGLE|TRIGGER))$ ]]; then
-  snaplog "ERROR" "wrong start type (${STARTTYPE})"
+  logend "ERROR" "wrong start type (${STARTTYPE})"
   cleanupexit 1
 fi
 
@@ -384,9 +404,8 @@ fi
 # Get restore job information
 restorejob="$(getrestorejob ${JOBID})"
 if [ "${restorejob}" == "" ]; then
-  errmsg="job id ${JOBID} not found or of wrong type (${STARTTYPE})"
-  log "ERROR" "${errmsg}"
-  errcode=3
+  logend "ERROR" "job id ${JOBID} not found or of wrong type (${STARTTYPE})"
+  cleanupexit 1
 fi
 
 # Get the various restore job fields
@@ -410,12 +429,12 @@ pgsqlstatus="$(getfieldvalue "${restorejob}" 17)"
 # Check active status
 # Always stop when pgsql set to inactive
 if [ "${pgsqlstatus}" == "HALTED" ]; then
-  snaplog "ERROR" "restore job ${JOBID} requested on an inactive postgres instance [${pgsqlhost}:${pgsqlport}]"
+  logend "ERROR" "restore job ${JOBID} requested on an inactive postgres instance [${pgsqlhost}:${pgsqlport}]"
   cleanupexit 1
 fi
 # When scheduled (CRON), quit when job is halted
 if [ "${status}" == "HALTED" ]; then
-  snaplog "ERROR" "scheduled restore job ${JOBID} requested which is is on halt (hint: manual start works)"
+  logend "ERROR" "scheduled restore job ${JOBID} requested which is is on halt (hint: manual start works)"
   cleanupexit 1
 fi
 
@@ -438,17 +457,16 @@ fi
 
 # Check status of the backup job
 if [ ! -e ${DUMP}.catalog.dat ] || [ "$(getbackupstatus ${DUMP}.catalog.dat)" != "SUCCESS" ]; then
-  errmsg="backup ${DUMP} does not exist, or failed, restore not started" 
-  log "ERROR" "${errmsg}" 
-  errcode=4
+  logend "ERROR" "backup ${DUMP} does not exist, or failed, restore not started" 
+  cleanupexit 1
 fi
 
 pgsqlhost=$(resolvepghost ${pgsqlhost})
 
 # Set postgres destination server version (also connection test)
 setpgbinpath
-if [ "${ERRORS}" != "" ]; then
-  snaplog "ERROR" "could not connect to target database"
+if [ "${PGBIN}" == "" ]; then
+  logend "ERROR" "could not connect to target database"
   cleanupexit 1
 fi
 
@@ -497,15 +515,6 @@ if [ "${VERBOSITY}" == "VERBOSE" ]; then
   echo "full dump path:         ${DUMP}"
   echo "dump type:              ${dumptype}"
   echo ""
-  if [ "${errmsg}" != "" ]; then
-    echo "ERROR: ${errmsg}"
-  fi
-fi
-
-# Ready to go or not?
-if [ ${errcode} -gt 0 ]; then
-  snaplog "ERROR" "initialization errors, exit code: ${errcode} (${errmsg})"
-  cleanupexit ${errcode}
 fi
 
 # Check if already running, quit if so, exit code 0 (its not an error).
@@ -520,12 +529,17 @@ log "INFO" "starting ${STARTTYPE} restore, job id [${JOBID}] from dump [`basenam
 snaplog "INFO" "init - starting ${STARTTYPE} restore, job id [${JOBID}] from dump [`basename ${DUMP}`]"
 
 # Start psql or pg_restore operation
+RESULT="ERROR"
 if [ "${dumptype}" == "DIR" ]; then
   run_dir_restore
 elif  [ "${dumptype}" == "SQL" ]; then
   run_sql_restore
 fi
+logend "$RESULT" "$errmsg"
 
 # Normal end
-cleanupexit 0
-
+if [ "${RESULT}" == "ERROR" ]; then
+  cleanupexit 1
+else
+  cleanupexit 0
+fi

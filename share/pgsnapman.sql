@@ -329,6 +329,15 @@ CREATE FUNCTION put_dumpjob(pgsnapworkerid integer, pgsqlinstanceid integer, dbn
 
 
 --
+-- Name: put_restorelog(integer, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION put_restorelog(resjobid integer, bupath text) RETURNS integer
+    LANGUAGE sql
+    AS $_$insert into pgsnap_restorelog (pgsnap_restorejob_id, bu_path) values ($1, $2) returning id; $_$;
+
+
+--
 -- Name: put_singlerun(integer, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -573,6 +582,15 @@ begin
   return;
 end;
 $_$;
+
+
+--
+-- Name: upd_restorelog(integer, text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION upd_restorelog(logid integer, status text, message text, bupath text) RETURNS void
+    LANGUAGE sql
+    AS $_$update pgsnap_restorelog set endtime=now()::timestamp without time zone, status=$2, message=$3, bu_path=$4 where id = $1; $_$;
 
 
 SET default_tablespace = '';
@@ -835,6 +853,40 @@ ALTER SEQUENCE pgsnap_restorejob_id_seq OWNED BY pgsnap_restorejob.id;
 
 
 --
+-- Name: pgsnap_restorelog; Type: TABLE; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE TABLE pgsnap_restorelog (
+    id integer NOT NULL,
+    pgsnap_restorejob_id integer,
+    starttime timestamp without time zone DEFAULT now(),
+    endtime timestamp without time zone,
+    status text DEFAULT 'RUNNING'::text,
+    bu_path text,
+    message text
+);
+
+
+--
+-- Name: pgsnap_restorelog_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE pgsnap_restorelog_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: pgsnap_restorelog_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE pgsnap_restorelog_id_seq OWNED BY pgsnap_restorelog.id;
+
+
+--
 -- Name: pgsnap_script; Type: TABLE; Schema: public; Owner: -; Tablespace: 
 --
 
@@ -1034,6 +1086,17 @@ CREATE VIEW vw_instance AS
 
 
 --
+-- Name: vw_link_restore_catalog; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW vw_link_restore_catalog AS
+ SELECT l.id AS restorelog_id,
+    c.id AS catalog_id
+   FROM (pgsnap_restorelog l
+     JOIN pgsnap_catalog c ON ((((c.bu_location || '/'::text) || c.bu_name) = l.bu_path)));
+
+
+--
 -- Name: vw_pgsql_instance_bu_window_length; Type: VIEW; Schema: public; Owner: -
 --
 
@@ -1098,6 +1161,13 @@ ALTER TABLE ONLY pgsnap_restorejob ALTER COLUMN id SET DEFAULT nextval('pgsnap_r
 -- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
+ALTER TABLE ONLY pgsnap_restorelog ALTER COLUMN id SET DEFAULT nextval('pgsnap_restorelog_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
+--
+
 ALTER TABLE ONLY pgsnap_script ALTER COLUMN id SET DEFAULT nextval('pgsnap_script_id_seq'::regclass);
 
 
@@ -1152,6 +1222,14 @@ ALTER TABLE ONLY pgsnap_message
 
 ALTER TABLE ONLY pgsnap_restorejob
     ADD CONSTRAINT pgsnap_restorejob_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: pgsnap_restorelog_pkey; Type: CONSTRAINT; Schema: public; Owner: -; Tablespace: 
+--
+
+ALTER TABLE ONLY pgsnap_restorelog
+    ADD CONSTRAINT pgsnap_restorelog_pkey PRIMARY KEY (id);
 
 
 --
