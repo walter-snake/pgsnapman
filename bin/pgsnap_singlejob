@@ -93,6 +93,14 @@ function startdumpjobs {
   done < ${jobfile}
 }
 
+function startrestorejobs {
+  local line
+  while read line; do
+    talk "single restore job ids: ${line}"
+    ${SCRIPTPATH}/pgsnap_restore "$(getfieldvalue "${line}" 1)" "$(getfieldvalue "${line}" 2)" ${VERBOSITY} SINGLE &
+  done < ${TEMPDIR}/$$.singlerestorejobs.list
+}
+
 # =======================================
 # MAIN
 # =======================================
@@ -135,22 +143,31 @@ fi
 
 # Check if anything to do
 
-if [ "$VERBOSITY" == "VERBOSE" ]; then
-  echo "Checking for single run dump jobs"
-fi
-sql="select count(*) from vw_dumpjob_worker_instance where jobtype = 'SINGLE' and id not in (select jobid from pgsnap_singlerun where jobclass = 'DUMP');"
+# DUMP jobs
+talk "Checking for single run dump jobs"
+sql="select count(*) from vw_dumpjob_worker_instance where pgsnap_worker_id = ${BUWORKERID} and jobtype = 'SINGLE' \
+  and id not in (select jobid from pgsnap_singlerun where jobclass = 'DUMP');"
 c=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}"`
 if [ $c -gt 0 ]; then
-  if [ "$VERBOSITY" == "VERBOSE" ]; then
-    echo "Starting cacheconfig to download single run configuration data"
-  fi
+  talk "Starting cacheconfig to download single run configuration data"
   ${SCRIPTPATH}/pgsnap_cacheconfig SILENT SINGLE $$
   # Start the dumps
-  snaplog "INFO" "single jobs found, starting"
+  snaplog "INFO" "single dump jobs found, starting"
   startdumpjobs
 fi
 
 # Be careful: do not clean up the dumpjob file, as it will be used by the pgsnap_dump script, and we don't know
 # for sure when they're ready dealing with it. The pgsnap_clean tool will take care of it.
+
+
+# RESTORE jobs
+talk "Checking for single run dump jobs"
+sql="select r.id as restore_id, c.id as catalog_id from pgsnap_restorejob r join pgsnap_catalog c on r.pgsnap_catalog_id = c.id \
+    where r.status = 'ACTIVE' and r.jobtype = 'SINGLE' and c.bu_worker_id = ${BUWORKERID} \
+    and r.id not in (select jobid from pgsnap_singlerun where jobclass = 'RESTORE');"
+${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}" --output="${TEMPDIR}/$$.singlerestorejobs.list"
+# Start the restores
+snaplog "INFO" "single restore jobs found, starting"
+startrestorejobs
 
 cleanupexit 0

@@ -680,6 +680,7 @@ CREATE TABLE pgsnap_catalog (
     keep boolean DEFAULT false,
     bu_extension text,
     pgversion text,
+    bu_worker_id integer,
     CONSTRAINT pgsnap_catalog_status_check CHECK ((status = ANY (ARRAY['SUCCESS'::text, 'FAILED'::text, 'REMOVING'::text]))),
     CONSTRAINT pgsnap_catalog_verified_check CHECK ((verified = ANY (ARRAY['YES'::text, 'FAILED'::text, 'NO'::text])))
 );
@@ -796,7 +797,7 @@ CREATE TABLE pgsnap_restorejob (
     dest_pgsql_instance_id integer NOT NULL,
     dest_dbname text NOT NULL,
     restoretype text DEFAULT 'FULL'::text,
-    restoreschema text DEFAULT '*'::text,
+    restoreschema text DEFAULT '*'::text NOT NULL,
     restoreoptions text DEFAULT ''::text,
     existing_db text DEFAULT 'RENAME'::text,
     status text DEFAULT 'ACTIVE'::text,
@@ -808,6 +809,7 @@ CREATE TABLE pgsnap_restorejob (
     tblspc_handling text DEFAULT 'NO_TBLSPC'::text,
     CONSTRAINT pgsnap_restorejob_existing_db_check CHECK ((existing_db = ANY (ARRAY['DROP'::text, 'RENAME'::text, 'DROP_BEFORE'::text]))),
     CONSTRAINT pgsnap_restorejob_jobtype_check CHECK ((jobtype = ANY (ARRAY['SINGLE'::text, 'CRON'::text, 'TRIGGER'::text]))),
+    CONSTRAINT pgsnap_restorejob_restoreschema_check CHECK ((length(restoreschema) > 0)),
     CONSTRAINT pgsnap_restorejob_restoretype_check CHECK ((restoretype = ANY (ARRAY['FULL'::text, 'DATA'::text, 'SCHEMA'::text]))),
     CONSTRAINT pgsnap_restorejob_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
 );

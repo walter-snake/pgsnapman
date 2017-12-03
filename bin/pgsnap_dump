@@ -102,8 +102,9 @@ from (select datname, unnest(datacl)::text as acl \
 select datname,acl_role,acl_rights from acls \
 where datname = '${1}'"
   local acls=`${pgbin}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname="${1}" -F '|' -A -t -c "${sql}"`
+  touch ${2}
   if [ "${acls}" != "" ]; then
-    echo "REVOKE ALL ON DATABASE ${1} FROM public;" > ${2}
+    echo "REVOKE ALL ON DATABASE ${1} FROM public;" >> ${2}
   fi
   for line in $acls; do
     local acl="$(getfieldvalue ${line} 3)"
@@ -162,6 +163,8 @@ function startpgsnapjob {
     return
   fi
   jobid=$(getfieldvalue "${row}" 1)
+  # retrieve worker from cache (we might not have been able to contact the database)
+  BUWORKERID=$(getfieldvalue "${row}" 2)
   pgsqlid=$(getfieldvalue "${row}" 3)
   pgsqlhost=$(getfieldvalue "${row}" 16)
   pgsqlport=$(getfieldvalue "${row}" 17)
@@ -386,7 +389,7 @@ fi
 
 # Write catalog data file for upload, symlink in central upload dir
 copylog=${jobdir}/${buname}.catalog.dat
-preparecatalogdata "${2}\t${INITIMESTAMP}\t`date +'%Y%m%dT%H%M%S'`\t${jobresult}\t${buname}${ext}\t${jobdir}\t${DBSIZE}\t${SIZEONDISK}\t${dbname}\t${schema}\t${butype}\t${ext}\t${pgversion}" "${copylog}" "NEW" "UPLOAD"
+preparecatalogdata "${2}\t${INITIMESTAMP}\t`date +'%Y%m%dT%H%M%S'`\t${jobresult}\t${buname}${ext}\t${jobdir}\t${DBSIZE}\t${SIZEONDISK}\t${dbname}\t${schema}\t${butype}\t${ext}\t${pgversion}\t${BUWORKERID}" "${copylog}" "NEW" "UPLOAD"
 
 # Next procedures, set exit code
 if [ "${jobresult}" == "FAILED" ]; then

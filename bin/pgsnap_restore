@@ -209,7 +209,12 @@ function prepareroles {
   # check and create other roles
   # a bit more complex: read schema, and find all alter owner, grant and revoke rows
   # use pg_restore to read the schema, and grep relevant records
-  ${PGBIN}/pg_restore --schema-only ${restoreoptions} "${DUMP}" | grep -E '^((GRANT|REVOKE|ALTER.*OWNER\ TO))' | awk '{if ($1 == "ALTER") print $6; else print $7;}' | grep -iv 'PUBLIC' | sed 's/;//'| sort > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles
+  ${PGBIN}/pg_restore --schema-only ${restoreoptions} "${DUMP}" | grep -E '^((GRANT|REVOKE|ALTER.*OWNER\ TO))' | awk '{if ($1 == "ALTER") print $6; else print $7;}' | grep -iv 'PUBLIC' | sed 's/;//'| sort > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles_temp
+  # add roles from database acl when we need them
+  if [ "${DIRECTRESTORE}" == "NO" ]; then
+    cat "${DUMP}.database_acl.sql" | awk '{print $7}' | sed 's/;//' | grep -iv 'public' >> ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles_temp
+  fi
+  cat ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles_temp | sort > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles
   # read user names, create
   local line
   local linetrim
@@ -274,18 +279,27 @@ function run_dir_restore {
   # Load the settings for this dump
   setDBSETTINGS
 
-  # restore type DATA: no database manipulation
-  if [ "${restoretype}" == "DATA" ]; then
+  # Various options, makes it a bit complex
+  # DATA ONLY: objects exist, do nothing with rights, object creation
+  # dump of a specific schema: do prepare roles, but not on the database level, omit setting database acl's, no temp db
+  # Check if DATABASE creation data is present in the dump toc, if not, restore straight into target:
+  if [ "`${PGBIN}/pg_restore -l --create ${restoreoptions} ${DUMP} | grep DATABASE`" == "" ]; then
+    DIRECTRESTORE=YES
+  else
+    DIRECTRESTORE=NO
+  fi
+  # always prepare roles (only a little useless work when doing DATA only, maybe we process too many roles, but that's not too bad)
+  if [ "${rolehandling}" == "USE_ROLE" ]; then
+    prepareroles
+  fi
+
+  # restore type DATA or specific schema: no database manipulation
+  if [ "${DIRECTRESTORE}" == "YES" ]; then
     RESTOREDB="${dbname}"
   else
     # temp name, we always run restore in a temp database
     RESTOREDB="${dbname}_$$"
   
-    # prepare roles
-    if [ "${rolehandling}" == "USE_ROLE" ]; then
-      prepareroles
-    fi
-
     # tablespaces
     if [ "${tblspchandling}" == "USE_TBLSPC" ]; then
       checktablespaces
@@ -305,11 +319,11 @@ function run_dir_restore {
       ec="$(dropdatabase "${dbname}")"
     fi
   fi
-  # end DATA exlusion
+  # end DATA exclusion
 
   # restore, depends on DATA/SCHEMA/FULL
   log "INFO" "processing - restore to temp database ${RESTOREDB} started"
-  ${PGBIN}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${RESTOREDB} ${restoreoptions} "${DUMP}"
+  ${PGBIN}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${RESTOREDB} ${restoreoptions} "${DUMP}" 2>> ${LOGDIR}/pgsnap_restore_postgres.log
   if [ "$?" == "0" ]; then
     log "INFO" "processing - restore to temp database ${RESTOREDB} completed"
   else
@@ -320,8 +334,8 @@ function run_dir_restore {
     return
   fi
   
-  # restore type DATA: no database manipulation
-  if [ "${restoretype}" != "DATA" ]; then
+  # restore type DATA or restore from a dump of a specific schema: no database manipulation
+  if [ "${DIRECTRESTORE}" == "NO" ]; then
    # drop/move original after restore
     if [ "${existingdb}" == "DROP" ]; then
       ec="$(dropdatabase "${dbname}")"

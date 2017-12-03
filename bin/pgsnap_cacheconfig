@@ -85,14 +85,14 @@ function initrootdir {
 function installcrontab {
   # Install new crontab, remove old pgsnap_dump entries, keep other entries
   crontab -l > ${TEMPDIR}/crontab.previous
-  cat ${TEMPDIR}/crontab.previous | grep -v pgsnap | cat - ${TEMPDIR}/cron_snapjobs.temp > ${TEMPDIR}/crontab.latest
+  cat ${TEMPDIR}/crontab.previous | grep -v pgsnap | cat - ${TEMPDIR}/$$.0.cron_snapjobs.temp > ${TEMPDIR}/crontab.latest
   crontab ${TEMPDIR}/crontab.latest
   if [ "$?" == "0" ]; then
     snaplog "INFO" "processing - crontab properly installed${JOBWARNINGS}"
   else
     snaplog "ERROR" "processing - crontab failed to install (format errors)"
   fi
-  rm ${TEMPDIR}/cron_snapjobs.temp
+  rm ${TEMPDIR}/$$.0.cron_snapjobs.temp
 }
 
 # Retrieves the worker configurations from the catalog database
@@ -109,9 +109,9 @@ function getworkerconfig {
 function updateworkerconfig {
 
   # Create temp cron job file
-  echo "# pgsnapman ###################################################################" > ${TEMPDIR}/cron_snapjobs.temp
-  echo "# pgsnapman jobs created at ${INITIMESTAMP}" >> ${TEMPDIR}/cron_snapjobs.temp
-  echo "# pgsnapman ###################################################################" >> ${TEMPDIR}/cron_snapjobs.temp
+  echo "# pgsnapman ###################################################################" > ${TEMPDIR}/$$.0.cron_snapjobs.temp
+  echo "# pgsnapman jobs created at ${INITIMESTAMP}" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
+  echo "# pgsnapman ###################################################################" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
 
   # Add crontab entries for own cron job from worker config
   row=$(getworkerconfig ${BUWORKERID})
@@ -120,11 +120,11 @@ function updateworkerconfig {
   CLEANCRON=$(getfieldvalue "${row}" 6)
   UPLOADCRON=$(getfieldvalue "${row}" 7)
 
-  echo "# pgsnapman worker jobs" >> ${TEMPDIR}/cron_snapjobs.temp
-  echo "${CACHECONFIGCRON} ${SCRIPTPATH}/pgsnap_cacheconfig SILENT CRON" >> ${TEMPDIR}/cron_snapjobs.temp
-  echo "${CLEANCRON} ${SCRIPTPATH}/pgsnap_clean SILENT" >> ${TEMPDIR}/cron_snapjobs.temp
-  echo "${SINGLEJOBCRON} ${SCRIPTPATH}/pgsnap_singlejob SILENT" >> ${TEMPDIR}/cron_snapjobs.temp
-  echo "${UPLOADCRON} ${SCRIPTPATH}/pgsnap_upload SILENT" >> ${TEMPDIR}/cron_snapjobs.temp
+  echo "# pgsnapman worker jobs" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
+  echo "${CACHECONFIGCRON} ${SCRIPTPATH}/pgsnap_cacheconfig SILENT CRON" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
+  echo "${CLEANCRON} ${SCRIPTPATH}/pgsnap_clean SILENT" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
+  echo "${SINGLEJOBCRON} ${SCRIPTPATH}/pgsnap_singlejob SILENT" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
+  echo "${UPLOADCRON} ${SCRIPTPATH}/pgsnap_upload SILENT" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
 }
 
 function updatepgsqlinstanceconfig {
@@ -230,14 +230,19 @@ function getcronjobs {
       AND jobtype = 'CRON' \
     ORDER BY id" > ${2}/dumpjobs.list.temp
   mv ${2}/dumpjobs.list.temp ${2}/dumpjobs.list
+
+
+  # Be talkative
   if [ "$VERBOSITY" == "VERBOSE" ]; then
     echo "Job data for postgres instance id: "$1
     echo "-------------------------------------"
     echo "Snapshot base directory: "$2
+    echo "Dump jobs"
     echo "id|pgsnap_worker_id|pgsql_instance_id|dbname|dumptype|dumpschema|cron|keep_daily|keep_weekly|keep_monthly|keep_yearly|comment|jobstatus|jobtype|dumpoptions"
     cat ${2}/dumpjobs.list
     echo ""
   fi
+
 }
 
 # Create the cron job entries for the jobs, based on data in the local cache (dumpjobs.list)
@@ -247,7 +252,7 @@ function createcronjobs {
   if  [ "$VERBOSITY" == "VERBOSE" ]; then
     echo "Creating cron jobs, processing: "$1/dumpjobs.list
   fi
-  echo "# pgsnapman pgsnap_dump jobs for "`basename $1` >> ${TEMPDIR}/cron_snapjobs.temp
+  echo "# pgsnapman pgsnap_dump jobs for "`basename $1` >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
   while read line; do
     jobid=$(getfieldvalue "${line}" 1)
     pgsqlid=$(getfieldvalue "${line}" 3)
@@ -296,7 +301,7 @@ function createcronjobs {
     # The database may be available at the scheduled time, so the dump tool will repeat this test.
     PRE=""
     log "INFO" "job id ${jobid} - ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}"
-    echo "# INFO pgsnapman job id ${jobid} - ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}" >> ${TEMPDIR}/cron_snapjobs.temp 
+    echo "# INFO pgsnapman job id ${jobid} - ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp 
     # For active jobs, try to verify the database connection and postgresql version
     if [ "${jobstatus}" == "ACTIVE" ]; then
       # Check postgres instance version
@@ -315,7 +320,7 @@ function createcronjobs {
         if [ ! -e ${pgbin}/pg_dump ]; then
           PRE="# "
           log "ERROR" "job id ${jobid} - job is disabled as pg_dump could not be found, check pgbinxx paths in config file ${CONFIGFILE})"
-          echo "# ERROR pgsnapman job is disabled as pg_dump could not be found" >> ${TEMPDIR}/cron_snapjobs.temp
+          echo "# ERROR pgsnapman job is disabled as pg_dump could not be found" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
         fi
       fi
     fi
@@ -323,10 +328,10 @@ function createcronjobs {
     if [ "${jobstatus}" == "HALTED" ]; then
       PRE="# "
       log "WARNING" "job id ${jobid} - disabled by user (status HALTED): ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}"
-      echo "# WARNING pgsnapman job is disabled by user" >> ${TEMPDIR}/cron_snapjobs.temp
+      echo "# WARNING pgsnapman job is disabled by user" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
     fi
     # Write cron entry
-    echo "${PRE}${cron} ${SCRIPTPATH}/pgsnap_dump ${pgsqlid}_${pgsqldns}_${pgsqlport} ${jobid} SILENT CRON" >> ${TEMPDIR}/cron_snapjobs.temp
+    echo "${PRE}${cron} ${SCRIPTPATH}/pgsnap_dump ${pgsqlid}_${pgsqldns}_${pgsqlport} ${jobid} SILENT CRON" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
     log "INFO" "job id ${jobid} - cron entry created: ${PRE}${cron} ${SCRIPTPATH}/pgsnap_dump ${pgsqlid}_${pgsqldns}_${pgsqlport} ${jobid} SILENT CRON"
   done < $1/dumpjobs.list
 }
@@ -388,6 +393,30 @@ function updatesinglejobconfig {
   echo ${result}
 }
 
+# Get restore cron jobs for this backup worker 
+# restore jobs from dump catalog entries that are created by this worker (we don't have other data)
+# include all jobs, restore jobs always contact the catalog database to figure out if the job is halted or active
+function addrestorejobs {
+  # Restore jobs (temp, will not be cached)
+  talk "Checking for cron run dump jobs"
+  sql="select r.id as restore_id, c.id as catalog_id, r.cron, c.bu_name, c.starttime, r.dest_dbname, r.restoreschema, r.restoretype, r.restoreoptions from pgsnap_restorejob r join pgsnap_catalog c on r.pgsnap_catalog_id = c.id \
+    where r.jobtype = 'CRON' and c.bu_worker_id = ${BUWORKERID};"
+  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}" --output="${TEMPDIR}/$$.0.restorejobs.list"
+  # Be talkative
+  if [ "$VERBOSITY" == "VERBOSE" ]; then
+    echo "Restore jobs"
+    echo "id|catalog_id|cron|bu_name|starttime|dest_dbname|restoreschema|restoretype|restoreoptions"
+    cat ${TEMPDIR}/$$.0.restorejobs.list
+    echo ""
+  fi
+
+  echo "# pgsnapman restore jobs" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
+  local line
+  while read line; do
+    echo "$(getfieldvalue "${line}" 3) ${SCRIPTPATH}/pgsnap_restore $(getfieldvalue "${line}" 1) $(getfieldvalue "${line}" 2) VERBOSE CRON" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
+  done < ${TEMPDIR}/$$.0.restorejobs.list
+}
+
 # ================================================================================
 # MAIN
 # ===============================================================================
@@ -433,6 +462,7 @@ if [ "${ACTION}" == "CRON" ]; then
   updateworkerconfig
   updatepgsqlinstanceconfig
   updatecronjobconfig
+  addrestorejobs
   installcrontab
 elif [ "${ACTION}" == "SINGLE" ] &&  [ "${SINGLERUNPID}" == "" ]; then
   # Error condition

@@ -31,7 +31,7 @@ PGSCDB_REQUIRED=YES
 # Gets a random selection from the catalog, and verifies
 # $1 percentage to check (retrieve)
 function verifybackupselection {
-  local sql="select id, random() as rnd, bu_location || '/' || bu_name as bu_path \
+  local sql="select id, random() as rnd, bu_location || '/' || bu_name as bu_path, pgversion \
     from pgsnap_catalog \
     where dumptype not like 'CLUSTER%' and status = 'SUCCESS' and verified NOT LIKE 'YES' \
     order by rnd \
@@ -42,14 +42,19 @@ function verifybackupselection {
   local id
   local bupath
   local msg
+  local pgversion
+  local pgbin
   for line in ${lines}; do
     # start restore, check for errors
     id=$(getfieldvalue "${line}" 1)
     bupath=$(getfieldvalue "${line}" 3)
+    pgversion=$(getfieldvalue "${line}" 4)
+    pgbin="$(getpgbinlocation ${pgversion})"
     # run pg_restore, but without output (we use the pg_restore version of the catalog db)
-    talk "verifying: [$id] [${bupath}]"
+    talk "verifying:         [$id] [${bupath}]"
+    talk "using pgsql tools: ${pgbin}"
     log "INFO" "# pg_restore messages for [$id] [`basename ${bupath}`]"
-    ${PGSCBIN}/pg_restore -f /dev/null "${bupath}" 2>> ${LOGDIR}/pgsnap_verify.log
+    ${pgbin}/pg_restore -f /dev/null "${bupath}" 2>> ${LOGDIR}/pgsnap_verify.log
     if [ "$?" == "0" ]; then
       talk "-> SUCCESS"
       log "INFO" "# verified successfully: [$id] [`basename ${bupath}`]"

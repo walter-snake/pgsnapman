@@ -39,19 +39,22 @@ function uploaddata {
   if [ "${format}" == "message" ]; then
     sql="\COPY pgsnap_message (logtime, level, pgsnap_tool,  message, jobclass, jobid) FROM stdin";
   elif [ "${format}" == "catalog" ]; then
-    sql="\COPY pgsnap_catalog (pgsnap_dumpjob_id, starttime, endtime, status, bu_name, bu_location, dbsize, dumpsize, dbname, dumpschema, dumptype, bu_extension, pgversion) FROM stdin"
+    sql="\COPY pgsnap_catalog (pgsnap_dumpjob_id, starttime, endtime, status, bu_name, bu_location, dbsize, dumpsize, dbname \
+      , dumpschema, dumptype, bu_extension, pgversion, bu_worker_id) FROM stdin"
   else
     snaplog "ERROR" "destination format unknown"
     return
   fi
 
   # Upload the data
-#  echo -e "\.\n" | cat ${1} - | ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "${sql}" 2> ${TEMPDIR}/pgsnap_upload.psql.log
+  talk "uploading `basename ${1}`"
   echo -e "\.\n" | cat ${1} - | ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "${sql}" > /dev/null
   if [ "$?" == "0" ]; then
     snaplog "INFO" "processing - finished uploading `basename ${1}`"
     rm -f ${1}
+    talk "-> SUCCESS"
   else
+    talk "-> ERROR"
     snaplog echo "ERROR" "processing - failed uploading data (connection error): `basename ${1}`"
   fi
 #  else

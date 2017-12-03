@@ -152,6 +152,20 @@ function getworkerstatus {
   echo "${workerstatus}"
 }
 
+# Retrieve the bin location for a specific postgres version
+# $1 version
+function getpgbinlocation {
+  eval pgbinvar=PGBIN${1}
+  local pgbin=${!pgbinvar}
+  # check if pg dump exists
+  if [ ! -e ${pgbin}/psql ]; then
+    snaplog "ERROR" "postgres tools not found, check PGBINxx paths in config file ${CONFIGFILE}"
+    ERRORS=1
+  else
+    echo ${pgbin}
+  fi
+}
+
 # Catalog database
 # -----------------------------------------
 
@@ -224,7 +238,7 @@ function preparecatalogdata {
   local format=`echo "${2}" | awk -F '.' '{print $(NF-1)}'`
   # Verify the upload format using regular expression
   if [ "${format}" == "catalog" ]; then
-    if [ "`echo -e "${1}" | grep -E '^\d+\t\d{8}T\d{6}\t\d{8}T\d{6}\t[A-Z]+\t[a-zA-Z0-9_\.\/]+\t[a-zA-Z0-9_\./]+\t-?\d+\t-?\d+\t.*\t.*\t.*\t.*\t.*$'`" == "" ]; then
+    if [ "`echo -e "${1}" | grep -E '^\d+\t\d{8}T\d{6}\t\d{8}T\d{6}\t[A-Z]+\t[a-zA-Z0-9_\.\/]+\t[a-zA-Z0-9_\./]+\t-?\d+\t-?\d+\t.*\t.*\t.*\t.*\t.*\t\d+$'`" == "" ]; then
       snaplog "ERROR" "catalog upload wrong format: $1"
       return
     fi
