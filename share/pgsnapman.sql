@@ -678,6 +678,8 @@ CREATE TABLE pgsnap_catalog (
     dumptype text,
     verified text DEFAULT 'NO'::text,
     keep boolean DEFAULT false,
+    bu_extension text,
+    pgversion text,
     CONSTRAINT pgsnap_catalog_status_check CHECK ((status = ANY (ARRAY['SUCCESS'::text, 'FAILED'::text, 'REMOVING'::text]))),
     CONSTRAINT pgsnap_catalog_verified_check CHECK ((verified = ANY (ARRAY['YES'::text, 'FAILED'::text, 'NO'::text])))
 );

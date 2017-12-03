@@ -90,7 +90,6 @@ function dumpglobalacls {
   if [ "${1}" == *";"* ]; then
     return
   fi
- 
 
   # The nice way, using a function (but that's not present in every database)
   # local sql="select * from get_globalacl('${1}') as (datname name, acl_role text, acl_rights text);"
@@ -387,7 +386,7 @@ fi
 
 # Write catalog data file for upload, symlink in central upload dir
 copylog=${jobdir}/${buname}.catalog.dat
-preparecatalogdata "${2}\t${INITIMESTAMP}\t`date +'%Y%m%dT%H%M%S'`\t${jobresult}\t${buname}${ext}\t${jobdir}\t${DBSIZE}\t${SIZEONDISK}\t${dbname}\t${schema}\t${butype}" "${copylog}" "NEW" "UPLOAD"
+preparecatalogdata "${2}\t${INITIMESTAMP}\t`date +'%Y%m%dT%H%M%S'`\t${jobresult}\t${buname}${ext}\t${jobdir}\t${DBSIZE}\t${SIZEONDISK}\t${dbname}\t${schema}\t${butype}\t${ext}\t${pgversion}" "${copylog}" "NEW" "UPLOAD"
 
 # Next procedures, set exit code
 if [ "${jobresult}" == "FAILED" ]; then

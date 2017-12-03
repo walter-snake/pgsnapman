@@ -352,8 +352,8 @@ function run_dir_restore {
 
 # Get restore information from the database, startup specials
 # - should check backup catalog for SUCCESS of the specific dump job, but not in case of a TRIGGER start (catalog entry probably not present)
-# - SINGLE job must register in the pgsnap_singlerun table as soon as it is started (to prevent a new start)
-# We don't want to start a new restore operation while this one is running (same for backups, but there it gives system load/lockup, restore could potentially break integrity).
+# - we don't want to start a new restore operation while this one is running (same for backups, but there it gives system load/lockup, restore
+#   could potentially break integrity), this is handle lock function.
 
 errcode=0
 errmsg=""
@@ -364,7 +364,8 @@ if [[ ! "${STARTTYPE}" =~ ^((CRON|SINGLE|TRIGGER))$ ]]; then
   cleanupexit 1
 fi
 
-# Check if already running after obtaining full path information, as we'll write this info to the lock file
+# REMARK Check if already running AFTER obtaining full path information, as we need to write this info to the lock file
+# (the clean up tool uses it to prevent a dump being used from deleting)
 
 # Get restore job information
 restorejob="$(getrestorejob ${JOBID})"
@@ -498,11 +499,6 @@ if [ "$(isjobrunning ${JOBID})" == "0" ]; then
   lock ${JOBID} "${DUMP}"
 else
   cleanupexit 0
-fi
-
-# Single job: write marker to database
-if [ "${STARTTYPE}" == "SINGLE" ]; then
-  setsinglerunstarted ${JOBID} 'RESTORE'
 fi
 
 # Log message

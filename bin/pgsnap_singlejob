@@ -85,11 +85,11 @@ function startdumpjobs {
       echo ""
     fi
 
-    # Start the dump, in the background, and it should not start again, so we immediately mark it in the database
-    # A job might (much) run longer than the interval between checks for jobs
-    ${SCRIPTPATH}/pgsnap_dump ${pgsqlid}_${pgsqlhost}_${pgsqlport} ${jobid} ${VERBOSITY} SINGLE $$ &
-    # Immediately mark it in the database as started
+    # Start the dump, in the background, and it should never start again, so we immediately mark it in the database
+    # A job might (much) run longer than the interval between checks for jobs, can't use the catalog as the catalog
+    # data could be uploaded much later, so immediately mark it in the database as started.
     setsinglerunstarted ${jobid} "DUMP"
+    ${SCRIPTPATH}/pgsnap_dump ${pgsqlid}_${pgsqlhost}_${pgsqlport} ${jobid} ${VERBOSITY} SINGLE $$ &
   done < ${jobfile}
 }
 

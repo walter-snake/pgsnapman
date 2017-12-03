@@ -28,14 +28,14 @@ SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 # Catalog database needed?
 PGSCDB_REQUIRED=YES
 
+# Load functions, will also perform initialization operations
+. ${SCRIPTPATH}/pgsnap_lib
+
 # Check verbosity
 if [[ ! "$1" =~ SILENT|VERBOSE ]]; then
   echo "ERROR verbosity must be set"
   cleanupexit 1
 fi
-
-# Load functions, will also perform initialization operations
-. ${SCRIPTPATH}/pgsnap_lib
 
 # =======================================
 # Functions
@@ -352,5 +352,8 @@ else
   # Retention policy-cleaning
   cleanupcatalog
 fi
+
+# Fire up verification job
+${SCRIPTPATH}/pgsnap_verify ${VERBOSITY}
 
 cleanupexit 0

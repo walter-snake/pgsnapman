@@ -31,22 +31,38 @@ PGSCDB_REQUIRED=YES
 # Gets a random selection from the catalog, and verifies
 # $1 percentage to check (retrieve)
 function verifybackupselection {
-  local sql="select id, random() as rnd, bu_location || '/' || bu_name as bu_path from pgsnap_catalog where bu_name not like '%.sql.gz' and status = 'SUCCESS' and verified NOT LIKE 'YES' order by rnd limit (select round((count(*) * ${1}/100)::numeric)::int from pgsnap_catalog where status = 'SUCCESS' and verified NOT LIKE 'YES');"
+  local sql="select id, random() as rnd, bu_location || '/' || bu_name as bu_path \
+    from pgsnap_catalog \
+    where dumptype not like 'CLUSTER%' and status = 'SUCCESS' and verified NOT LIKE 'YES' \
+    order by rnd \
+    limit (select round((count(*)::numeric * ${1}/100)::numeric)::int \
+      from pgsnap_catalog
+      where dumptype not like 'CLUSTER%' and status = 'SUCCESS' and verified NOT LIKE 'YES');"
   local lines=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}"`
   local id
   local bupath
+  local msg
   for line in ${lines}; do
     # start restore, check for errors
     id=$(getfieldvalue "${line}" 1)
     bupath=$(getfieldvalue "${line}" 3)
     # run pg_restore, but without output (we use the pg_restore version of the catalog db)
     talk "verifying: [$id] [${bupath}]"
-    ${PGSCBIN}/pg_restore -f /dev/null "${bupath}" 2>> ${TEMPDIR}/$$.0.pgsnap_verify.log
+    log "INFO" "# pg_restore messages for [$id] [`basename ${bupath}`]"
+    ${PGSCBIN}/pg_restore -f /dev/null "${bupath}" 2>> ${LOGDIR}/pgsnap_verify.log
     if [ "$?" == "0" ]; then
       talk "-> SUCCESS"
+      log "INFO" "# verified successfully: [$id] [`basename ${bupath}`]"
       setcatalogstatus "${id}" "SUCCESS"
     else
       talk "-> FAILED"
+      msg="backup `basename ${bupath}` reported SUCCESS, verification reported ERROR"
+      # log message 
+      log "CRITICAL" "# verified with errors: [$id] [`basename ${bupath}`]"
+      snaplog "CRITICAL" "${msg}"
+      # also put a message in the database
+      preparecatalogdata "`date '+%Y%m%dT%H%M%S'`\tCRITICAL\t${TOOLNAME}\t${msg}\tVERIFY\t${id}" "${UPLOADDIR}//$$.pgsnap_verify.message.dat" "ADD" ""
+      # set catalog status
       setcatalogstatus "${id}" "FAILED"
     fi
   done
@@ -68,9 +84,19 @@ function setcatalogstatus {
 # MAIN
 # ========================================
 
-if [ "$2" == "" ]; then
-  PERCENTAGE=25
+JOBID=0
+# Check if already running, quit if so, exit code 0 (its not an error).
+if [ "$(isjobrunning ${JOBID})" == "0" ]; then
+  lock ${JOBID} "${DUMP}"
+else
+  cleanupexit 0
 fi
-talk "Percentage to verify: ${PERCENTAGE}"
-verifybackupselection ${PERCENTAGE}
 
+# Check cmd arg for percentage, otherwise default
+if [ "$2" != "" ]; then
+  VERIFYPERC=$2
+fi
+talk "Percentage to verify: ${VERIFYPERC}"
+verifybackupselection ${VERIFYPERC}
+
+cleanupexit 0

@@ -57,3 +57,6 @@ AUTO_DUMPJOB=YES
 # Maintenance db (must be present on every pgsql instance)
 MAINTDB=postgres
 
+# Verify percentage
+VERIFYPERC=25
+

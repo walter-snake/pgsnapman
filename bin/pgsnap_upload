@@ -39,7 +39,7 @@ function uploaddata {
   if [ "${format}" == "message" ]; then
     sql="\COPY pgsnap_message (logtime, level, pgsnap_tool,  message, jobclass, jobid) FROM stdin";
   elif [ "${format}" == "catalog" ]; then
-    sql="\COPY pgsnap_catalog (pgsnap_dumpjob_id, starttime, endtime, status, bu_name, bu_location, dbsize, dumpsize, dbname, dumpschema, dumptype) FROM stdin"
+    sql="\COPY pgsnap_catalog (pgsnap_dumpjob_id, starttime, endtime, status, bu_name, bu_location, dbsize, dumpsize, dbname, dumpschema, dumptype, bu_extension, pgversion) FROM stdin"
   else
     snaplog "ERROR" "destination format unknown"
     return
