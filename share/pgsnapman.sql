@@ -81,15 +81,15 @@ CREATE FUNCTION get_hasjob(pgsql_id integer, dbname text) RETURNS text
 
 
 --
--- Name: get_keep_catjobid(timestamp without time zone, integer, integer, integer, integer, integer); Type: FUNCTION; Schema: public; Owner: -
+-- Name: get_keep_catjobid(timestamp with time zone, integer, integer, integer, integer, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION get_keep_catjobid(datenow timestamp without time zone, jobid integer, days integer, weeks integer, months integer, years integer) RETURNS SETOF record
+CREATE FUNCTION get_keep_catjobid(datenow timestamp with time zone, jobid integer, days integer, weeks integer, months integer, years integer) RETURNS SETOF record
     LANGUAGE plpgsql
     AS $_$
 declare
-  keep_slicestart timestamp without time zone;
-  keep_sliceend timestamp without time zone;
+  keep_slicestart timestamp with time zone;
+  keep_sliceend timestamp with time zone;
   dj record;
   r record;
   keep_id record;
@@ -98,6 +98,7 @@ begin
 
   -- initialize, end of first slice
   keep_sliceend := $1::date + ('1 day')::interval;
+  keep_ids := ARRAY[]::integer[];
 
   -- 1 per day
   --raise notice 'Daily clean up, end date at start: %', keep_sliceend;
@@ -109,6 +110,7 @@ begin
       where (keep_slicestart, keep_sliceend) overlaps (starttime, starttime)
         and status = 'SUCCESS'
         and pgsnap_dumpjob_id = jobid
+        and keep = 'AUTO'
       order by starttime desc limit 1
     loop
       if NOT r.id IS NULL then
@@ -130,6 +132,7 @@ begin
       where (keep_slicestart, keep_sliceend) overlaps (starttime, starttime)
         and status = 'SUCCESS'
         and pgsnap_dumpjob_id = jobid
+        and keep = 'AUTO'
       order by starttime asc limit 1
     loop
       if NOT r.id IS NULL then
@@ -151,6 +154,7 @@ begin
       where (keep_slicestart, keep_sliceend) overlaps (starttime, starttime)
         and status = 'SUCCESS'
         and pgsnap_dumpjob_id = jobid
+        and keep = 'AUTO'
      order by starttime asc limit 1
     loop
       if NOT r.id IS NULL then
@@ -171,8 +175,10 @@ begin
     for r in select id
       from pgsnap_catalog
       where (keep_slicestart, keep_sliceend) overlaps (starttime, starttime)
+        and status = 'SUCCESS'
         and pgsnap_dumpjob_id = jobid
-        order by starttime asc limit 1
+        and keep = 'AUTO'
+       order by starttime asc limit 1
     loop
       if NOT r.id IS NULL then
         keep_ids := array_append(keep_ids, r.id);
@@ -186,7 +192,7 @@ begin
   -- all catalog entries marked as keep, or linked to a restore job
   for r in select id
     from pgsnap_catalog
-    where keep = true
+    where keep = 'YES'
     or id in (select pgsnap_catalog_id from pgsnap_restorejob)
   loop
       if NOT keep_ids @> ARRAY[r.id] then
@@ -273,7 +279,7 @@ declare
   rnd integer;
 begin
   select * into pgsqldata from pgsql_instance where id = pgsql_instance_id;
-  length := extract('hour' from (('20000102T' || pgsqldata.bu_window_end || ':00')::timestamp without time zone - ('20000101T' || pgsqldata.bu_window_start || ':00')::timestamp without time zone)::interval)::integer * 60;
+  length := extract('hour' from (('20000102T' || pgsqldata.bu_window_end || ':00')::timestamp with time zone - ('20000101T' || pgsqldata.bu_window_start || ':00')::timestamp with time zone)::interval)::integer * 60;
   select (random() * length)::integer into rnd;
   select (pgsqldata.bu_window_start || ':00')::time + (rnd::text || ' min')::interval into crontime;
   return extract('min' from crontime) || ' ' || extract('hour' from crontime) || ' * * *' ;
@@ -317,6 +323,15 @@ $$;
 CREATE FUNCTION put_dumpjob(pgsqlinstanceid integer, dbname text, comment text) RETURNS integer
     LANGUAGE sql
     AS $_$insert into pgsnap_dumpjob (pgsql_instance_id, dbname, comment) values ($1, $2, $3) returning id;$_$;
+
+
+--
+-- Name: put_dumpjob(integer, text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION put_dumpjob(pgsqlinstanceid integer, dbname text, comment text, status text) RETURNS integer
+    LANGUAGE sql
+    AS $_$insert into pgsnap_dumpjob (pgsql_instance_id, dbname, comment, status) values ($1, $2, $3, $4) returning id;$_$;
 
 
 --
@@ -365,223 +380,12 @@ CREATE FUNCTION set_dumpjobstatus(job_id integer, status text) RETURNS void
 
 
 --
--- Name: test_retention_keep(timestamp without time zone); Type: FUNCTION; Schema: public; Owner: -
+-- Name: set_restorejobstatus(integer, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION test_retention_keep(datenow timestamp without time zone) RETURNS SETOF record
-    LANGUAGE plpgsql
-    AS $_$
-declare
-  days integer;
-  weeks integer;
-  months integer;
-  years integer;
-  keep_slicestart timestamp without time zone;
-  keep_sliceend timestamp without time zone;
-  dj record;
-  r record;
-  keep_id record;
-  keep_ids integer[];
-begin
-  -- Get the clean up schedule from the dumpjobs table
-  select * from pgsnap_dumpjob into dj where id = $1;
-  days := dj.keep_daily;
-  weeks := dj.keep_weekly;
-  months := dj.keep_monthly;
-  years := dj.keep_yearly;
-  
-  -- 1 per day older then 'keep slicestart' time
-  keep_slicestart := $1::date;
-  for i in 0..days - 1 loop
-    -- using overlaps, we're going to collect all ids in day intervals for i-days, and then pick the most recent
-    keep_sliceend := keep_slicestart - (i + 1 || ' days')::interval;
-    for r in select id
-      from test_dates
-      where (keep_slicestart - (i || ' days')::interval, keep_sliceend)
-        overlaps (tijd, tijd)
-      order by tijd desc limit 1
-    loop
-      if NOT r.id IS NULL then
-        keep_ids := array_append(keep_ids, r.id);
-      end if;
-      raise notice 'day % %', i, r.id;
-    end loop;
-  end loop;
-    
-  -- 1 per week older then 'keep slicestart' time
-  keep_slicestart := keep_sliceend;
-  for i in 0..weeks - 1 loop
-    -- using overlaps, we're going to collect all ids in week intervals for i-weeks, and then pick the oldest
-    keep_sliceend := keep_slicestart - (i + 1 || ' weeks')::interval;
-    for r in select id
-      from test_dates
-      where (keep_slicestart - (i || ' weeks')::interval, keep_sliceend)
-        overlaps (tijd, tijd)
-      order by tijd asc limit 1
-   loop
-      if NOT r.id IS NULL then
-        keep_ids := array_append(keep_ids, r.id);
-      end if;
-      raise notice 'week % %', i, r.id;
-    end loop;
-  end loop;
-
-  -- 1 per month
-  keep_slicestart := keep_sliceend;
-  for i in 0..months - 1 loop
-    -- using overlaps, we're going to collect all ids in week intervals for i-weeks, and then pick the oldest
-    keep_sliceend := keep_slicestart - (i + 1 || ' months')::interval;
-    for r in select id
-      from test_dates
-      where (keep_slicestart - (i || ' months')::interval, keep_sliceend)
-        overlaps (tijd, tijd)
-      order by tijd asc limit 1
-    loop
-      if NOT r.id IS NULL then
-        keep_ids := array_append(keep_ids, r.id);
-      end if;
-      raise notice 'month % %', i, r.id;
-    end loop;
-  end loop;
-
-  -- 1 per year
-  keep_slicestart := keep_sliceend;
-  for i in 0..years - 1 loop
-    -- using overlaps, we're going to collect all ids in week intervals for i-weeks, and then pick the oldest
-    keep_sliceend := keep_slicestart - (i + 1 || ' years')::interval;
-    for r in select id
-      from test_dates
-      where (keep_slicestart - (i || ' years')::interval, keep_sliceend)
-        overlaps (tijd, tijd)
-      order by tijd asc limit 1
-    loop
-      if NOT r.id IS NULL then
-        keep_ids := array_append(keep_ids, r.id);
-      end if;
-      raise notice 'year % %', i, r.id;
-    end loop;
-  end loop;
-
-  -- output
-  raise notice 'array size %', array_length(keep_ids, 1);
-  for keep_id in select unnest(keep_ids)
-  loop
-    return next keep_id;
-  end loop;
-  return;
-end;
-$_$;
-
-
---
--- Name: test_retention_keep(timestamp without time zone, integer, integer, integer, integer); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION test_retention_keep(datenow timestamp without time zone, days integer, weeks integer, months integer, years integer) RETURNS SETOF record
-    LANGUAGE plpgsql
-    AS $_$
-declare
-  keep_slicestart timestamp without time zone;
-  keep_sliceend timestamp without time zone;
-  dj record;
-  r record;
-  keep_id record;
-  keep_ids integer[];
-begin
-
-  -- initialize, end of first slice
-  keep_sliceend := $1::date + ('1 day')::interval;
-
-  -- 1 per day
-  --raise notice 'Daily clean up, end date at start: %', keep_sliceend;
-  for i in 1..days loop
-    -- using overlaps, we're going to collect all ids in day intervals for i-days, and then pick the most recent
-    keep_slicestart := keep_sliceend - (1 || ' days')::interval;
-    for r in select id
-      from test_dates
-      where (keep_slicestart, keep_sliceend)
-        overlaps (tijd, tijd)
-      order by tijd desc limit 1
-    loop
-      if NOT r.id IS NULL then
-        keep_ids := array_append(keep_ids, r.id);
-      end if;
-      raise notice 'D % % [%..%]', i, r.id, keep_slicestart, keep_sliceend;    
-    end loop;
-    -- set new slice end date
-    keep_sliceend := keep_slicestart;
-  end loop;
-    
-  -- 1 per week
-  --raise notice 'Weekly clean up, end date at start: %', keep_sliceend;
-  for i in 1..weeks loop
-    -- using overlaps, we're going to collect all ids in day intervals for i-days, and then pick the most recent
-    keep_slicestart := keep_sliceend - (1 || ' weeks')::interval;
-    for r in select id
-      from test_dates
-      where (keep_slicestart, keep_sliceend)
-        overlaps (tijd, tijd)
-      order by tijd asc limit 1
-    loop
-      if NOT r.id IS NULL then
-        keep_ids := array_append(keep_ids, r.id);
-      end if;
-      raise notice 'W % % [%..%]', i, r.id, keep_slicestart, keep_sliceend;    
-    end loop;
-    -- set new slice end date
-    keep_sliceend := keep_slicestart;
-  end loop;
-  
-  -- 1 per month
-  --raise notice 'Monthly clean up, end date at start: %', keep_sliceend;
-  for i in 1..months loop
-    -- using overlaps, we're going to collect all ids in day intervals for i-days, and then pick the most recent
-    keep_slicestart := keep_sliceend - (1 || ' months')::interval;
-    for r in select id
-      from test_dates
-      where (keep_slicestart, keep_sliceend)
-        overlaps (tijd, tijd)
-      order by tijd asc limit 1
-    loop
-      if NOT r.id IS NULL then
-        keep_ids := array_append(keep_ids, r.id);
-      end if;
-      raise notice 'M % % [%..%]', i, r.id, keep_slicestart, keep_sliceend;    
-    end loop;
-    -- set new slice end date
-    keep_sliceend := keep_slicestart;
-  end loop;
-
-
-  -- 1 per year
-  --raise notice 'Yearly clean up, end date at start: %', keep_sliceend;
-  for i in 1..years loop
-    -- using overlaps, we're going to collect all ids in day intervals for i-days, and then pick the most recent
-    keep_slicestart := keep_sliceend - (1 || ' year')::interval;
-    for r in select id
-      from test_dates
-      where (keep_slicestart, keep_sliceend)
-        overlaps (tijd, tijd)
-      order by tijd asc limit 1
-    loop
-      if NOT r.id IS NULL then
-        keep_ids := array_append(keep_ids, r.id);
-      end if;
-      raise notice 'Y % % [%..%]', i, r.id, keep_slicestart, keep_sliceend;    
-    end loop;
-    -- set new slice end date
-    keep_sliceend := keep_slicestart;
-  end loop;
-
-  -- output
-  --raise notice 'Keeping: %', array_length(keep_ids, 1);
-  for keep_id in select unnest(keep_ids)
-  loop
-    return next keep_id;
-  end loop;
-  return;
-end;
-$_$;
+CREATE FUNCTION set_restorejobstatus(job_id integer, status text) RETURNS void
+    LANGUAGE sql
+    AS $_$update pgsnap_restorejob set status = $2 where id = $1;$_$;
 
 
 --
@@ -590,12 +394,41 @@ $_$;
 
 CREATE FUNCTION upd_restorelog(logid integer, status text, message text, bupath text) RETURNS void
     LANGUAGE sql
-    AS $_$update pgsnap_restorelog set endtime=now()::timestamp without time zone, status=$2, message=$3, bu_path=$4 where id = $1; $_$;
+    AS $_$update pgsnap_restorelog set endtime=now()::timestamp with time zone, status=$2, message=$3, bu_path=$4 where id = $1; $_$;
 
 
 SET default_tablespace = '';
 
 SET default_with_oids = false;
+
+--
+-- Name: pgsnap_catalog; Type: TABLE; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE TABLE pgsnap_catalog (
+    id integer NOT NULL,
+    pgsnap_dumpjob_id integer,
+    starttime timestamp with time zone,
+    endtime timestamp with time zone,
+    status text,
+    bu_name text,
+    bu_location text,
+    dbsize bigint,
+    dumpsize bigint,
+    dbname text,
+    dumpschema text,
+    dumptype text,
+    verified text DEFAULT 'NO'::text,
+    keep text DEFAULT 'AUTO'::text,
+    bu_extension text,
+    pgversion text,
+    bu_worker_id integer,
+    message text,
+    CONSTRAINT pgsnap_catalog_keep_check CHECK ((keep = ANY (ARRAY['NO'::text, 'YES'::text, 'AUTO'::text]))),
+    CONSTRAINT pgsnap_catalog_status_check CHECK ((status = ANY (ARRAY['SUCCESS'::text, 'FAILED'::text, 'REMOVING'::text]))),
+    CONSTRAINT pgsnap_catalog_verified_check CHECK ((verified = ANY (ARRAY['YES'::text, 'FAILED'::text, 'NO'::text])))
+);
+
 
 --
 -- Name: pgsnap_dumpjob; Type: TABLE; Schema: public; Owner: -; Tablespace: 
@@ -616,29 +449,16 @@ CREATE TABLE pgsnap_dumpjob (
     comment text,
     cron text NOT NULL,
     status text DEFAULT 'ACTIVE'::text,
-    jobtype text DEFAULT 'CRON'::text,
+    jobtype text DEFAULT 'REPEAT'::text,
     pgsnap_restorejob_id text,
-    date_added timestamp without time zone DEFAULT now(),
+    date_added timestamp with time zone DEFAULT now(),
+    CONSTRAINT pgsnap_dumpjob_cron_check CHECK ((cron ~ '^([,/\*0-9]+\ ){4}[,/\*0-9]+$'::text)),
     CONSTRAINT pgsnap_dumpjob_dumptype_check CHECK ((dumptype = ANY (ARRAY['FULL'::text, 'SCHEMA'::text, 'CLUSTER_SCHEMA'::text, 'SCRIPT'::text, 'CLUSTER'::text]))),
-    CONSTRAINT pgsnap_dumpjob_jobtype_check CHECK ((jobtype = ANY (ARRAY['CRON'::text, 'SINGLE'::text]))),
-    CONSTRAINT pgsnap_dumpjob_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
-);
-
-
---
--- Name: pgsnap_worker; Type: TABLE; Schema: public; Owner: -; Tablespace: 
---
-
-CREATE TABLE pgsnap_worker (
-    id integer NOT NULL,
-    dns_name text NOT NULL,
-    comment text,
-    cron_cacheconfig text DEFAULT '15 20 * * *'::text,
-    cron_singlejob text DEFAULT '* * * * *'::text,
-    cron_clean text DEFAULT '15 18 * * *'::text,
-    cron_upload text DEFAULT '*/5 * * * *'::text,
-    status text DEFAULT 'ACTIVE'::text,
-    CONSTRAINT pgsnap_worker_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
+    CONSTRAINT pgsnap_dumpjob_jobtype_check CHECK ((jobtype = ANY (ARRAY['REPEAT'::text, 'SINGLE'::text]))),
+    CONSTRAINT pgsnap_dumpjob_pgsnap_restorejob_id_check CHECK ((pgsnap_restorejob_id ~ '^[0-9,]*$'::text)),
+    CONSTRAINT pgsnap_dumpjob_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text, 'STARTED'::text]))),
+    CONSTRAINT pgsnap_dumpjob_status_check1 CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text, 'HASRUN'::text]))),
+    CONSTRAINT pgsnap_dumpjob_status_check2 CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text, 'STARTED'::text, 'HASRUN'::text])))
 );
 
 
@@ -656,52 +476,100 @@ CREATE TABLE pgsql_instance (
     bu_window_start integer DEFAULT 2,
     bu_window_end integer DEFAULT 6,
     pgsnap_worker_id_default integer,
+    date_added timestamp with time zone DEFAULT now(),
     CONSTRAINT pgsql_instance_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
 );
 
 
 --
--- Name: old_stuff; Type: VIEW; Schema: public; Owner: -
+-- Name: catalog_compact; Type: VIEW; Schema: public; Owner: -
 --
 
-CREATE VIEW old_stuff AS
- SELECT DISTINCT p.id,
+CREATE VIEW catalog_compact AS
+ SELECT c.id,
     p.dns_name,
     p.pgport,
-    p.comment,
-    p.status,
-    p.pgsql_superuser,
-    b.id AS pgsnap_worker_id
-   FROM ((pgsnap_dumpjob j
+    ((c.dbname || '.'::text) || c.dumpschema) AS dbname,
+    c.dumptype,
+    c.bu_name,
+    c.starttime,
+    (c.endtime - c.starttime) AS duration,
+    c.status,
+    c.verified,
+    c.keep,
+    c.dbsize,
+    c.dumpsize
+   FROM ((pgsnap_catalog c
+     JOIN pgsnap_dumpjob j ON ((j.id = c.pgsnap_dumpjob_id)))
      JOIN pgsql_instance p ON ((p.id = j.pgsql_instance_id)))
-     JOIN pgsnap_worker b ON ((j.pgsnap_worker_id = b.id)));
+  ORDER BY c.starttime;
 
 
 --
--- Name: pgsnap_catalog; Type: TABLE; Schema: public; Owner: -; Tablespace: 
+-- Name: pgsnap_worker; Type: TABLE; Schema: public; Owner: -; Tablespace: 
 --
 
-CREATE TABLE pgsnap_catalog (
+CREATE TABLE pgsnap_worker (
     id integer NOT NULL,
-    pgsnap_dumpjob_id integer,
-    starttime timestamp without time zone,
-    endtime timestamp without time zone,
-    status text,
-    bu_name text,
-    bu_location text,
-    dbsize bigint,
-    dumpsize bigint,
-    dbname text,
-    dumpschema text,
-    dumptype text,
-    verified text DEFAULT 'NO'::text,
-    keep boolean DEFAULT false,
-    bu_extension text,
-    pgversion text,
-    bu_worker_id integer,
-    CONSTRAINT pgsnap_catalog_status_check CHECK ((status = ANY (ARRAY['SUCCESS'::text, 'FAILED'::text, 'REMOVING'::text]))),
-    CONSTRAINT pgsnap_catalog_verified_check CHECK ((verified = ANY (ARRAY['YES'::text, 'FAILED'::text, 'NO'::text])))
+    dns_name text NOT NULL,
+    comment text,
+    cron_cacheconfig text DEFAULT '15 20 * * *'::text,
+    cron_singlejob text DEFAULT '* * * * *'::text,
+    cron_clean text DEFAULT '15 18 * * *'::text,
+    cron_upload text DEFAULT '*/5 * * * *'::text,
+    status text DEFAULT 'ACTIVE'::text,
+    date_added timestamp with time zone DEFAULT now(),
+    CONSTRAINT pgsnap_worker_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
 );
+
+
+--
+-- Name: vw_dumpjob_worker_instance; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW vw_dumpjob_worker_instance AS
+ SELECT j.id,
+    j.pgsnap_worker_id,
+    j.pgsql_instance_id,
+    j.dbname,
+    j.dumptype,
+    j.dumpschema,
+    j.cron,
+    j.keep_daily,
+    j.keep_weekly,
+    j.keep_monthly,
+    j.keep_yearly,
+    j.comment,
+    j.status,
+    j.jobtype,
+    b.dns_name AS pgsnap_worker_dns_name,
+    p.dns_name AS pgsql_instance_dns_name,
+    p.pgport AS pgsql_instance_port,
+    p.pgsql_superuser AS pgsql_instance_superuser,
+    j.pgsnap_restorejob_id,
+    j.dumpoptions
+   FROM ((pgsnap_dumpjob j
+     JOIN pgsnap_worker b ON ((b.id = j.pgsnap_worker_id)))
+     JOIN pgsql_instance p ON ((p.id = j.pgsql_instance_id)));
+
+
+--
+-- Name: dumpjob_compact; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW dumpjob_compact AS
+ SELECT vw_dumpjob_worker_instance.id,
+    vw_dumpjob_worker_instance.pgsnap_worker_dns_name AS pgs_worker,
+    ((vw_dumpjob_worker_instance.pgsql_instance_dns_name || ':'::text) || vw_dumpjob_worker_instance.pgsql_instance_port) AS pgsql_instance,
+    vw_dumpjob_worker_instance.jobtype,
+    ((vw_dumpjob_worker_instance.dbname || '.'::text) || vw_dumpjob_worker_instance.dumpschema) AS dbname_schema,
+    vw_dumpjob_worker_instance.dumptype,
+    vw_dumpjob_worker_instance.dumpoptions,
+    vw_dumpjob_worker_instance.cron,
+    vw_dumpjob_worker_instance.comment,
+    vw_dumpjob_worker_instance.status,
+    vw_dumpjob_worker_instance.pgsnap_restorejob_id AS restorejob
+   FROM vw_dumpjob_worker_instance;
 
 
 --
@@ -780,7 +648,7 @@ CREATE TABLE pgsnap_message (
     id integer NOT NULL,
     level text,
     pgsnap_tool text,
-    logtime timestamp without time zone,
+    logtime timestamp with time zone,
     message text,
     jobclass text,
     jobid integer
@@ -821,15 +689,16 @@ CREATE TABLE pgsnap_restorejob (
     status text DEFAULT 'ACTIVE'::text,
     comment text,
     jobtype text DEFAULT 'SINGLE'::text,
-    cron text DEFAULT '# * * * * *'::text,
+    cron text DEFAULT '* * * * *'::text NOT NULL,
     pgsnap_catalog_id integer DEFAULT (-1),
     role_handling text DEFAULT 'USE_ROLE'::text,
     tblspc_handling text DEFAULT 'NO_TBLSPC'::text,
+    date_added timestamp with time zone DEFAULT now(),
+    CONSTRAINT pgsnap_restorejob_cron_check CHECK ((cron ~ '^([,/\*0-9]+\ ){4}[,/\*0-9]+$'::text)),
     CONSTRAINT pgsnap_restorejob_existing_db_check CHECK ((existing_db = ANY (ARRAY['DROP'::text, 'RENAME'::text, 'DROP_BEFORE'::text]))),
-    CONSTRAINT pgsnap_restorejob_jobtype_check CHECK ((jobtype = ANY (ARRAY['SINGLE'::text, 'CRON'::text, 'TRIGGER'::text]))),
+    CONSTRAINT pgsnap_restorejob_jobtype_check CHECK ((jobtype = ANY (ARRAY['SINGLE'::text, 'REPEAT'::text, 'TRIGGER'::text]))),
     CONSTRAINT pgsnap_restorejob_restoreschema_check CHECK ((length(restoreschema) > 0)),
-    CONSTRAINT pgsnap_restorejob_restoretype_check CHECK ((restoretype = ANY (ARRAY['FULL'::text, 'DATA'::text, 'SCHEMA'::text]))),
-    CONSTRAINT pgsnap_restorejob_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
+    CONSTRAINT pgsnap_restorejob_restoretype_check CHECK ((restoretype = ANY (ARRAY['FULL'::text, 'DATA'::text, 'SCHEMA'::text])))
 );
 
 
@@ -859,8 +728,8 @@ ALTER SEQUENCE pgsnap_restorejob_id_seq OWNED BY pgsnap_restorejob.id;
 CREATE TABLE pgsnap_restorelog (
     id integer NOT NULL,
     pgsnap_restorejob_id integer,
-    starttime timestamp without time zone DEFAULT now(),
-    endtime timestamp without time zone,
+    starttime timestamp with time zone DEFAULT now(),
+    endtime timestamp with time zone,
     status text DEFAULT 'RUNNING'::text,
     bu_path text,
     message text
@@ -893,7 +762,8 @@ ALTER SEQUENCE pgsnap_restorelog_id_seq OWNED BY pgsnap_restorelog.id;
 CREATE TABLE pgsnap_script (
     id integer NOT NULL,
     scriptname text,
-    scriptcode text
+    scriptcode text,
+    date_added timestamp with time zone DEFAULT now()
 );
 
 
@@ -924,7 +794,7 @@ CREATE TABLE pgsnap_singlerun (
     id integer NOT NULL,
     jobid integer NOT NULL,
     jobclass text NOT NULL,
-    runtime timestamp without time zone DEFAULT now(),
+    runtime timestamp with time zone DEFAULT now(),
     CONSTRAINT pgsnap_singlerun_jobclass_check CHECK ((jobclass = ANY (ARRAY['DUMP'::text, 'RESTORE'::text])))
 );
 
@@ -987,85 +857,23 @@ ALTER SEQUENCE pgsql_instance_id_seq OWNED BY pgsql_instance.id;
 
 
 --
--- Name: test_dates; Type: TABLE; Schema: public; Owner: -; Tablespace: 
+-- Name: restorejob_compact; Type: VIEW; Schema: public; Owner: -
 --
 
-CREATE TABLE test_dates (
-    id integer,
-    tijd timestamp without time zone
-);
-
-
---
--- Name: vw_catalog_compact; Type: VIEW; Schema: public; Owner: -
---
-
-CREATE VIEW vw_catalog_compact AS
- SELECT c.id,
-    p.dns_name,
-    p.pgport,
-    c.dbname,
-    c.dumpschema,
-    c.dumptype,
-    c.bu_name,
-    c.starttime,
-    (c.endtime - c.starttime) AS duration,
-    c.status,
-    c.dbsize,
-    c.dumpsize
-   FROM ((pgsnap_catalog c
-     JOIN pgsnap_dumpjob j ON ((j.id = c.pgsnap_dumpjob_id)))
-     JOIN pgsql_instance p ON ((p.id = j.pgsql_instance_id)))
-  ORDER BY c.starttime;
-
-
---
--- Name: vw_dumpjob_worker_instance; Type: VIEW; Schema: public; Owner: -
---
-
-CREATE VIEW vw_dumpjob_worker_instance AS
+CREATE VIEW restorejob_compact AS
  SELECT j.id,
-    j.pgsnap_worker_id,
-    j.pgsql_instance_id,
-    j.dbname,
-    j.dumptype,
-    j.dumpschema,
+    w.dns_name AS pgs_worker,
+    ((p.dns_name || ':'::text) || p.pgport) AS pgsql_instance,
+    j.dest_dbname,
+    j.restoretype,
+    j.restoreschema,
+    j.restoreoptions,
     j.cron,
-    j.keep_daily,
-    j.keep_weekly,
-    j.keep_monthly,
-    j.keep_yearly,
-    j.comment,
-    j.status,
-    j.jobtype,
-    b.dns_name AS pgsnap_worker_dns_name,
-    p.dns_name AS pgsql_instance_dns_name,
-    p.pgport AS pgsql_instance_port,
-    p.pgsql_superuser AS pgsql_instance_superuser,
-    j.pgsnap_restorejob_id,
-    j.dumpoptions
-   FROM ((pgsnap_dumpjob j
-     JOIN pgsnap_worker b ON ((b.id = j.pgsnap_worker_id)))
-     JOIN pgsql_instance p ON ((p.id = j.pgsql_instance_id)));
-
-
---
--- Name: vw_dumpjob_compact; Type: VIEW; Schema: public; Owner: -
---
-
-CREATE VIEW vw_dumpjob_compact AS
- SELECT vw_dumpjob_worker_instance.id,
-    vw_dumpjob_worker_instance.pgsnap_worker_dns_name AS pgs_worker,
-    ((vw_dumpjob_worker_instance.pgsql_instance_dns_name || ':'::text) || vw_dumpjob_worker_instance.pgsql_instance_port) AS pgsql_instance,
-    vw_dumpjob_worker_instance.jobtype,
-    ((vw_dumpjob_worker_instance.dbname || '.'::text) || vw_dumpjob_worker_instance.dumpschema) AS dbname_schema,
-    vw_dumpjob_worker_instance.dumptype,
-    vw_dumpjob_worker_instance.dumpoptions,
-    vw_dumpjob_worker_instance.cron,
-    vw_dumpjob_worker_instance.comment,
-    vw_dumpjob_worker_instance.status,
-    vw_dumpjob_worker_instance.pgsnap_restorejob_id AS restorejob
-   FROM vw_dumpjob_worker_instance;
+    j.comment
+   FROM (((pgsnap_restorejob j
+     JOIN pgsql_instance p ON ((p.id = j.dest_pgsql_instance_id)))
+     LEFT JOIN pgsnap_catalog c ON ((c.id = j.pgsnap_catalog_id)))
+     LEFT JOIN pgsnap_worker w ON ((w.id = c.bu_worker_id)));
 
 
 --
@@ -1103,7 +911,7 @@ CREATE VIEW vw_link_restore_catalog AS
 CREATE VIEW vw_pgsql_instance_bu_window_length AS
  SELECT pgsql_instance.id,
     pgsql_instance.bu_window_start AS start_hour,
-    ((date_part('hour'::text, (((('20000102T'::text || pgsql_instance.bu_window_end) || ':00'::text))::timestamp without time zone - ((('20000101T'::text || pgsql_instance.bu_window_start) || ':00'::text))::timestamp without time zone)))::integer * 60) AS length_min
+    ((date_part('hour'::text, (((('20000102T'::text || pgsql_instance.bu_window_end) || ':00'::text))::timestamp with time zone - ((('20000101T'::text || pgsql_instance.bu_window_start) || ':00'::text))::timestamp with time zone)))::integer * 60) AS length_min
    FROM pgsql_instance;
 
 

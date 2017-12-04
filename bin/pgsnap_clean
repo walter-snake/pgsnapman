@@ -8,7 +8,7 @@
 #
 # $1 VERBOSITY [SILENT|VERBOSE]
 # $2 DEDUPCLEAN (full clean of dedup data store, optional)
-# $3 BATCH (run DEDUPCLEAN in batch mode, optional)
+# $3 BATCH (run full DEDUPCLEAN in batch mode, optional when $2=DEDUPCLEAN)
 #
 
 # ======================================
@@ -83,16 +83,14 @@ function setcatalogdbstatus {
 function cleanupjob {
   local line
   echo "${INITIMESTAMP} Catalog ids to keep for job id: $1" >> ${LOGDIR}/pgsnap_clean.keepcatids.log
-  local sql="select c.id, c.starttime, c.bu_name, c.bu_location || '/' || c.bu_name as full_path from pgsnap_catalog c where c.pgsnap_dumpjob_id = $1 AND c.id not in (select id from get_keep_catjobid('`date '+%Y%m%dT%H%M%S'`', $1, $2, $3, $4, $5) as (id integer));"
+  local sql="select c.id, c.starttime, c.bu_name, c.bu_location || '/' || c.bu_name as full_path from pgsnap_catalog c where c.pgsnap_dumpjob_id = $1 AND c.id not in (select id from get_keep_catjobid('`date '+%Y%m%dT%H%M%S%z'`', $1, $2, $3, $4, $5) as (id integer));"
 # FOR DEBUGGING
-#  local sql="select c.id, c.starttime, c.bu_name, c.bu_location || '/' || c.bu_name as full_path from pgsnap_catalog c where c.pgsnap_dumpjob_id = $1 AND c.id not in (select id from get_keep_catjobid('`date '+%Y%m%dT%H%M%S'`', $1, 0, 0, 0, 0) as (id integer));"
+#  local sql="select c.id, c.starttime, c.bu_name, c.bu_location || '/' || c.bu_name as full_path from pgsnap_catalog c where c.pgsnap_dumpjob_id = $1 AND c.id not in (select id from get_keep_catjobid('`date '+%Y%m%dT%H%M%S%z'`', $1, 0, 0, 0, 0) as (id integer));"
 # END DEBUGGING
   ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" -A -t -F '|' --output=${TEMPDIR}/$$.removedumps.list 2>> ${LOGDIR}/pgsnap_clean.keepcatids.log
   # Loop through all catalog entries, and remove them
   while read line; do
-    if [ "${VERBOSITY}" == "VERBOSE" ]; then
-      echo "INFO remove from catalog: $(getfieldvalue "${line}" 1) $(getfieldvalue "${line}" 2) $(getfieldvalue "${line}" 3)"
-    fi
+    talk "INFO remove from catalog: $(getfieldvalue "${line}" 1) $(getfieldvalue "${line}" 2) $(getfieldvalue "${line}" 3)"
     log "INFO" "remove from catalog: $(getfieldvalue "${line}" 1) $(getfieldvalue "${line}" 2) $(getfieldvalue "${line}" 3)"
     # Set status to REMOVING, so you know you shouldn't start a restore job from this one.
     setcatalogdbstatus $(getfieldvalue "${line}" 1) "REMOVING"
@@ -102,7 +100,7 @@ function cleanupjob {
     if [ "$(issafetoremove "${path}")" == "NO" ]; then
       log "WARNING" "path unsafe to remove or restore job running [${path}]"
     elif [ "$(isrestorerunning "${path}")" == "YES" ]; then
-        echo "WARNING" "restore job running [${path}]"
+        talk "WARNING" "restore job running [${path}]"
         log "WARNING" "restore job running [${path}]"
     else
       local checksumfile=${path}.chksum
@@ -171,7 +169,7 @@ function dedupstore_clean {
   if [ "${VERBOSITY}" == "VERBOSE" ]; then
     echo "INFO processing dedupdata: $1"
     echo "INFO searching for links"
-    echo "* marked for removal"
+    echo "* dedup store file marked for removal"
   fi
   while read line; do
     chksum=`echo "${line}" | cut -d ' ' -f1`
@@ -305,7 +303,7 @@ fi
 # Otherwise we're in trouble (especially the snapshot dir, where we
 # must find the links: no link, data gone). 
 if [ ! -d ${DUMPSNAP} ]; then
-  echo "The snapshot directory does not exist, unsafe to continue."
+  talk "The snapshot directory does not exist, unsafe to continue."
   snaplog "ERROR" "init  - the snapshot directory does not exist, unsafe to continue."
   cleanupexit 1
 fi
@@ -324,28 +322,31 @@ if [ "$2" == "DEDUPCLEAN" ]; then
   # never be checked again. Thus, it is made possible to perform a full dedupstore clean up, by calling
   # dedupstore_fullclean.
   # To be run from the commandline, nothing will be logged (messages all stdout).
+  talk "Performing full deduplication store cleanup"
   snaplog "INFO" "init - full dedupstore scan and clean"
   dedupstore_fullclean
-else 
+else
   # Normal, scheduled maintenance mode
+  talk "Perform maintenance clean up per backup"
 
   # Clean up temp files from previously running jobs (unclean exit, or just because we have to)
-  find ${TEMPDIR} -type f -name '*' | grep -v crontab >> ${TEMPDIR}/clean_running.temp
+  find ${TEMPDIR} -type f -name '*' | grep -v crontab >> ${TEMPDIR}/$$.0.clean_running.temp
   while read line; do
     chkpid=$(echo `basename $line` | cut -d '.' -f 1)
     ps -p $chkpid &> /dev/null
     if [ "$?" == "1" ]; then
       rm -f $line
     fi
-  done < ${TEMPDIR}/clean_running.temp
-  rm -f ${TEMPDIR}/clean_running.temp
+  done < ${TEMPDIR}/$$.0.clean_running.temp
+  rm -f ${TEMPDIR}/$$.0.clean_running.temp
 
   # Log file rotation
+  filetimestamp=`date '+%Y%m%dT%H%M%S%z'`
   rotate=`find ${LOGDIR} -type f -name '*.log' -size +${MAXLOGSIZE}`
   for f in ${rotate}; do
     if [ "${f}" != "" ]; then
-      mv "${f}" "${LOGDIR}/`basename ${f}`.${INITIMESTAMP}"
-      gzip "${LOGDIR}/`basename ${f}`.${INITIMESTAMP}"
+      mv "${f}" "${LOGDIR}/`basename ${f}`.${filetimestamp}"
+      gzip "${LOGDIR}/`basename ${f}`.${filetimestamp}"
     fi
   done
 
@@ -354,6 +355,7 @@ else
 fi
 
 # Fire up verification job
-${SCRIPTPATH}/pgsnap_verify ${VERBOSITY}
+talk "Starting verification"
+${SCRIPTPATH}/pgsnap_verify ${VERBOSITY} &
 
 cleanupexit 0

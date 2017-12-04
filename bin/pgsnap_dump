@@ -225,7 +225,7 @@ function startpgsnapjob {
   TOOL_LOG=${jobdir}.log
 
   # Get timestamp, backup name, postgres version
-  buname=${jobid}_${dbname}${schema_part}_${butype}_${INITIMESTAMP}
+  buname=${jobid}_${dbname}${schema_part}_${butype}_`date '+%Y%m%dT%H%M%S'`
   log "INFO" "job id ${jobid} - ${jobtype} backup ${buname}"
   # Check postgres server version and binary availability 
   pgversion=$(getpgversion "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${dbname}")
@@ -389,7 +389,7 @@ fi
 
 # Write catalog data file for upload, symlink in central upload dir
 copylog=${jobdir}/${buname}.catalog.dat
-preparecatalogdata "${2}\t${INITIMESTAMP}\t`date +'%Y%m%dT%H%M%S'`\t${jobresult}\t${buname}${ext}\t${jobdir}\t${DBSIZE}\t${SIZEONDISK}\t${dbname}\t${schema}\t${butype}\t${ext}\t${pgversion}\t${BUWORKERID}" "${copylog}" "NEW" "UPLOAD"
+preparecatalogdata "${2}\t${INITIMESTAMP}\t`date +'%Y%m%dT%H%M%S%z'`\t${jobresult}\t${buname}${ext}\t${jobdir}\t${DBSIZE}\t${SIZEONDISK}\t${dbname}\t${schema}\t${butype}\t${ext}\t${pgversion}\t${BUWORKERID}" "${copylog}" "NEW" "UPLOAD"
 
 # Next procedures, set exit code
 if [ "${jobresult}" == "FAILED" ]; then

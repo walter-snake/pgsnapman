@@ -4,7 +4,8 @@
 #                     must run on a backup node, with passwordless (.pgpass does the job) to all database servers
 #
 # $1 restore job id
-# $2 backup path to use, for TRIGGER type: full backup path; for CRON/SINGLE jobs: use 'FROM_JOB' or specify catalog id
+# $2 backup path to use [<full_backup_path>|<catalog_id>] (for trigger based starts you must use the full path, as
+#    you don't know the catalog id, and the neccessary data is most likely not yet present in the catalog)
 # $3 verbosity [VERBOSE|SILENT]
 # $4 startup type [CRON|SINGLE|TRIGGER]
 #      
@@ -432,20 +433,17 @@ if [ "${pgsqlstatus}" == "HALTED" ]; then
   logend "ERROR" "restore job ${JOBID} requested on an inactive postgres instance [${pgsqlhost}:${pgsqlport}]"
   cleanupexit 1
 fi
-# When scheduled (CRON), quit when job is halted
-if [ "${status}" == "HALTED" ]; then
-  logend "ERROR" "scheduled restore job ${JOBID} requested which is is on halt (hint: manual start works)"
+# On a scheduled start (CRON), quit when job is halted
+if [ "${STARTTYPE}" == "CRON" ] && [ "${status}" != "ACTIVE" ]; then
+  logend "ERROR" "scheduled restore job ${JOBID} requested which is is on halt (hint: manual start as SINGLE job overrides the HALTED status)"
   cleanupexit 1
 fi
 
-# Depending on job type, choose restore options
-# TRIGGER: all information available
-# SINGLE/CRON: we might need to get the path
-if [ "${STARTTYPE}" != "TRIGGER" ]; then
-  if [[ "${DUMP}" =~ ^[0-9]+$ ]]; then
-    catalogid=${DUMP}
-    DUMP=$(getdumppathfromcatalog ${catalogid})
-  fi
+# We might need to get the path (in case DUMP is only numeric, it must be a catalog id, turn
+# it into a full path with catalog based information)
+if [[ "${DUMP}" =~ ^[0-9]+$ ]]; then
+  catalogid=${DUMP}
+  DUMP=$(getdumppathfromcatalog ${catalogid})
 fi
 # Figure out type (cluster/sql or database/directory dump), strip of .sql.gz
 if [[ "${DUMP}" =~ .sql.gz$ ]]; then
@@ -528,12 +526,20 @@ fi
 log "INFO" "starting ${STARTTYPE} restore, job id [${JOBID}] from dump [`basename ${DUMP}`]"
 snaplog "INFO" "init - starting ${STARTTYPE} restore, job id [${JOBID}] from dump [`basename ${DUMP}`]"
 
-# Start psql or pg_restore operation
+# Start psql or pg_restore operation, set job status to started in case of a SINGLE run job
 RESULT="ERROR"
-if [ "${dumptype}" == "DIR" ]; then
-  run_dir_restore
-elif  [ "${dumptype}" == "SQL" ]; then
-  run_sql_restore
+errcode=0
+if [ "${jobtype}" == "SINGLE" ]; then
+  errcode=$(setjobstatus "RESTORE" ${JOBID} "STARTED")
+fi
+if [ $errcode -gt 0 ]; then
+  errmsg="aborted as job status could not be set, indicates a catalog database error"
+else
+  if [ "${dumptype}" == "DIR" ]; then
+    run_dir_restore
+  elif  [ "${dumptype}" == "SQL" ]; then
+    run_sql_restore
+  fi
 fi
 logend "$RESULT" "$errmsg"
 

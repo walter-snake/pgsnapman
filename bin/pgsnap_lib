@@ -60,7 +60,9 @@ function talk {
 # $1: log level
 # $2: log message
 function snaplog {
-  echo "`date '+%Y%m%dT%H%M%S'` $1 ${TOOLNAME} ${2}" >> ${PGSNAPMANLOG}
+  if [ -d "${LOGDIR}" ]; then
+    echo "`date '+%Y%m%dT%H%M%S%z'` $1 ${TOOLNAME} ${2}" >> ${PGSNAPMANLOG}
+  fi
 }
 
 # Write a log entry to the tool log
@@ -69,9 +71,9 @@ function snaplog {
 # $3: NEW: start new log
 function log {
   if [ "${3}" == "NEW" ]; then
-    echo "`date '+%Y%m%dT%H%M%S'` $1 ${TOOLNAME} ${2}" > ${TOOL_LOG}
+    echo "`date '+%Y%m%dT%H%M%S%z'` $1 ${TOOLNAME} ${2}" > ${TOOL_LOG}
   else
-    echo "`date '+%Y%m%dT%H%M%S'` $1 ${TOOLNAME} ${2}" >> ${TOOL_LOG}
+    echo "`date '+%Y%m%dT%H%M%S%z'` $1 ${TOOLNAME} ${2}" >> ${TOOL_LOG}
   fi
 }
 
@@ -81,13 +83,14 @@ function log {
 # Gets pgsnap_worker id (quit on error if requested)
 # Requires PGSCDB_REQUIRED to be set (before sourcing this library)
 function getworkerid {
-  local bwid=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');"`
+  local bwid=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');" 2> /dev/null`
   if [ "$?" != "0" ] || [ "${bwid}" == "" ]; then
     if [ "${PGSCDB_REQUIRED}" == "NO" ]; then
+      ERROR=""
       snaplog "WARNING" "init - could not connect to catalog database (ignored)"
     else
+      ERROR="CON_FAILED"
       snaplog "ERROR" "init - could not connect to catalog database (fatal)"
-      cleanupexit 2
     fi
   fi
   echo "${bwid}"
@@ -216,12 +219,20 @@ function getdbsize {
   echo "${dbsize}"
 }
 
-# Mark a single run job as started in the database
-# $1 jobid
-# $2 job class/type [DUMP|RESTORE]
-function setsinglerunstarted {
-  local sql="SELECT put_singlerun($1, '$2')"
+# Mark a single run job as halted in the database
+# $1 job class/type [DUMP|RESTORE]
+# $2 job id
+# $3 job status [HALTED|ACTIVE|STARTED|HASRUN]
+function setjobstatus {
+#  local sql="SELECT put_singlerun($1, '$2')"
+  local sql
+  if [ "${2}" == "DUMP" ]; then
+    sql="SELECT set_dumpjobstatus($2, '$3');"
+  else
+    sql="SELECT set_restorejobstatus($2, '$3');"
+  fi
   ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" > /dev/null
+  echo $?
 }
 
 # Verify and write upload data for the catalog database
@@ -238,12 +249,12 @@ function preparecatalogdata {
   local format=`echo "${2}" | awk -F '.' '{print $(NF-1)}'`
   # Verify the upload format using regular expression
   if [ "${format}" == "catalog" ]; then
-    if [ "`echo -e "${1}" | grep -E '^\d+\t\d{8}T\d{6}\t\d{8}T\d{6}\t[A-Z]+\t[a-zA-Z0-9_\.\/]+\t[a-zA-Z0-9_\./]+\t-?\d+\t-?\d+\t.*\t.*\t.*\t.*\t.*\t\d+$'`" == "" ]; then
+    if [ "`echo -e "${1}" | grep -E '^\d+\t\d{8}T\d{6}[+-]\d+\t\d{8}T\d{6}[+-]\d+\t[A-Z]+\t[a-zA-Z0-9_\.\/]+\t[a-zA-Z0-9_\./]+\t-?\d+\t-?\d+\t.*\t.*\t.*\t.*\t.*\t\d+$'`" == "" ]; then
       snaplog "ERROR" "catalog upload wrong format: $1"
       return
     fi
   elif [ "${format}" == "message" ]; then
-    if [ "`echo -e "${1}" | grep -E '^\d{8}T\d{6}\t((INFO|WARNING|ERROR|CRITICAL|DEBUG))\t.+\t.*\t((CACHE_CONFIG|DUMP|RESTORE|VERIFY))\t-?\d+$'`" == "" ]; then
+    if [ "`echo -e "${1}" | grep -E '^\d{8}T\d{6}[+-]\d+\t((INFO|WARNING|ERROR|CRITICAL|DEBUG))\t.+\t.*\t((CACHE_CONFIG|DUMP|RESTORE|VERIFY))\t-?\d+$'`" == "" ]; then
       snaplog "ERROR" "message upload wrong format: $1"
       return
     fi
@@ -295,6 +306,8 @@ function getscript {
 # Init actions
 # =====================================
 
+ERROR=0
+
 # Set hostname
 FQDN=`hostname -f`
 
@@ -337,14 +350,17 @@ SCRIPTDIR=${ROOTDIR}/script
 # Set upload dir
 UPLOADDIR=${ROOTDIR}/upload
 
+
 # Get a timestamp
-INITIMESTAMP=`date '+%Y%m%dT%H%M%S'`
+INITIMESTAMP=`date '+%Y%m%dT%H%M%S%z'`
 
 # Set the hostname for the pgsnapman database (put '-h ' in front of it for non local connections)
 PGSCHOST=$(resolvepghost ${PGSCHOST})
 
 # Retrieve the worker id for this worker instance (we do not need the catalog db, so we can continue if not found)
+ERROR=0
 BUWORKERID=$(getworkerid)
+if [ "${ERROR}" != "0" ]; then cleanupexit 1; fi
 
 # Get worker status, quit if HALTED (any tool will quit when the worker is halted)
 if [ "$(getworkerstatus)" == "HALTED" ]; then

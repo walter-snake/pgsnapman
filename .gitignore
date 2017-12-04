@@ -1,5 +1,7 @@
 *.swp
 *.cdmp
 *.config
+*.tar.gz
+*.org
 
 temp/

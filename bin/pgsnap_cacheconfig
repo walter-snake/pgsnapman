@@ -6,7 +6,7 @@
 #
 # Commandline options
 #   $1 verbosity [SILENT|VERBOSE]
-#   $2 action/job type [INIT|CRON|SINGLE]
+#   $2 action/startup [INIT|CRON|SINGLE]
 #   $3 job id for a single job run (required when action = SINGLE)
 #
 # Actions taken:
@@ -14,10 +14,10 @@
 #   New pgsnapman data directory will be built.
 #
 # ACTION=CRON
-#   Downloads and prepares pgsql instance dump directories and scheduled jobs.
+#   Downloads and prepares pgsql instance dump directories and scheduled jobs (dump and restore).
 #
 # ACTION=SINGLE
-#   Downloads and prepares pgsql instance dump directories and single run jobs.
+#   Downloads and prepares pgsql instance dump directories and single run jobs (dump only).
 #
 #   1 connects to central configuration database
 #   2 reads which pg instances should be backed up by this host
@@ -44,6 +44,9 @@ while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symli
   [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
 done
 SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+
+# Skip logging without configured directory
+if [ "${ACTION}" == "INIT" ]; then LOGINIT="NO"; fi
 
 # Catalog database needed?
 PGSCDB_REQUIRED=YES
@@ -74,11 +77,13 @@ function initrootdir {
   # Create the central pgsnapman dump directory
   mkdir -p ${DUMPSNAP}
   mkdir -p ${DEDUPDATA}
-  mkdir -p ${ROOTDIR}/upload
-  mkdir -p ${ROOTDIR}/script
+  mkdir -p ${UPLOADDIR}
+  mkdir -p ${SCRIPTDIR}
   mkdir -p ${TEMPDIR}
-  mkdir -p ${LOG}
+  mkdir -p ${LOGDIR}
   echo "Done."
+
+  echo -n "${BUWORKERID}" > ${ROOTDIR}/workerid
 }
 
 # Install the new crontab
@@ -205,7 +210,7 @@ function createdumpjobs {
     local HASJOB=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT get_hasjob(${1}, '${line}');"`
     if [ "${HASJOB}" != "YES" ]; then
       echo "add database: ${fqdnhost}:${3}/${line}"
-      local jobid=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT put_dumpjob(${1}, '${line}', 'auto added dump job');"`
+      local jobid=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT put_dumpjob(${1}, '${line}', 'auto added dump job', '${AUTO_DUMPJOB_STATUS}');"`
       echo "new dump job created with id: ${jobid}"
       let "c = c + 1"
     fi
@@ -226,8 +231,9 @@ function getcronjobs {
       comment,status,jobtype, \
       pgsnap_worker_dns_name,pgsql_instance_dns_name,pgsql_instance_port,pgsql_instance_superuser,pgsnap_restorejob_id,dumpoptions \
     FROM vw_dumpjob_worker_instance \
-    WHERE pgsnap_worker_id = ${BUWORKERID} AND pgsql_instance_id = ${1} \
-      AND jobtype = 'CRON' \
+    WHERE pgsnap_worker_id = ${BUWORKERID} \
+      AND cron NOT LIKE '* * * * *'  \
+      AND pgsql_instance_id = ${1} \
     ORDER BY id" > ${2}/dumpjobs.list.temp
   mv ${2}/dumpjobs.list.temp ${2}/dumpjobs.list
 
@@ -253,6 +259,7 @@ function createcronjobs {
     echo "Creating cron jobs, processing: "$1/dumpjobs.list
   fi
   echo "# pgsnapman pgsnap_dump jobs for "`basename $1` >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
+  #cat $1/dumpjobs.list | grep -v "\* \* \* \* \*" | while read line; do
   while read line; do
     jobid=$(getfieldvalue "${line}" 1)
     pgsqlid=$(getfieldvalue "${line}" 3)
@@ -300,10 +307,13 @@ function createcronjobs {
     # If postgres version could not be determined there was an error, but it will emitted as a warning at this stage.
     # The database may be available at the scheduled time, so the dump tool will repeat this test.
     PRE=""
-    log "INFO" "job id ${jobid} - ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}"
-    echo "# INFO pgsnapman job id ${jobid} - ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp 
     # For active jobs, try to verify the database connection and postgresql version
+    if [ "${jobstatus}" == "HALTED" ]; then
+      log "WARNING" "job id ${jobid} - disabled by user (status HALTED): ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}"
+    fi
     if [ "${jobstatus}" == "ACTIVE" ]; then
+      echo "# INFO pgsnapman job id ${jobid} - ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp 
+      log "INFO" "job id ${jobid} - ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}"
       # Check postgres instance version
       pgversion=$(getpgversion "${pgsqlhost}" ${pgsqlport} ${pgsqlsuperuser} ${dbname})
       if [ "${pgversion}" == "" ]; then
@@ -319,20 +329,19 @@ function createcronjobs {
       if [ "${pgversion}" != "" ]; then
         if [ ! -e ${pgbin}/pg_dump ]; then
           PRE="# "
-          log "ERROR" "job id ${jobid} - job is disabled as pg_dump could not be found, check pgbinxx paths in config file ${CONFIGFILE})"
+          log "ERROR" "job id ${jobid} - job is disabled as pg_dump could not be found, check PGBINxx paths in config file ${CONFIGFILE})"
           echo "# ERROR pgsnapman job is disabled as pg_dump could not be found" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
         fi
       fi
-    fi
-    # Emit warning on halted jobs
-    if [ "${jobstatus}" == "HALTED" ]; then
-      PRE="# "
-      log "WARNING" "job id ${jobid} - disabled by user (status HALTED): ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}"
-      echo "# WARNING pgsnapman job is disabled by user" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
-    fi
+    # Probably better to leave them out, only good for debugging: emit warning on halted jobs
+#    else [ "${jobstatus}" == "HALTED" ]; then
+#      PRE="# "
+#      log "WARNING" "job id ${jobid} - disabled by user (status HALTED): ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}"
+#      echo "# WARNING pgsnapman job is disabled by user" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
     # Write cron entry
-    echo "${PRE}${cron} ${SCRIPTPATH}/pgsnap_dump ${pgsqlid}_${pgsqldns}_${pgsqlport} ${jobid} SILENT CRON" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
-    log "INFO" "job id ${jobid} - cron entry created: ${PRE}${cron} ${SCRIPTPATH}/pgsnap_dump ${pgsqlid}_${pgsqldns}_${pgsqlport} ${jobid} SILENT CRON"
+      echo "${PRE}${cron} ${SCRIPTPATH}/pgsnap_dump ${pgsqlid}_${pgsqldns}_${pgsqlport} ${jobid} SILENT CRON" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
+      log "INFO" "job id ${jobid} - cron entry created: ${PRE}${cron} ${SCRIPTPATH}/pgsnap_dump ${pgsqlid}_${pgsqldns}_${pgsqlport} ${jobid} SILENT CRON"
+    fi
   done < $1/dumpjobs.list
 }
 
@@ -395,12 +404,13 @@ function updatesinglejobconfig {
 
 # Get restore cron jobs for this backup worker 
 # restore jobs from dump catalog entries that are created by this worker (we don't have other data)
-# include all jobs, restore jobs always contact the catalog database to figure out if the job is halted or active
+# include all CRON jobs, restore jobs always contact the catalog database for their configuration
 function addrestorejobs {
   # Restore jobs (temp, will not be cached)
   talk "Checking for cron run dump jobs"
-  sql="select r.id as restore_id, c.id as catalog_id, r.cron, c.bu_name, c.starttime, r.dest_dbname, r.restoreschema, r.restoretype, r.restoreoptions from pgsnap_restorejob r join pgsnap_catalog c on r.pgsnap_catalog_id = c.id \
-    where r.jobtype = 'CRON' and c.bu_worker_id = ${BUWORKERID};"
+  sql="select r.id as restore_id, c.id as catalog_id, r.cron, c.bu_name, c.starttime, r.dest_dbname, r.restoreschema \
+    , r.restoretype, r.restoreoptions from pgsnap_restorejob r join pgsnap_catalog c on r.pgsnap_catalog_id = c.id \
+    where r.cron NOT LIKE '* * * * *' and c.bu_worker_id = ${BUWORKERID};"
   ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}" --output="${TEMPDIR}/$$.0.restorejobs.list"
   # Be talkative
   if [ "$VERBOSITY" == "VERBOSE" ]; then
@@ -413,22 +423,13 @@ function addrestorejobs {
   echo "# pgsnapman restore jobs" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
   local line
   while read line; do
-    echo "$(getfieldvalue "${line}" 3) ${SCRIPTPATH}/pgsnap_restore $(getfieldvalue "${line}" 1) $(getfieldvalue "${line}" 2) VERBOSE CRON" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
+    echo "$(getfieldvalue "${line}" 3) ${SCRIPTPATH}/pgsnap_restore $(getfieldvalue "${line}" 1) $(getfieldvalue "${line}" 2) SILENT CRON" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
   done < ${TEMPDIR}/$$.0.restorejobs.list
 }
 
 # ================================================================================
 # MAIN
 # ===============================================================================
-
-# Check if already running, quit if so, exit code 0 (its not an error).
-JOBID=0
-if [ "$(isjobrunning ${JOBID})" == "0" ]; then
-  lock ${JOBID} "${0} ${1} ${2} ${3} ${4} ${5}"
-else
-  cleanupexit 0
-fi
-
 # Tool log
 TOOL_LOG=${LOGDIR}/$$.pgsnap_cacheconfig.log 
 
@@ -449,6 +450,14 @@ elif [ "${ACTION}" == "INIT" ]; then
   installcrontab
 
   # And done
+  cleanupexit 0
+fi
+
+# Check if already running, quit if so, exit code 0 (its not an error).
+JOBID=0
+if [ "$(isjobrunning ${JOBID})" == "0" ]; then
+  lock ${JOBID} "${0} ${1} ${2} ${3} ${4} ${5}"
+else
   cleanupexit 0
 fi
 
