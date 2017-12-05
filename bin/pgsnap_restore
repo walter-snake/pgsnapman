@@ -329,7 +329,7 @@ function run_dir_restore {
     local ec=$(createdatabase ${RESTOREDB} ${tblspchandling})
     # if this fails, we'll bail out
     if [ "$ec" != "0" ]; then
-      errmsg="database creation failed for temp database ${RESTOREDB}"
+      msg="database creation failed for temp database ${RESTOREDB}"
       RESULT="ERROR"
       return
     fi
@@ -347,7 +347,7 @@ function run_dir_restore {
   if [ "$?" == "0" ]; then
     log "INFO" "processing - restore to temp database ${RESTOREDB} completed"
   else
-    errmsg="processing - restore to temp database ${RESTOREDB} failed, abort restore, trying to drop temp database"
+    msg="processing - restore to temp database ${RESTOREDB} failed, abort restore, trying to drop temp database"
     RESULT="ERROR"
     ec=$(dropdatabase "${RESTOREDB}")
     return
@@ -376,7 +376,7 @@ function run_dir_restore {
     fi
   fi  
   # end DATA exclusion
-  errmsg="finished restore of database $(getfieldvalue "${DBSETTINGS}" 1) -> ${dbname}"
+  msg="finished restore of database $(getfieldvalue "${DBSETTINGS}" 1) -> ${dbname}"
   RESULT="COMPLETED"
 }
 
@@ -390,7 +390,7 @@ function run_dir_restore {
 #   could potentially break integrity), this is handle lock function.
 
 errcode=0
-errmsg=""
+msg=""
 logstart 
 
 # Verify starttype
@@ -530,10 +530,10 @@ snaplog "INFO" "init - starting ${STARTTYPE} restore, job id [${JOBID}] from dum
 RESULT="ERROR"
 errcode=0
 if [ "${jobtype}" == "SINGLE" ]; then
-  errcode=$(setjobstatus "RESTORE" ${JOBID} "STARTED")
+  setjobstatus "RESTORE" ${JOBID} "HALTED"
 fi
 if [ $errcode -gt 0 ]; then
-  errmsg="aborted as job status could not be set, indicates a catalog database error"
+  msg="aborted as job status could not be set, indicates a catalog database error"
 else
   if [ "${dumptype}" == "DIR" ]; then
     run_dir_restore
@@ -541,7 +541,7 @@ else
     run_sql_restore
   fi
 fi
-logend "$RESULT" "$errmsg"
+logend "$RESULT" "$msg"
 
 # Normal end
 if [ "${RESULT}" == "ERROR" ]; then
@@ -549,3 +549,9 @@ if [ "${RESULT}" == "ERROR" ]; then
 else
   cleanupexit 0
 fi
+
+logend "$RESULT" "$msg"
+cleanupexit ${errcode}
+
+# EOF
+

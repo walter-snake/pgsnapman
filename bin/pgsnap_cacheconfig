@@ -378,6 +378,7 @@ function updatecronjobconfig {
 # Set up the job list for the single jobs that have to be executed (both dump and restore)
 function updatesinglejobconfig {
   local line
+  # cron = '* * * * *' is the clue to run a job on the minutely scheduler, only valid for SINGLE (RUN) JOBS
   local sql="SELECT id,pgsnap_worker_id,pgsql_instance_id,dbname,dumptype,dumpschema \
     ,cron,keep_daily,keep_weekly,keep_monthly,keep_yearly \
     ,comment,status \
@@ -385,15 +386,16 @@ function updatesinglejobconfig {
     ,pgsql_instance_superuser \
     ,pgsnap_restorejob_id,dumpoptions \
     FROM vw_dumpjob_worker_instance \
-    WHERE id NOT IN (select jobid from pgsnap_singlerun where jobclass = 'DUMP') \
-    AND pgsnap_worker_id = ${BUWORKERID} \
-    AND jobtype = 'SINGLE' \
+    WHERE cron = '* * * * *' \
+      AND jobtype = 'SINGLE' \
+      AND status = 'ACTIVE' \
+      AND pgsnap_worker_id = ${BUWORKERID} \
     ORDER BY id;"
-  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}" > ${TEMPDIR}/${SINGLERUNPID}.singledumpjobs.list
+  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}" > ${TEMPDIR}/${SINGLERUNPID}.0.singledumpjobs.list
   c=0
   while read line; do
     let "c = c + 1"
-  done < ${TEMPDIR}/${SINGLERUNPID}.singledumpjobs.list
+  done < ${TEMPDIR}/${SINGLERUNPID}.0.singledumpjobs.list
   if [ $c -eq 0 ]; then
     local result=NO
   else
@@ -475,6 +477,7 @@ if [ "${ACTION}" == "CRON" ]; then
   installcrontab
 elif [ "${ACTION}" == "SINGLE" ] &&  [ "${SINGLERUNPID}" == "" ]; then
   # Error condition
+  talk "ERROR can not run in SINGLE mode without SINGLERUNPID"
   snaplog "ERROR" "can not run in SINGLE mode without SINGLERUNPID"
   cleanupexit 1
 elif [ "${ACTION}" == "SINGLE" ]; then

@@ -3,6 +3,8 @@
 # pgsnap_singlejob Checks for jobs marked as single run, downloads configuration and starts the jobs.
 #
 # $1 verbosity [VERBOSE|SILENT]
+# $2 job type (optional)
+# $3 job id (optional)
 
 # ======================================
 # Initialization
@@ -41,7 +43,7 @@ LOGINIT=NO
 # Start dump jobs
 function startdumpjobs {
   local line
-  local jobfile=${TEMPDIR}/$$.singledumpjobs.list
+  local jobfile=${TEMPDIR}/$$.0.singledumpjobs.list
   while read line; do
     jobid=$(getfieldvalue "${line}" 1)
     pgsqlid=$(getfieldvalue "${line}" 3)
@@ -75,7 +77,7 @@ function startdumpjobs {
       echo "dbname:         ${dbname}"
       echo "butype:         ${butype}"
       echo "schema:         ${schema}"
-      echo "cron:           ${cron} (SINGLE mode: ignored)"
+      echo "cron:           ${cron}"
       echo "job status:     ${jobstatus}"
       echo "job type:       ${jobtype}"
       echo "dump options:   ${dumpoptions}"
@@ -85,10 +87,7 @@ function startdumpjobs {
       echo ""
     fi
 
-    # Start the dump, in the background, and it should never start again, so we immediately mark it in the database
-    # A job might (much) run longer than the interval between checks for jobs, can't use the catalog as the catalog
-    # data could be uploaded much later, so immediately mark it in the database as started.
-    setsinglerunstarted ${jobid} "DUMP"
+    # Start the dump, use this job's pid as key to the job list
     ${SCRIPTPATH}/pgsnap_dump ${pgsqlid}_${pgsqlhost}_${pgsqlport} ${jobid} ${VERBOSITY} SINGLE $$ &
   done < ${jobfile}
 }
@@ -98,7 +97,7 @@ function startrestorejobs {
   while read line; do
     talk "single restore job ids: ${line}"
     ${SCRIPTPATH}/pgsnap_restore "$(getfieldvalue "${line}" 1)" "$(getfieldvalue "${line}" 2)" ${VERBOSITY} SINGLE &
-  done < ${TEMPDIR}/$$.singlerestorejobs.list
+  done < ${TEMPDIR}/$$.0.singlerestorejobs.list
 }
 
 # =======================================
@@ -113,6 +112,18 @@ if [ "$(isjobrunning ${JOBID})" == "0" ]; then
 else
   cleanupexit 0
 fi
+
+# Check if anything to do
+if [ "${3}" == "" ]; then
+  id="%"
+else
+  id=${3}
+fi
+
+if [[ ! ${id} =~ ^[%0-9]*$ ]]; then
+  talk "id format not correct (empty, % or number)":
+  exit 1
+fi 
 
 # Display information
 if [ "$VERBOSITY" == "VERBOSE" ]; then
@@ -135,25 +146,38 @@ if [ "$VERBOSITY" == "VERBOSE" ]; then
   echo "  port: ${PGSCPORT}"
   echo "  user: ${PGSCUSER}"
   echo ""
+  echo "Specific job type:        ${2}"
+  echo "Specific id:              ${id}"
+  echo ""
   echo "Postgres instances managed by pgsnapman:"
   echo "id|dns_name|pgport|comment|status|pgsuperuser|bu_window_start|bu_window_end|pgsql_worker_id_default"
   cat $ROOTDIR/pg_instances.list
   echo ""
 fi
 
-# Check if anything to do
-
 # DUMP jobs
-talk "Checking for single run dump jobs"
-sql="select count(*) from vw_dumpjob_worker_instance where pgsnap_worker_id = ${BUWORKERID} and jobtype = 'SINGLE' \
-  and id not in (select jobid from pgsnap_singlerun where jobclass = 'DUMP');"
-c=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}"`
-if [ $c -gt 0 ]; then
-  talk "Starting cacheconfig to download single run configuration data"
-  ${SCRIPTPATH}/pgsnap_cacheconfig SILENT SINGLE $$
-  # Start the dumps
-  snaplog "INFO" "single dump jobs found, starting"
-  startdumpjobs
+c=0
+if [ "${2}" != "RESTORE" ]; then
+  talk "Checking for single run dump jobs"
+  sql="select count(*) from vw_dumpjob_worker_instance \
+    where pgsnap_worker_id = ${BUWORKERID} \
+      and jobtype = 'SINGLE' \
+      and status = 'ACTIVE' \
+      and cron = '* * * * *' \
+      and id::text like '${id}';"
+  c=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}"`
+  if [ $c -eq 0 ]; then
+    talk "Nothing to do"
+  else
+    # Need to download config data, as new pgsql instances may be added
+    talk "Starting cacheconfig to download list of single run jobs, as well as configure the data store for new pgsql instances"
+    ${SCRIPTPATH}/pgsnap_cacheconfig SILENT SINGLE $$
+    # Start the dumps
+    talk "Start the dump jobs..."
+    snaplog "INFO" "single dump jobs found, starting"
+    startdumpjobs
+  fi
+  talk ""
 fi
 
 # Be careful: do not clean up the dumpjob file, as it will be used by the pgsnap_dump script, and we don't know
@@ -161,13 +185,25 @@ fi
 
 
 # RESTORE jobs
-talk "Checking for single run dump jobs"
+c=0
+if [ "${2}" != "DUMP" ]; then
+talk "Checking for single run restore jobs"
 sql="select r.id as restore_id, c.id as catalog_id from pgsnap_restorejob r join pgsnap_catalog c on r.pgsnap_catalog_id = c.id \
-    where r.status = 'ACTIVE' and r.jobtype = 'SINGLE' and c.bu_worker_id = ${BUWORKERID} \
-    and r.id not in (select jobid from pgsnap_singlerun where jobclass = 'RESTORE');"
-${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}" --output="${TEMPDIR}/$$.singlerestorejobs.list"
-# Start the restores
-snaplog "INFO" "single restore jobs found, starting"
-startrestorejobs
+  where r.status = 'ACTIVE' \
+    and r.jobtype = 'SINGLE' \
+    and r.cron = '* * * * *' \
+    and r.id::text like '${id}'
+    and c.bu_worker_id = ${BUWORKERID};"
+  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}" --output="${TEMPDIR}/$$.0.singlerestorejobs.list"
+  if [ "`cat ${TEMPDIR}/$$.0.singlerestorejobs.list`" == "" ]; then
+    talk "Nothing to do"
+  else
+    # Start the restores
+    talk "Start the restore jobs..."
+    snaplog "INFO" "single restore jobs found, starting"
+    startrestorejobs
+  fi
+  talk ""
+fi
 
 cleanupexit 0

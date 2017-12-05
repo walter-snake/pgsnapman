@@ -456,9 +456,7 @@ CREATE TABLE pgsnap_dumpjob (
     CONSTRAINT pgsnap_dumpjob_dumptype_check CHECK ((dumptype = ANY (ARRAY['FULL'::text, 'SCHEMA'::text, 'CLUSTER_SCHEMA'::text, 'SCRIPT'::text, 'CLUSTER'::text]))),
     CONSTRAINT pgsnap_dumpjob_jobtype_check CHECK ((jobtype = ANY (ARRAY['REPEAT'::text, 'SINGLE'::text]))),
     CONSTRAINT pgsnap_dumpjob_pgsnap_restorejob_id_check CHECK ((pgsnap_restorejob_id ~ '^[0-9,]*$'::text)),
-    CONSTRAINT pgsnap_dumpjob_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text, 'STARTED'::text]))),
-    CONSTRAINT pgsnap_dumpjob_status_check1 CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text, 'HASRUN'::text]))),
-    CONSTRAINT pgsnap_dumpjob_status_check2 CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text, 'STARTED'::text, 'HASRUN'::text])))
+    CONSTRAINT pgsnap_dumpjob_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
 );
 
 
@@ -698,7 +696,8 @@ CREATE TABLE pgsnap_restorejob (
     CONSTRAINT pgsnap_restorejob_existing_db_check CHECK ((existing_db = ANY (ARRAY['DROP'::text, 'RENAME'::text, 'DROP_BEFORE'::text]))),
     CONSTRAINT pgsnap_restorejob_jobtype_check CHECK ((jobtype = ANY (ARRAY['SINGLE'::text, 'REPEAT'::text, 'TRIGGER'::text]))),
     CONSTRAINT pgsnap_restorejob_restoreschema_check CHECK ((length(restoreschema) > 0)),
-    CONSTRAINT pgsnap_restorejob_restoretype_check CHECK ((restoretype = ANY (ARRAY['FULL'::text, 'DATA'::text, 'SCHEMA'::text])))
+    CONSTRAINT pgsnap_restorejob_restoretype_check CHECK ((restoretype = ANY (ARRAY['FULL'::text, 'DATA'::text, 'SCHEMA'::text]))),
+    CONSTRAINT pgsnap_restorejob_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
 );
 
 

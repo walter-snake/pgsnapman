@@ -19,7 +19,7 @@ function lock {
 # $1 error code
 function cleanupexit {
   # Remove temp files, including lock
-  rm -f ${TEMPDIR}/$$.*
+  rm -f ${TEMPDIR}/$$.*.${TOOLNAME}*
   exit $1
 }
 
@@ -222,17 +222,16 @@ function getdbsize {
 # Mark a single run job as halted in the database
 # $1 job class/type [DUMP|RESTORE]
 # $2 job id
-# $3 job status [HALTED|ACTIVE|STARTED|HASRUN]
+# $3 job status [HALTED|ACTIVE]
 function setjobstatus {
-#  local sql="SELECT put_singlerun($1, '$2')"
   local sql
-  if [ "${2}" == "DUMP" ]; then
+  if [ "${1}" == "DUMP" ]; then
     sql="SELECT set_dumpjobstatus($2, '$3');"
   else
     sql="SELECT set_restorejobstatus($2, '$3');"
   fi
   ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" > /dev/null
-  echo $?
+  errcode=$?
 }
 
 # Verify and write upload data for the catalog database
