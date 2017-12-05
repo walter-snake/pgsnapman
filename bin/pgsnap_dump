@@ -155,63 +155,6 @@ function dumpdbsettings {
 # $1 path to postgres instance snapshot root directory
 # $2 id of job to start
 function startpgsnapjob {
-  if [ "${STARTTYPE}" == "CRON" ]; then
-    local dumpjobs=${DUMPSNAP}/${1}/dumpjobs.list
-  else
-    local dumpjobs=${TEMPDIR}/${SINGLERUNPID}.0.singledumpjobs.list
-  fi
-  snaplog "INFO" "configuration - reading job info from ${dumpjobs} [$2]"
-  row="$(findrow ${dumpjobs} ${2})"
-  if [ "${row}" == "" ]; then
-    RETVAL="JOB_NOT_FOUND"
-    return
-  fi
-  jobid=$(getfieldvalue "${row}" 1)
-  # retrieve worker from cache (we might not have been able to contact the database)
-  BUWORKERID=$(getfieldvalue "${row}" 2)
-  pgsqlid=$(getfieldvalue "${row}" 3)
-  pgsqlhost=$(getfieldvalue "${row}" 16)
-  pgsqlport=$(getfieldvalue "${row}" 17)
-  pgsqlsuperuser=$(getfieldvalue "${row}" 18)
-  dbname=$(getfieldvalue "${row}" 4)
-  butype=$(getfieldvalue "${row}" 5)
-  schema=$(getfieldvalue "${row}" 6)
-  cron=$(getfieldvalue "${row}" 7)
-  jobstatus=$(getfieldvalue "${row}" 13)
-  jobtype=$(getfieldvalue "${row}" 14)
-  restorejobid=$(getfieldvalue "${row}" 19)
-  dumpoptions=$(getfieldvalue "${row}" 20)
-  # Set schema_part for the dump name, NOTE special exception:
-  # when butype is set to SCRIPT, we want to ignore the schema field.
-  if [ "${schema}" == "*" ] || [ "${butype}" == "SCRIPT" ]; then
-    schema_part=""
-  else
-    dumpoptions="--schema=\"${schema}\" ${dumpoptions}"
-    schema_part=".${schema}"
-  fi
-
-  # Resolve host
-  pgsqlhost=$(resolvepghost ${pgsqlhost})
-
-  # Display a lot of data in verbose mode
-  if  [ "$VERBOSITY" == "VERBOSE" ]; then
-    echo "PgSnapDump job data configuration"
-    echo "jobid:          ${jobid}"
-    echo "pg id:          ${pgsqlid}"
-    echo "pg host:        ${pgsqlhost}"
-    echo "pg port:        ${pgsqlport}"
-    echo "pg superuser:   ${pgsqlsuperuser}"
-    echo "dbname:         ${dbname}"
-    echo "butype:         ${butype}"
-    echo "schema:         ${schema}"
-    echo "cron:           ${cron}"
-    echo "job status:     ${jobstatus}"
-    echo "job type:       ${jobtype}"
-    echo "dump options:   ${dumpoptions}"
-    echo "restore job id: ${restorejobid}"
-    echo ""
-  fi
-
   # Determine job type, as naming schema's differ, also set --schema-only flag if required
   if [ "${butype}" == "CLUSTER_SCHEMA" ]; then
     jobdir=${DUMPSNAP}/${1}/${jobid}_cluster.schema
@@ -228,7 +171,7 @@ function startpgsnapjob {
   # Set logfile
   TOOL_LOG=${jobdir}.log
 
-  # Get timestamp, backup name, postgres version
+  # Get filename, postgres version
   buname=${jobid}_${dbname}${schema_part}_${butype}_`date '+%Y%m%dT%H%M%S'`
   log "INFO" "job id ${jobid} - ${jobtype} backup ${buname}"
   # Check postgres server version and binary availability 
@@ -359,8 +302,8 @@ if [ "$VERBOSITY" == "VERBOSE" ]; then
 fi
 
 # Break out when pgsql instance for this job is halted
-if [ "${INSTANCESTATUS}" == "HALTED" ] && [ "${STARTTYPE}" == "CRON" ]; then
-  snaplog "WARNING" "abandon job - pgsql_instance halted [`basename ${PGSQLID}`]"
+if [ "${INSTANCESTATUS}" == "HALTED" ]; then
+  snaplog "WARNING" "abandon job - pgsql instance halted [`basename ${PGSQLID}`]"
   cleanupexit 0
 fi
 
@@ -375,6 +318,8 @@ snaplog "INFO" "configuration - reading job info from ${jobfile} [$JOBID]"
 row="$(findrow ${jobfile} ${2})"
 # Check if we have the required job info, otherwise stop
 if [ "${row}" == "" ]; then
+  talk "ERROR configuration - pgsql_instance.job [`basename ${PGSQLID}`].[${JOBID}] not found in ${STARTTYPE} job list"
+  snaplog "ERROR" "configuration - pgsql_instance.job [`basename ${PGSQLID}`].[${JOBID}] not found in ${STARTTYPE} job list"
   cleanupexit 1
 fi
 # Read job data
@@ -404,6 +349,12 @@ fi
 # Resolve host
 pgsqlhost=$(resolvepghost ${pgsqlhost})
 
+# In case of JOB type SINGLE (NOT STARTUP TYPE!), the status MUST be read from the server
+if [ "${jobtype}" == "SINGLE" ]; then
+  # get status from server
+  jobstatus=$(getjobstatus "DUMP" "${JOBID}")
+fi
+
 # Display a lot of data in verbose mode
 if  [ "$VERBOSITY" == "VERBOSE" ]; then
   echo "PgSnapDump job data configuration"
@@ -417,31 +368,37 @@ if  [ "$VERBOSITY" == "VERBOSE" ]; then
   echo "butype:         ${butype}"
   echo "schema:         ${schema}"
   echo "cron:           ${cron}"
-  echo "job status:     ${jobstatus}"
-  echo "job type:       ${jobtype}"
+  echo -n "job status:     ${jobstatus}"
+  if [ "${jobtype}" == "SINGLE" ]; then echo -n " (SINGLE job: retrieved from server)"; fi
+  echo -e "\njob type:       ${jobtype}"
   echo "dump options:   ${dumpoptions}"
   echo "restore job id: ${restorejobid}"
   echo ""
 fi
 # -----------------------------------------------
 
-# Start psql or pg_restore operation, set job status to started in case of a SINGLE run job
+# Quit when status is halted and job type is single
+if [ "${jobtype}" == "SINGLE" ] && [ "${jobstatus}" == "HALTED" ]; then
+  msg="aborted as job has already run, which is normal, so this message will not be logged"
+  talk "${msg}"
+  cleanupexit 0
+fi
+
+# Set job status to started in case of a SINGLE run job (job TYPE, not STARTUP type)
+# Both on cron and as single job
+# This MUST succeed (otherwise risk of running job over and over again)
+errcode=0
 if [ "${jobtype}" == "SINGLE" ]; then
+  # sets errcode
   setjobstatus "DUMP" ${JOBID} "HALTED"
 fi
-echo ${errcode}
-exit
 if [ $errcode -gt 0 ]; then
   msg="aborted as job status could not be set, indicates a catalog database error"
+  snaplog "ERROR" "${msg}"
+  cleanupexit 1
 else
   # Start the dumpjob
   startpgsnapjob ${PGSQLID} ${JOBID}
-fi
-
-# Check results, log status etc.
-if [ "${RETVAL}" == "JOB_NOT_FOUND" ]; then
-  snaplog "ERROR" "configuration - pgsql_instance.job [`basename ${PGSQLID}`].[${JOBID}] not found in ${STARTTYPE} job list"
-  cleanupexit 1
 fi
 
 if [ "$VERBOSITY" == "VERBOSE" ]; then

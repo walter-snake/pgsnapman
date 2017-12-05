@@ -55,6 +55,15 @@ $_$;
 
 
 --
+-- Name: get_dumpjobstatus(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION get_dumpjobstatus(jobid integer) RETURNS text
+    LANGUAGE sql
+    AS $_$select status from pgsnap_dumpjob where id = $1;$_$;
+
+
+--
 -- Name: get_globalacl(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -263,6 +272,15 @@ CREATE FUNCTION get_pgsnap_worker_uploadcron(workerid integer) RETURNS text
 CREATE FUNCTION get_pgsql_instance_id(dns_name text, pgport integer) RETURNS integer
     LANGUAGE sql
     AS $_$select id from pgsql_instance where dns_name = $1 and pgport = $2;$_$;
+
+
+--
+-- Name: get_restorejobstatus(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION get_restorejobstatus(jobid integer) RETURNS text
+    LANGUAGE sql
+    AS $_$select status from pgsnap_restorejob where id = $1;$_$;
 
 
 --

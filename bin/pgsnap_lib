@@ -234,6 +234,22 @@ function setjobstatus {
   errcode=$?
 }
 
+# Get the job status from the server, latest state
+# $1 job class/type [DUMP|RESTORE]
+# $2 job id
+# Returns jobstatus (text)
+function getjobstatus {
+  local sql
+  if [ "${1}" == "DUMP" ]; then
+    sql="SELECT get_dumpjobstatus($2);"
+  else
+    sql="SELECT get_restorejobstatus($2);"
+  fi
+  local js
+  js=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "$sql" 2> /dev/null`
+  echo "${js}"
+}
+
 # Verify and write upload data for the catalog database
 # Checks format based on file name pattern (destination table) and regular expression
 # $1 datarow (pgsql copy format)
