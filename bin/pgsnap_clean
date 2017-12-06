@@ -42,7 +42,7 @@ fi
 # =======================================
 
 # Retrieve all jobs with catalog entries, and retention info from the jobs table.
-# writes a temp file ${TEMPDIR}/$$.catalogjobinfo.list
+# writes a temp file ${TEMPDIR}/$$.0.catalogjobinfo.list
 # (no parameters)
 function getcatalogjobinfo {
   # Obtain retention policy values for deleted jobs
@@ -57,7 +57,7 @@ function getcatalogjobinfo {
     from pgsnap_catalog c \
     left join pgsnap_dumpjob j \
       on j.id = c.pgsnap_dumpjob_id;"
-  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" -A -t -F '|' > ${TEMPDIR}/$$.catalogjobinfo.list
+  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" -A -t -F '|' > ${TEMPDIR}/$$.0.catalogjobinfo.list
 }
 
 # Removes an entry from the catalog list
@@ -107,9 +107,11 @@ function cleanupjob {
       # Possibly slow when cleaning up tons of backups, as files will be checked multiple times. But, this is
       # only the case when there are indeed many links, and typically when cleaning on a daily basis, it is the
       # faster solution, as only a handful of probably non-identical database dumps will be cleaned (one per database).
-      # 1. Clean up dedup store first, as it requires the .chksum file
+      # 1. Remove the data files (step 1), still keeping the chksum etc
+      rm -rf ${path}/*.dat*
+      # 2. Clean up dedup store
       dedupstore_clean ${checksumfile}
-      # 2. Now remove the files
+      # Remove everything else
       rm -rf ${path}*
     fi
     # Remove the entry from the catalog db altogether
@@ -161,6 +163,7 @@ function isrestorerunning {
 # Verify a single data file in the dedupstore, check if it can be removed.
 # $1 file with checksums (1st column) to verify and clean if no links are present anymore
 function dedupstore_clean {
+  local rmfile
   local line
   if [ ! -e "${1}" ]; then
     return
@@ -169,15 +172,19 @@ function dedupstore_clean {
   if [ "${VERBOSITY}" == "VERBOSE" ]; then
     echo "INFO processing dedupdata: $1"
     echo "INFO searching for links"
-    echo "* dedup store file marked for removal"
+    echo "------------------------------------"
+    echo "Checked files (* marked for removal)"
   fi
+  # Create new empty temo file to store files to remove in
+  echo -n "" > ${TEMPDIR}/$$.0.datafiles.rm
+  # Build list of files to remove
   while read line; do
-    chksum=`echo "${line}" | cut -d ' ' -f1`
+    chksum=$(getfieldvalue "${line}" 1 " ")
     local idxpath="$(getdedupindexedpath ${chksum})"
     ##echo "indexedpath: ${idxpath}"
     c=`find -L ${DUMPSNAP}/ -samefile ${idxpath} | wc -l | sed 's/ //g'`
     if [ $c -eq 0 ]; then
-      echo "$line" >> ${TEMPDIR}/$$.datafiles.rm
+      echo "$line" >> ${TEMPDIR}/$$.0.datafiles.rm
     fi
     if [ "${VERBOSITY}" == "VERBOSE" ]; then
       if [ $c -eq 0 ]; then
@@ -188,12 +195,14 @@ function dedupstore_clean {
     fi
   done < ${1}
 
-  # Go through list of files to remove
-  if [ -e "${TEMPDIR}/$$.datafiles.rm" ]; then
+  # Go through list of files to remove from dedupstore
+  if [ -e "${TEMPDIR}/$$.0.datafiles.rm" ]; then
     while read line; do
-      echo ${line}
-    done < ${TEMPDIR}/$$.datafiles.rm
-    rm -f ${TEMPDIR}/$$.datafiles.rm
+      chksum=$(getfieldvalue "${line}" 1 " ")
+      rmfile=$(getdedupindexedpath "${chksum}")
+      talk "* remove file: ${rmfile}"
+      rm -f "${rmfile}"
+    done < ${TEMPDIR}/$$.0.datafiles.rm
   fi
 }
 
@@ -217,8 +226,7 @@ function cleanupcatalog {
   # Go through results, clean up
   while read line; do
     cleanupjob $(getfieldvalue "${line}" 1) $(getfieldvalue "${line}" 2) $(getfieldvalue "${line}" 3) $(getfieldvalue "${line}" 4) $(getfieldvalue "${line}" 5) 
-  done < ${TEMPDIR}/$$.catalogjobinfo.list
-  rm -f ${TEMPDIR}/$$.catalogjobinfo.list
+  done < ${TEMPDIR}/$$.0.catalogjobinfo.list
 }
 
 # Full clean up of the deduplication store, forced by comparing link pointers with
@@ -226,22 +234,21 @@ function cleanupcatalog {
 function dedupstore_fullclean {
   local line
   # Check links to every file, as long as there's one, we leave it in place.
-  find ${DEDUPDATA}/* -type f > ${TEMPDIR}/$$.datafiles.list
+  find ${DEDUPDATA}/* -type f > ${TEMPDIR}/$$.0.datafiles.list
   if [ "$?" != 0 ]; then
-    echo "ERROR find errors occured"
+    talk "ERROR find errors occured"
     return
   fi
   tc=0
   lc=0
   log "INFO" "searching for links"
-  if [ "${VERBOSITY}" == "VERBOSE" ]; then
-    echo "*=marked for removal"
-  fi
+  talk "------------------------------------"
+  talk "Checked files (* marked for removal)"
   while read line; do
-    let "lc = lc + c"
     c=`find -L ${DUMPSNAP}/ -samefile ${line} | wc -l | sed 's/ //g'`
+    let "lc = lc + c"
     if [ $c -eq 0 ]; then
-      echo "$line" >> ${TEMPDIR}/$$.datafiles.rm
+      echo "$line" >> ${TEMPDIR}/$$.0.datafiles.rm
       let "tc = tc + 1"
     fi
     if [ "${VERBOSITY}" == "VERBOSE" ]; then
@@ -251,25 +258,28 @@ function dedupstore_fullclean {
         echo "  `basename ${line}` - link count: $c"
       fi
     fi
-  done < ${TEMPDIR}/$$.datafiles.list
+  done < ${TEMPDIR}/$$.0.datafiles.list
 
   # An extra check: if no links are found, nothing will be deleted. This makes it impossible
   # that files will be deleted when someone manually removed the links, 
   if [ $lc -eq 0 ]; then
+    talk "No links are found, we're not deleting anything as a precaution measure"
     log "WARNING" "no links are found, we're not deleting anything as a precaution measure"
     return
   fi
 
   # Check if anything to do, depending on batch mode or not asks for confirmation.
-  if [ ! -e ${TEMPDIR}/$$.datafiles.rm ]; then
+  if [ ! -e ${TEMPDIR}/$$.0.datafiles.rm ]; then
+    talk "Nothing to do"
     log "INFO" "nothing to do"
   else
     if [ "${BATCHMODE}" != "BATCH" ]; then
-      echo "Do you wish to remove $tc files?"
-      select yn in "Yes" "No"; do
+      while true; do
+        read -p "Do you wish to remove $tc files??" yn
         case $yn in
-          Yes ) break;;
-          No ) cleanupexit;;
+          [Yy]* ) break;;
+          [Nn]* ) cleanupexit;;
+          * ) echo "Please answer yes or no.";;
         esac
       done
     fi
@@ -277,15 +287,9 @@ function dedupstore_fullclean {
     log "INFO" "removing $tc files"
     while read line; do
       rm -f ${line} 
-    done < ${TEMPDIR}/$$.datafiles.rm
+    done < ${TEMPDIR}/$$.0.datafiles.rm
   fi
-
-  # Clean up temp files
-  rm -f ${TEMPDIR}/$$.datafiles.list
-  rm -f ${TEMPDIR}/$$.datafiles.rm
 }
-
-
 
 # =======================================
 # MAIN
@@ -327,9 +331,9 @@ if [ "$2" == "DEDUPCLEAN" ]; then
   dedupstore_fullclean
 else
   # Normal, scheduled maintenance mode
-  talk "Perform maintenance clean up per backup"
+  talk "Performing maintenance clean up by backup"
 
-  # Clean up temp files from previously running jobs (unclean exit, or just because we have to)
+  # Clean up temp files from previously running jobs (unclean exit, checks for running by pid)
   find ${TEMPDIR} -type f -name '*' | grep -v crontab >> ${TEMPDIR}/$$.0.clean_running.temp
   while read line; do
     chkpid=$(echo `basename $line` | cut -d '.' -f 1)
@@ -338,7 +342,6 @@ else
       rm -f $line
     fi
   done < ${TEMPDIR}/$$.0.clean_running.temp
-  rm -f ${TEMPDIR}/$$.0.clean_running.temp
 
   # Log file rotation
   filetimestamp=`date '+%Y%m%dT%H%M%S%z'`
@@ -352,10 +355,13 @@ else
 
   # Retention policy-cleaning
   cleanupcatalog
+
+  # Fire up verification job when in SILENT mode
+  if [ "${VERBOSITY}" == "SILENT" ]; then 
+    talk "Starting verification"
+    ${SCRIPTPATH}/pgsnap_verify ${VERBOSITY} &
+  fi
 fi
-
-# Fire up verification job
-talk "Starting verification"
-${SCRIPTPATH}/pgsnap_verify ${VERBOSITY} &
-
 cleanupexit 0
+
+

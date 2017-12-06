@@ -362,6 +362,15 @@ CREATE FUNCTION put_dumpjob(pgsnapworkerid integer, pgsqlinstanceid integer, dbn
 
 
 --
+-- Name: put_dumpjob(integer, integer, text, text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION put_dumpjob(pgsnapworkerid integer, pgsqlinstanceid integer, dbname text, schemaname text, comment text, status text) RETURNS integer
+    LANGUAGE sql
+    AS $_$insert into pgsnap_dumpjob (pgsnap_worker_id, pgsql_instance_id, dbname, dumpschema, comment, status) values ($1, $2, $3, $4, $5, $6) returning id;$_$;
+
+
+--
 -- Name: put_restorelog(integer, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -407,10 +416,10 @@ CREATE FUNCTION set_restorejobstatus(job_id integer, status text) RETURNS void
 
 
 --
--- Name: upd_restorelog(integer, text, text, text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: set_restorelog(integer, text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION upd_restorelog(logid integer, status text, message text, bupath text) RETURNS void
+CREATE FUNCTION set_restorelog(logid integer, status text, message text, bupath text) RETURNS void
     LANGUAGE sql
     AS $_$update pgsnap_restorelog set endtime=now()::timestamp with time zone, status=$2, message=$3, bu_path=$4 where id = $1; $_$;
 
@@ -442,6 +451,8 @@ CREATE TABLE pgsnap_catalog (
     pgversion text,
     bu_worker_id integer,
     message text,
+    pgsql_dns_name text,
+    pgsql_port integer,
     CONSTRAINT pgsnap_catalog_keep_check CHECK ((keep = ANY (ARRAY['NO'::text, 'YES'::text, 'AUTO'::text]))),
     CONSTRAINT pgsnap_catalog_status_check CHECK ((status = ANY (ARRAY['SUCCESS'::text, 'FAILED'::text, 'REMOVING'::text]))),
     CONSTRAINT pgsnap_catalog_verified_check CHECK ((verified = ANY (ARRAY['YES'::text, 'FAILED'::text, 'NO'::text])))
@@ -484,10 +495,10 @@ CREATE TABLE pgsnap_dumpjob (
 
 CREATE TABLE pgsql_instance (
     id integer NOT NULL,
-    dns_name text,
+    dns_name text NOT NULL,
     pgport integer,
     comment text,
-    pgsql_superuser text,
+    pgsql_superuser text DEFAULT 'postgres'::text,
     status text DEFAULT 'ACTIVE'::text,
     bu_window_start integer DEFAULT 2,
     bu_window_end integer DEFAULT 6,
@@ -586,6 +597,20 @@ CREATE VIEW dumpjob_compact AS
     vw_dumpjob_worker_instance.status,
     vw_dumpjob_worker_instance.pgsnap_restorejob_id AS restorejob
    FROM vw_dumpjob_worker_instance;
+
+
+--
+-- Name: instance_compact; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW instance_compact AS
+ SELECT pgsql_instance.id,
+    ((((pgsql_instance.pgsql_superuser || '@'::text) || pgsql_instance.dns_name) || ':'::text) || pgsql_instance.pgport) AS instance,
+    pgsql_instance.status,
+    pgsql_instance.bu_window_start AS def_start_hour,
+    pgsql_instance.bu_window_end AS def_end_hour,
+    pgsql_instance.pgsnap_worker_id_default AS default_worker
+   FROM pgsql_instance;
 
 
 --
@@ -804,38 +829,6 @@ ALTER SEQUENCE pgsnap_script_id_seq OWNED BY pgsnap_script.id;
 
 
 --
--- Name: pgsnap_singlerun; Type: TABLE; Schema: public; Owner: -; Tablespace: 
---
-
-CREATE TABLE pgsnap_singlerun (
-    id integer NOT NULL,
-    jobid integer NOT NULL,
-    jobclass text NOT NULL,
-    runtime timestamp with time zone DEFAULT now(),
-    CONSTRAINT pgsnap_singlerun_jobclass_check CHECK ((jobclass = ANY (ARRAY['DUMP'::text, 'RESTORE'::text])))
-);
-
-
---
--- Name: pgsnap_singlerun_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE pgsnap_singlerun_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: pgsnap_singlerun_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE pgsnap_singlerun_id_seq OWNED BY pgsnap_singlerun.id;
-
-
---
 -- Name: pgsnap_worker_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -1000,13 +993,6 @@ ALTER TABLE ONLY pgsnap_script ALTER COLUMN id SET DEFAULT nextval('pgsnap_scrip
 -- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY pgsnap_singlerun ALTER COLUMN id SET DEFAULT nextval('pgsnap_singlerun_id_seq'::regclass);
-
-
---
--- Name: id; Type: DEFAULT; Schema: public; Owner: -
---
-
 ALTER TABLE ONLY pgsnap_worker ALTER COLUMN id SET DEFAULT nextval('pgsnap_worker_id_seq'::regclass);
 
 
@@ -1063,14 +1049,6 @@ ALTER TABLE ONLY pgsnap_restorelog
 
 ALTER TABLE ONLY pgsnap_script
     ADD CONSTRAINT pgsnap_script_pkey PRIMARY KEY (id);
-
-
---
--- Name: pgsnap_singlerun_pkey; Type: CONSTRAINT; Schema: public; Owner: -; Tablespace: 
---
-
-ALTER TABLE ONLY pgsnap_singlerun
-    ADD CONSTRAINT pgsnap_singlerun_pkey PRIMARY KEY (id);
 
 
 --

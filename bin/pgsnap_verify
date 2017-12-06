@@ -41,7 +41,6 @@ function verifybackupselection {
   local lines=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}"`
   local id
   local bupath
-  local msg
   local pgversion
   local pgbin
   for line in ${lines}; do
@@ -61,12 +60,12 @@ function verifybackupselection {
       setcatalogstatus "${id}" "SUCCESS"
     else
       talk "-> FAILED"
-      msg="backup `basename ${bupath}` reported SUCCESS, verification reported ERROR"
+      MSG="backup `basename ${bupath}` reported SUCCESS, verification reported ERROR"
       # log message 
       log "CRITICAL" "# verified with errors: [$id] [`basename ${bupath}`]"
-      snaplog "CRITICAL" "${msg}"
+      snaplog "CRITICAL" "${MSG}"
       # also put a message in the database
-      preparecatalogdata "`date '+%Y%m%dT%H%M%S%z'`\tCRITICAL\t${TOOLNAME}\t${msg}\tVERIFY\t${id}" "${UPLOADDIR}/$$.pgsnap_verify.message.dat" "ADD" ""
+      preparecatalogdata "`date '+%Y%m%dT%H%M%S%z'`\tCRITICAL\t${TOOLNAME}\t${MSG}\tVERIFY\t${id}" "${UPLOADDIR}/$$.pgsnap_verify.message.dat" "ADD" ""
       # set catalog status
       setcatalogstatus "${id}" "FAILED"
     fi

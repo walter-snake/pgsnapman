@@ -1,0 +1,29 @@
+create role aapje login;
+create role nootje login;
+create role "Visje" login;
+
+create database pgsdump1 with owner aapje;
+create database pgsdump2 with owner nootje;
+create database "PgsDump3" with owner "Visje";
+
+\c pgsdump1
+create table aap (id serial, naam text);
+insert into aap (naam) values ('jan'), ('piet');
+
+\c pgsdump2
+create schema noot authorization "nootje";
+create table noot.boom (id serial, naam text);
+alter table noot.boom owner to "nootje";
+insert into noot.boom (naam) values ('klaas'), ('marie');
+grant usage on schema noot to aapje;
+grant select on noot.boom to aapje;
+
+create schema "Mies";
+create table "Mies".roos (id serial, naam text);
+insert into "Mies".roos (naam) values ('iris'), ('piet');
+
+\c "PgsDump3"
+create table "Vis" (id serial, naam text);
+alter table "Vis" owner to "Visje";
+insert into "Vis" (naam) values ('jan'), ('piet');
+

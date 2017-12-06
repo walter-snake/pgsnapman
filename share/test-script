@@ -40,7 +40,7 @@ TOOLNAME=`basename $0`
 # $1: log level
 # $2: log message
 function snaplog {
-  echo "`date '+%Y%m%dT%H%M%S'` $1 ${TOOLNAME} ${2}" >> ${PGSNAPMANLOG}
+  echo "`date '+%Y%m%dT%H%M%S%z'` $1 ${TOOLNAME} ${2}" >> ${PGSNAPMANLOG}
 }
 
 # Write a log entry to the tool log
@@ -49,9 +49,9 @@ function snaplog {
 # $3: NEW: start new log
 function log {
   if [ "${3}" == "NEW" ]; then
-    echo "`date '+%Y%m%dT%H%M%S'` $1 ${TOOLNAME} ${2}" > ${TOOL_LOG}
+    echo "`date '+%Y%m%dT%H%M%S%z'` $1 ${TOOLNAME} ${2}" > ${TOOL_LOG}
   else
-    echo "`date '+%Y%m%dT%H%M%S'` $1 ${TOOLNAME} ${2}" >> ${TOOL_LOG}
+    echo "`date '+%Y%m%dT%H%M%S%z'` $1 ${TOOLNAME} ${2}" >> ${TOOL_LOG}
   fi
 }
 
@@ -65,7 +65,7 @@ function preparecatalogdata {
   local format=`echo "${2}" | awk -F '.' '{print $(NF-1)}'`
   # Verify the upload format using regular expression
   if [ "${format}" == "message" ]; then
-    if [ "`echo -e "${1}" | grep -E '^\d{8}T\d{6}\t((INFO|WARNING|ERROR|DEBUG))\t.+\t.*\t((CACHE_CONFIG|DUMP|RESTORE))\t-?\d+$'`" == "" ]; then
+    if [ "`echo -e "${1}" | grep -E '^\d{8}T\d{6}[+-]\d+\t((INFO|WARNING|ERROR|CRITICAL|DEBUG))\t.+\t.*\t((CACHE_CONFIG|DUMP|RESTORE|VERIFY))\t-?\d+$'`" == "" ]; then
       snaplog "ERROR" "message upload wrong format: $1"
       return
     fi
@@ -118,7 +118,7 @@ ec=$?
 # Toolname: script name (use ${TOOLNAME} or something else)
 # JobClass: [DUMP|RESTORE|DEDUP|CONFIG]
 # JobId: id of the pgsnapman job (use ${JOBID})
-preparecatalogdata "`date +'%Y%m%dT%H%M%S'`\tINFO\t${TOOLNAME}\tSome information that you want to log\tDUMP\t${JOBID}" "${UPLOADDIR}/$$.test-script.message.dat" NEW
+preparecatalogdata "`date +'%Y%m%dT%H%M%S%z'`\tINFO\t${TOOLNAME}\tSome information that you want to log\tDUMP\t${JOBID}" "${UPLOADDIR}/$$.test-script.message.dat" NEW
 
 # Uploading a catalog entry to the database (take good care of the format!)
 # -------------------------------------------------------------------
@@ -129,7 +129,7 @@ else
   jobresult=FAILED
   log "ERROR" "pg_dump did not run successfully, or not at all (or some more sensible info)"
   # Of course, you may also create a message entry in the catalog database: here
-  preparecatalogdata "`date +'%Y%m%dT%H%M%S'`\tERROR\t${TOOLNAME}\tpg_dump has not run (successfully)\tDUMP\t${JOBID}" "${UPLOADDIR}/$$.test-script.message.dat" NEW
+  preparecatalogdata "`date +'%Y%m%dT%H%M%S%z'`\tERROR\t${TOOLNAME}\tpg_dump has not run (successfully)\tDUMP\t${JOBID}" "${UPLOADDIR}/$$.test-script.message.dat" NEW
 fi
 # DBSIZE and SIZEONDISK: set as desired (integer, empty not allowed)
 DBSIZE=-1

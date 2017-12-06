@@ -1,22 +1,18 @@
 #!/bin/bash
 
-# pgsnap_dump: starts postgres dumps
-#                     must run on a backup node, with passwordless (.pgpass does the job) to all databases
-#                     should be backed up
+# pgsnap_dump: starts a single postgres dump operation
+#                     must run on a backup node, with passwordless superuser access (.pgpass does the job)
 #
-# $1 pgsql instance snapshot id <pginstanceid_pgdns_pgport>, resolves to snapshot/pgsqlinstance directory (must contain the job list)
+# $1 pgsql instance id <pginstanceid_pgdns_pgport>, resolves to snapshot/pgsqlinstance directory (must contain the job list)
 # $2 dump job id
-# $3 verbosity [VERBOSE|empty]
+# $3 verbosity [VERBOSE|SILENT]
 # $4 startup type [CRON|SINGLE]
-#      CRON will use the cached jobs in <snapshots>/<serverinstance>/dumpjobs.list
-#      SINGLE uses the jobs listed in <temp>/$5.0.singledumpjobs.list
-# $5 single run process id
+#      CRON will use cached job information in <snapshots>/<serverinstance>/dumpjobs.list
+#      SINGLE use temp cached information in <temp>/$5.0.singledumpjobs.list
+# $5 single run process id (for linking temp job info cache)
 #
-# Actions taken:
-#   1 reads configuration from locally cached data, so it isn't depending on the availability of the central database
-#   2 starts pg_dump and/or pg_dumpall
-# 
-# Actual backups are usually started by cron on this machine, but you may invoke it with a backup id at any time.
+# Actual backups are usually started by cron on this machine, but you may invoke it manually. This will override
+# HALTED jobs in CRON mode.
 
 # ======================================
 # Initialization
@@ -47,7 +43,7 @@ if [ "${STARTTYPE}" == "SINGLE" ] && [ "${SINGLERUNPID}" == "" ]; then
 fi
 
 # Catalog database needed? YES when running in SINGLE MODE, we must check if a job may start (job status ACTIVE)
-if [ "STARTTYPE" == "CRON" ]; then
+if [ "${STARTTYPE}" == "CRON" ]; then
   PGSCDB_REQUIRED=NO
 else
   PGSCDB_REQUIRED=YES
@@ -177,7 +173,8 @@ function startpgsnapjob {
   # Check postgres server version and binary availability 
   pgversion=$(getpgversion "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${dbname}")
   if [ "${pgversion}" == "" ]; then
-    log "ERROR" "job id ${jobid} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}"
+    MSG="job id ${jobid} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}"
+    log "ERROR" "${MSG}"
     ERRORS=1
   else
     eval pgbinvar=PGBIN${pgversion}
@@ -185,7 +182,8 @@ function startpgsnapjob {
   fi
   # check if pg dump exists
   if [ ! -e ${pgbin}/pg_dump ]; then
-    log "ERROR" "job id ${jobid} - job can not run - pg_dump not found, check PGBINxx paths in config file ${CONFIGFILE}"
+    MSG="job id ${jobid} - job can not run - pg_dump not found, check PGBINxx paths in config file ${CONFIGFILE}"
+    log "ERROR" "${MSG}"
     ERRORS=1
   else
   # Cluster schema dump
@@ -198,7 +196,8 @@ function startpgsnapjob {
       if [ "$?" == "0" ]; then
         log "INFO" "job id ${jobid} - finished pg_dumpall (cluster schema) for ${buname}${ext}"
       else
-        log "ERROR" "job id ${jobid} - errors occured during pg_dumpall (cluster schema) for ${buname}${ext}"
+        MSG="job id ${jobid} - errors occured during pg_dumpall (cluster schema) for ${buname}${ext}"
+        log "ERROR" "${MSG}"
         ERRORS=1
       fi
     elif  [ "${butype}" == "SCRIPT" ]; then
@@ -215,7 +214,8 @@ function startpgsnapjob {
         ${SCRIPTDIR}/${scriptname} ${TEMPDIR}/$$.scriptinit.temp >> ${jobdir}/${buname}.log
         local ec=$?
         if [ "$ec" != "0" ]; then
-          log "ERROR" "job id ${jobid} - script exited with code ${ec} for ${jobdir}/${buname}"
+          MSG="job id ${jobid} - script exited with code ${ec} for ${jobdir}/${buname}"
+i         log "ERROR" "${MSG}"
           ERRORS=1
         fi
       fi
@@ -224,7 +224,8 @@ function startpgsnapjob {
       # Tablespaces, users
       ${pgbin}/pg_dumpall ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} -l ${dbname} --globals-only -f ${jobdir}/${buname}.cluster_globals.sql -v 2>> ${jobdir}/${buname}.log
       if [ "$?" != "0" ]; then
-        log "ERROR" "job id ${jobid} - errors occured during pg_dumpall (globals): ${buname}"
+        MSG="job id ${jobid} - errors occured during pg_dumpall (globals): ${buname}"
+        log "ERROR" "${MSG}"
         ERRORS=1
       fi
       # Database settings
@@ -235,13 +236,15 @@ function startpgsnapjob {
       snaplog "INFO" "dumping - ${pgbin}/pg_dump ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} ${schemaonly} -Fd -f ${jobdir}/${buname} -v ${dbname}"
       ${pgbin}/pg_dump ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} ${schemaonly} -Fd -f ${jobdir}/${buname} -v ${dbname} 2>>  ${jobdir}/${buname}.log
       if [ "$?" != "0" ]; then
-        log "ERROR" "job id ${jobid} - errors occured during pg_dump: ${buname}"
+        MSG="job id ${jobid} - errors occured during pg_dump: ${buname}"
+        log "ERROR" "${MSG}"
         ERRORS=1
       fi
-      # Extract schema sql, as a means of testing the dump
-      ${pgbin}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --schema-only -f /dev/null -v ${jobdir}/${buname} 2>>  ${jobdir}/${buname}.log
+      # Extract schema sql, as a quick test of the dump
+      ${pgbin}/pg_restore --schema-only -f /dev/null -v ${jobdir}/${buname} 2>>  ${jobdir}/${buname}.log
       if [ "$?" != "0" ]; then
-        log "ERROR" "job id ${jobid} - errors occured during schema creation from dump: ${buname}"
+        MSG="job id ${jobid} - errors occured during schema creation from dump: ${buname}"
+        log "ERROR" "${MSG}"
         ERRORS=1
       fi
     fi
@@ -261,9 +264,6 @@ function startpgsnapjob {
 # ================================================================================
 # MAIN
 # ===============================================================================
-RESULT="ERROR"
-errcode=0
-msg=""
 
 # Check if already running, quit if so, exit code 0 (its not an error).
 if [ "$(isjobrunning ${JOBID})" == "0" ]; then
@@ -326,13 +326,14 @@ fi
 jobid=$(getfieldvalue "${row}" 1)
 # SKIP BUWORKERID (if needed in case of a SINGLE job it would have been obtained from the catalog server)
 pgsqlid=$(getfieldvalue "${row}" 3)
-pgsqlhost=$(getfieldvalue "${row}" 16)
+pgsqlfqdn=$(getfieldvalue "${row}" 16)
 pgsqlport=$(getfieldvalue "${row}" 17)
 pgsqlsuperuser=$(getfieldvalue "${row}" 18)
 dbname=$(getfieldvalue "${row}" 4)
 butype=$(getfieldvalue "${row}" 5)
 schema=$(getfieldvalue "${row}" 6)
 cron=$(getfieldvalue "${row}" 7)
+comment=$(getfieldvalue "${row}" 12)
 jobstatus=$(getfieldvalue "${row}" 13)
 jobtype=$(getfieldvalue "${row}" 14)
 restorejobid=$(getfieldvalue "${row}" 19)
@@ -346,13 +347,21 @@ else
   schema_part=".${schema}"
 fi
 
-# Resolve host
-pgsqlhost=$(resolvepghost ${pgsqlhost})
+# Resolve host, keep original name for logging
+pgsqlhost=$(resolvepghost ${pgsqlfqdn})
 
 # In case of JOB type SINGLE (NOT STARTUP TYPE!), the status MUST be read from the server
 if [ "${jobtype}" == "SINGLE" ]; then
   # get status from server
-  jobstatus=$(getjobstatus "DUMP" "${JOBID}")
+  getjobstatus "DUMP" "${JOBID}"
+  if [ $ERRCODE -eq 0 ]; then
+    jobstatus=${RETVAL}
+  else
+    MSG="abort - job status for SINGLE job could not be obtained from server"
+    snaplog "ERROR" "${MSG}"
+    talk "${MSG}"
+    cleanupexit $ERRCODE
+  fi
 fi
 
 # Display a lot of data in verbose mode
@@ -361,13 +370,14 @@ if  [ "$VERBOSITY" == "VERBOSE" ]; then
   echo "job file:       ${jobfile}"
   echo "jobid:          ${jobid}"
   echo "pg id:          ${pgsqlid}"
-  echo "pg host:        ${pgsqlhost}"
+  echo "pg host:        ${pgsqlfqdn}"
   echo "pg port:        ${pgsqlport}"
   echo "pg superuser:   ${pgsqlsuperuser}"
   echo "dbname:         ${dbname}"
   echo "butype:         ${butype}"
   echo "schema:         ${schema}"
   echo "cron:           ${cron}"
+  echo "cron:           ${comment}"
   echo -n "job status:     ${jobstatus}"
   if [ "${jobtype}" == "SINGLE" ]; then echo -n " (SINGLE job: retrieved from server)"; fi
   echo -e "\njob type:       ${jobtype}"
@@ -379,28 +389,29 @@ fi
 
 # Quit when status is halted and job type is single
 if [ "${jobtype}" == "SINGLE" ] && [ "${jobstatus}" == "HALTED" ]; then
-  msg="aborted as job has already run, which is normal, so this message will not be logged"
-  talk "${msg}"
+  MSG="Aborted as job has already run"
+  talk "${MSG}"
   cleanupexit 0
 fi
 
 # Set job status to started in case of a SINGLE run job (job TYPE, not STARTUP type)
 # Both on cron and as single job
-# This MUST succeed (otherwise risk of running job over and over again)
-errcode=0
+# This MUST succeed in order to proceed (otherwise risk of running job over and over again)
+ERRCODE=0
 if [ "${jobtype}" == "SINGLE" ]; then
   # sets errcode
   setjobstatus "DUMP" ${JOBID} "HALTED"
 fi
-if [ $errcode -gt 0 ]; then
-  msg="aborted as job status could not be set, indicates a catalog database error"
-  snaplog "ERROR" "${msg}"
-  cleanupexit 1
-else
+if [ $ERRCODE -eq 0 ]; then
   # Start the dumpjob
   startpgsnapjob ${PGSQLID} ${JOBID}
+else
+  MSG="Aborted as job status could not be set, indicates a catalog database error"
+  snaplog "ERROR" "${MSG}"
+  cleanupexit 1
 fi
 
+# Process the results
 if [ "$VERBOSITY" == "VERBOSE" ]; then
   echo "Dump location:   ${jobdir}"
   echo "Dump name:       ${buname}${ext}"
@@ -419,13 +430,15 @@ if [ "${ERRORS}" == "1" ]; then
   DBSIZE=-1
   SIZEONDISK=-1
 else
+  # use comment as message
+  MSG=${comment}
   snaplog "INFO" "dump completed - pgsql_instance.job [`basename ${PGSQLID}`].[${JOBID}]"
   jobresult="SUCCESS"
 fi
 
 # Write catalog data file for upload, symlink in central upload dir
 copylog=${jobdir}/${buname}.catalog.dat
-preparecatalogdata "${2}\t${INITIMESTAMP}\t`date +'%Y%m%dT%H%M%S%z'`\t${jobresult}\t${buname}${ext}\t${jobdir}\t${DBSIZE}\t${SIZEONDISK}\t${dbname}\t${schema}\t${butype}\t${ext}\t${pgversion}\t${BUWORKERID}" "${copylog}" "NEW" "UPLOAD"
+preparecatalogdata "${2}\t${INITIMESTAMP}\t`date +'%Y%m%dT%H%M%S%z'`\t${jobresult}\t${buname}${ext}\t${jobdir}\t${DBSIZE}\t${SIZEONDISK}\t${dbname}\t${schema}\t${butype}\t${ext}\t${pgversion}\t${BUWORKERID}\t${MSG}\t${pgsqlfqdn}\t${pgsqlport}" "${copylog}" "NEW" "UPLOAD"
 
 # Next procedures, set exit code
 if [ "${jobresult}" == "FAILED" ]; then

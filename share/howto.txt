@@ -1,0 +1,94 @@
+PgSnapMan short manual
+----------------------
+
+= Dump jobs =
+
+Scheduled dump jobs run independently of the catalog database, based on the configuration that was downloaded the last time pgsnap_cacheconfig was run. The local configuration cache includes all jobs that do not have a cron schedule of '* * * * *'. Cron jobs are created for each and every dump job listed that is not in HALTED state.
+
+Jobs of type SINGLE will run only once: the first run will set the status to HALTED. A job of type SINGLE will NOT run when the catalog database cannot be contacted (the status must be set).
+
+Jobs that have a cron schedule of '* * * * *' and that are of type SINGLE run through the pgsnap_singlerun tool, which effectively is 'run as soon as possible'. Every time the pgsnap_singlerun tool is started, it checks for jobs, temporarily caches the '* * * * *' jobs of the SINGLE type, and subsequently starts pgsnap_dump from the temporary cache.
+
+== Manual runs ==
+You can run a dump job of type REPEAT from the commandline (on the pgsnapman worker), also on HALTED jobs. SINGLE type jobs will run only once. To start a dump job from the commandline, you must provide the code for the postgres source server, the job id, verbosity and make it look like you started it from the scheduler. Example:
+
+./pgsnap_dump 1_domitian_5432 213 VERBOSE CRON
+
+* pgsnap_dump: the pgsnap_dump tool
+* 1_domitian_5432 (<postgres_instance id>_<postgres_host_name>_<postgres_port>)
+* 213 (dump job id)
+* VERBOSE (or SILENT, which does never produce any output, you may check the exit code for failures)
+* CRON (only one option available for this task)
+
+== Adding dump jobs ==
+
+=== Automatic ===
+Dump jobs can be added automatically. When a postgresql instance has a default pgsnapman worker set, the config tool will check for new databases, and add jobs. They can be added in an ACTIVE state, or in HALTED state. See the config settings AUTO_DUMPJOB and AUTO_DUMPJOB_STATUS.
+
+=== Manually ====
+Jobs can also be entered manually, by adding a row to the pgsnap_dumpjob table. There are a few options to help you enter them quickly. You may use one of the 4 functions to quickly add a job, or make use of the default values for the pgsnap_dumpjob table. The only values that MUST be provided are: 
+* pgsnap_worker_id
+* pgsql_instance_id
+* dbname
+
+This will produce a database only full dump, at a daily schedule, the scheduled time will be set to a random time between the start and end hours of the backup window of the pgsql instance.
+
+Example using the most simple function, which puts the job on the default worker for this database:
+SELECT put_dumpjob(1, 'mydatabase', 'A demo entry');
+
+== Summary ==
+- all jobs that can be scheduled and run manually are cached (cron NOT '* * * * *')
+- for cached jobs the status (ACTIVE) determines if a job will be scheduled
+- SINGLE jobs run only once (no override, except resetting the status in the catalog database)
+- REPEAT jobs can be started manually
+
+= Restore jobs =
+
+Restore jobs can be run on the scheduler, pgsnap_cacheconfig will create cron entries for each job with a cron schedule that is not '* * * * *'. A one time only job can be scheduled for a specific time or run as soon as possible, depending on the pgsnap_singlerun schedule.
+
+When running from the commandline as a 'SINGLE' job, the restore job will always start, regardless of the status (this is a manual override of the HALTED status). When started as a 'CRON' job, it will honour the  'status' field, and run only when in 'ACTIVE' state.
+
+When the destination postgres instance is in HALTED state, the job will never run.
+
+ 
+
+Note that restore jobs always need the catalog database to run, the run configuration is not cached as it is with the dump jobs (more clear program flow, at the expense of a little less reliable because of the dependency on the database).
+
+= General notes =
+* The pgsnapman entries of the crontab for the user running pgsnapman user will be overwritten every time pgsnap_cacheconfig runs (it removes all entries containing 'pgsnap', all other entries will remain in place).
+* When the source postgres instance is in HALTED state, the job will never run.
+* When the worker is in HALTED state, no tool will ever run (also not dedup, clean, cacheconfig and upload).
+* Warning: a one-time scheduled job will ONLY run when its start time is set after the first run of the cache updater.
+
+
+= Setting it up =
+The quick start for the understanding user.
+
+1. create the pgsnapman (pgs) database and make sure the user that's going to run pgsnapman has passwordless access to the database
+2. create the root data dir (everything will be stored in here, unless you specific otherwise)
+3. edit the config file accordingly (especially, set the rootdir and your pgs database connection)
+4. register the worker in the pgs database
+5. initialize your rootdir
+  pgsnap_cacheconfig VERBOSE INIT
+
+6. enter instances and jobs in the pgs database
+7. perform the first run to add your instances and jobs
+  pgsnap_cacheconfig VERBOSE CRON
+8. verify the crontab contents, if you're curious:
+  crontab -l
+
+You may encounter that there may be more entries than you expected. If an instance has a default worker set, pgsnapman will by default add all the databases that it can connect to on an instance. If you set the AUTO_DUMPJOB_STATUS to HALTED, the jobs won't show up in the crontab, but they do in the pgs database.
+ 
+A first manual dump run of either one of the databases must be possible right now. Just copy the cron entry, and execute it, something like:
+  ./pgsnap_dump 1_local_5432 1 SILENT CRON
+
+This will take only a second or so, and within five minutes (or whatever you scheduled) the uploader should have sent the log entry to your catalog database. Verify that by querying the pgsnap_catalog, e.g.:
+  select * from catalog_compact;
+or the full thing:
+  select * from pgsnap_catalog;
+  
+One extra step would be to run the clean and verification tool (validation is actually a separate tool, but it will run just after cleaning up):
+  ./pgsnap_clean SILENT
+
+Now the 'verified' field in the catalog should say 'YES'. Verification runs a full restore through pg_restore, with the output to /dev/null. This effectively tells you that the entire dump could be read.
+

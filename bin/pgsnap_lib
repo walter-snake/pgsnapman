@@ -15,7 +15,7 @@ function lock {
   echo -n "${2}" > "${TEMPDIR}/$$.$1.${TOOLNAME}.lock"
 }
 
-# Exit, but with clean up
+# Exit, remove our own temp files
 # $1 error code
 function cleanupexit {
   # Remove temp files, including lock
@@ -36,8 +36,8 @@ function isjobrunning {
       if [ "$?" == "1" ]; then
         rm -f ${findresult}
       else
-        local msg="exit: job id ${1}.${TOOLNAME} appears to be running - pid ${chkpid}" 
-        snaplog "WARNING" "${msg}"
+        local MSG="exit: job id ${1}.${TOOLNAME} appears to be running - pid ${chkpid}" 
+        snaplog "WARNING" "${MSG}"
         ec=1
       fi
     done
@@ -80,20 +80,21 @@ function log {
 # Status info
 # -------------------------------------------------------------------
 
-# Gets pgsnap_worker id (quit on error if requested)
+# Sets the pgsnap_worker id (quit on error if requested)
 # Requires PGSCDB_REQUIRED to be set (before sourcing this library)
-function getworkerid {
-  local bwid=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');" 2> /dev/null`
-  if [ "$?" != "0" ] || [ "${bwid}" == "" ]; then
+# When db not required, we obtain the value from the cached data
+function setworkerid {
+  BUWORKERID=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');" 2> /dev/null`
+  if [ "$?" != "0" ] || [ "${BUWORKERID}" == "" ]; then
     if [ "${PGSCDB_REQUIRED}" == "NO" ]; then
-      ERROR=""
+      ERRCODE=0
       snaplog "WARNING" "init - could not connect to catalog database (ignored)"
+      BUWORKERID=`cat ${ROOTDIR}/workerid`
     else
-      ERROR="CON_FAILED"
+      ERRCODE=1
       snaplog "ERROR" "init - could not connect to catalog database (fatal)"
     fi
   fi
-  echo "${bwid}"
 }
 
 # Get the hostname, resolve 'local' connections
@@ -231,7 +232,7 @@ function setjobstatus {
     sql="SELECT set_restorejobstatus($2, '$3');"
   fi
   ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" > /dev/null
-  errcode=$?
+  ERRCODE=$?
 }
 
 # Get the job status from the server, latest state
@@ -247,7 +248,8 @@ function getjobstatus {
   fi
   local js
   js=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "$sql" 2> /dev/null`
-  echo "${js}"
+  ERRCODE=$?
+  RETVAL="${js}"
 }
 
 # Verify and write upload data for the catalog database
@@ -264,12 +266,12 @@ function preparecatalogdata {
   local format=`echo "${2}" | awk -F '.' '{print $(NF-1)}'`
   # Verify the upload format using regular expression
   if [ "${format}" == "catalog" ]; then
-    if [ "`echo -e "${1}" | grep -E '^\d+\t\d{8}T\d{6}[+-]\d+\t\d{8}T\d{6}[+-]\d+\t[A-Z]+\t[a-zA-Z0-9_\.\/]+\t[a-zA-Z0-9_\./]+\t-?\d+\t-?\d+\t.*\t.*\t.*\t.*\t.*\t\d+$'`" == "" ]; then
+    if [ "`echo -e "${1}" | grep -E '^\d+\t\d{8}T\d{6}[+-]\d+\t\d{8}T\d{6}[+-]\d+\t[A-Z]+\t[a-zA-Z0-9_\.\/]+\t[a-zA-Z0-9_\./]+\t-?\d+\t-?\d+\t.*\t.*\t.*\t.*\t.*\t\d+\t.*\t.*\t\d+$'`" == "" ]; then
       snaplog "ERROR" "catalog upload wrong format: $1"
       return
     fi
   elif [ "${format}" == "message" ]; then
-    if [ "`echo -e "${1}" | grep -E '^\d{8}T\d{6}[+-]\d+\t((INFO|WARNING|ERROR|CRITICAL|DEBUG))\t.+\t.*\t((CACHE_CONFIG|DUMP|RESTORE|VERIFY))\t-?\d+$'`" == "" ]; then
+    if [ "`echo -e "${1}" | grep -E '^\d{8}T\d{6}[+-]\d+\t((INFO|WARNING|ERROR|CRITICAL|DEBUG))\t.+\t.*\t((CACHE_CONFIG|DUMP|RESTORE|VERIFY|DEDUP))\t-?\d+$'`" == "" ]; then
       snaplog "ERROR" "message upload wrong format: $1"
       return
     fi
@@ -303,8 +305,12 @@ function findrow {
 
 # Get field value from a row
 # $1 row with | separated fields
+# $2 field index to get the value from
+# $3 other field separator (optional)
 function getfieldvalue {
-  local val=$(echo "${1}" | cut -d '|' -f ${2})
+  local fs
+  if [ "${3}" != "" ]; then fs=${3}; else fs="|"; fi
+  local val=$(echo "${1}" | cut -d "${fs}" -f ${2})
   echo "${val}"
 }
 
@@ -317,11 +323,22 @@ function getscript {
   ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "${sql}" > ${SCRIPTDIR}/$1
 }
 
+# Reset all global error codes and messages
+function reseterrors {
+  ERROR=""
+  MSG=""
+  ERRCODE=0
+}
+
 # =====================================
 # Init actions
 # =====================================
 
-ERROR=0
+# Global super variables for messaging when using functions
+RETVAL=""
+ERROR=""
+MSG=""
+ERRCODE=0
 
 # Set hostname
 FQDN=`hostname -f`
@@ -337,7 +354,7 @@ else
   cleanupexit 1
 fi
 
-# Test for existing root dir
+# Test existing root dir
 if [ "`echo "${ROOTDIR}" | grep ' '`" != "" ]; then
   echo "ERROR PgSnapMan root name contains spaces [${ROOTDIR}]"
   cleanupexit 1
@@ -372,18 +389,13 @@ INITIMESTAMP=`date '+%Y%m%dT%H%M%S%z'`
 # Set the hostname for the pgsnapman database (put '-h ' in front of it for non local connections)
 PGSCHOST=$(resolvepghost ${PGSCHOST})
 
-# Retrieve the worker id for this worker instance (we do not need the catalog db, so we can continue if not found)
-ERROR=0
-BUWORKERID=$(getworkerid)
-if [ "${ERROR}" != "0" ]; then cleanupexit 1; fi
+# Sets the worker id for this worker instance (we do not need the catalog db, so we can continue if not found)
+setworkerid
+if [ ${ERRCODE} -gt 0 ]; then cleanupexit ${ERRCODE}; fi
 
 # Get worker status, quit if HALTED (any tool will quit when the worker is halted)
-if [ "$(getworkerstatus)" == "HALTED" ]; then
-  cleanupexit 6
-fi
+if [ "$(getworkerstatus)" == "HALTED" ]; then cleanupexit 0; fi
 
 # Write tool init log entry
-if [ "${LOGINIT}" != "NO" ]; then
-  snaplog "INFO" "init - using config: ${CONFIGFILE}"
-fi
+if [ "${LOGINIT}" != "NO" ]; then snaplog "INFO" "init - using config: ${CONFIGFILE}"; fi
 

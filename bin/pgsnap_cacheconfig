@@ -453,6 +453,11 @@ elif [ "${ACTION}" == "INIT" ]; then
 
   # And done
   cleanupexit 0
+else
+  if [ ! -e "${ROOTDIR}/workerid" ]; then
+    echo "ERROR pgsnapman not initialized (hint: run 'pgsnap_cacheconfig VERBOSE INIT')"
+    cleanupexit 1
+  fi
 fi
 
 # Check if already running, quit if so, exit code 0 (its not an error).

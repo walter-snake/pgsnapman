@@ -110,7 +110,7 @@ function logend {
   if [[ "${DUMP}" =~ ^[0-9]+$ ]]; then
     bupath="cat_id=${DUMP}"
   fi
-  local sql="select upd_restorelog(${LOGID}, '${1}', '${2}', '${bupath}');"
+  local sql="select set_restorelog(${LOGID}, '${1}', '${2}', '${bupath}');"
   log "${1}" "${2}"
   snaplog "${1}" "${2}"
   talk "${1} ${2}"
@@ -329,7 +329,7 @@ function run_dir_restore {
     local ec=$(createdatabase ${RESTOREDB} ${tblspchandling})
     # if this fails, we'll bail out
     if [ "$ec" != "0" ]; then
-      msg="database creation failed for temp database ${RESTOREDB}"
+      MSG="database creation failed for temp database ${RESTOREDB}"
       RESULT="ERROR"
       return
     fi
@@ -347,7 +347,7 @@ function run_dir_restore {
   if [ "$?" == "0" ]; then
     log "INFO" "processing - restore to temp database ${RESTOREDB} completed"
   else
-    msg="processing - restore to temp database ${RESTOREDB} failed, abort restore, trying to drop temp database"
+    MSG="processing - restore to temp database ${RESTOREDB} failed, abort restore, trying to drop temp database"
     RESULT="ERROR"
     ec=$(dropdatabase "${RESTOREDB}")
     return
@@ -376,7 +376,7 @@ function run_dir_restore {
     fi
   fi  
   # end DATA exclusion
-  msg="finished restore of database $(getfieldvalue "${DBSETTINGS}" 1) -> ${dbname}"
+  MSG="finished restore of database $(getfieldvalue "${DBSETTINGS}" 1) -> ${dbname}"
   RESULT="COMPLETED"
 }
 
@@ -390,7 +390,7 @@ function run_dir_restore {
 #   could potentially break integrity), this is handle lock function.
 
 errcode=0
-msg=""
+MSG=""
 logstart 
 
 # Verify starttype
@@ -533,7 +533,7 @@ if [ "${jobtype}" == "SINGLE" ]; then
   setjobstatus "RESTORE" ${JOBID} "HALTED"
 fi
 if [ $errcode -gt 0 ]; then
-  msg="aborted as job status could not be set, indicates a catalog database error"
+  MSG="aborted as job status could not be set, indicates a catalog database error"
 else
   if [ "${dumptype}" == "DIR" ]; then
     run_dir_restore
@@ -541,7 +541,7 @@ else
     run_sql_restore
   fi
 fi
-logend "$RESULT" "$msg"
+logend "$RESULT" "$MSG"
 
 # Normal end
 if [ "${RESULT}" == "ERROR" ]; then
@@ -550,7 +550,7 @@ else
   cleanupexit 0
 fi
 
-logend "$RESULT" "$msg"
+logend "$RESULT" "$MSG"
 cleanupexit ${errcode}
 
 # EOF

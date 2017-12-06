@@ -53,6 +53,7 @@ CHKSUMPROG_OPTIONS="-r"
 # this worker is the one that adds and performs the jobs. You may change the worker
 # and the default worker.
 AUTO_DUMPJOB=YES
+AUTO_DUMPJOB_STATUS=HALTED
 
 # Maintenance db (must be present on every pgsql instance)
 MAINTDB=postgres
