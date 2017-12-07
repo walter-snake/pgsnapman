@@ -92,3 +92,31 @@ One extra step would be to run the clean and verification tool (validation is ac
 
 Now the 'verified' field in the catalog should say 'YES'. Verification runs a full restore through pg_restore, with the output to /dev/null. This effectively tells you that the entire dump could be read.
 
+= Uploading messages =
+Catalog entries, restore log entries and messages are uploaded periodically with the pgsnap_upload tool. This tool can be called manually, when required (e.g. when testing). Just run it (default mode is SILENT, it can tell you what it does by calling it in VERBOSE mode:
+  ./pgsnap_upload VERBOSE
+
+= Verifying dumps =
+A basic verification of non-cluster dumps is automatically performed immediately after the dump, by trying to extract the schema from dump. This tells you at least that the toc is valid. A further verification is performed by the pgsnap_verify tool, which verifies non-cluster dumps by running them through pg_restore (the output goes straight into /dev/null). This tool runs automatically after 'pgsnap_clean SILENT', and checks a percentage of all not yet verified dumps. The percentage is set in the config file (e.g. VERIFYPERC=50);
+You may run this tool manually, and provide a percentage on the commandline, after the verbosity switch, the following example verifies every single non-cluster dump:
+  ./pgsnap_verify VERBOSE 100
+
+= Restore jobs =
+
+== CLUSTER dumps ==
+Restoring cluster dumps needs less information, as there's not much to choose from (it is a plain SQL file with everything included).
+
+The only options that have effect (* needed):
+* dest_pgsql_instance_id
+* dest_dbname (for a cluster dump this is the maintenance db, typically 'postgres')
+* job_type [SINGLE]
+* status [ACTIVE]
+* cron [* * * * *]
+* comment
+
+SINGLE, ACTIVE, '* * * * *': run as soon as possible (first scheduled pgsnap_singlejob)
+
+Example to create an entry in the pgsnap_restorejob table:
+  insert into pgsnap_restorejob (dest_pgsql_instance_id, dest_dbname, comment)
+    values (3, 'postgres', 'test alles restore');
+

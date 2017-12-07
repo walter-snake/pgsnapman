@@ -35,6 +35,17 @@ CREATE FUNCTION del_catalog(cat_id integer) RETURNS void
 
 
 --
+-- Name: get_databaseexists(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION get_databaseexists(dbname text) RETURNS integer
+    LANGUAGE sql
+    AS $_$
+select count(*)::integer from pg_database where datname = $1;
+$_$;
+
+
+--
 -- Name: get_default(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -306,6 +317,17 @@ $$;
 
 
 --
+-- Name: get_schemaexists(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION get_schemaexists(schemaname text) RETURNS integer
+    LANGUAGE sql
+    AS $_$
+select count(*)::integer from pg_namespace where nspname = $1;
+$_$;
+
+
+--
 -- Name: get_scriptcode(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -482,6 +504,7 @@ CREATE TABLE pgsnap_dumpjob (
     pgsnap_restorejob_id text,
     date_added timestamp with time zone DEFAULT now(),
     CONSTRAINT pgsnap_dumpjob_cron_check CHECK ((cron ~ '^([,/\*0-9]+\ ){4}[,/\*0-9]+$'::text)),
+    CONSTRAINT pgsnap_dumpjob_dumpschema_check CHECK ((dumpschema ~ '\*|.+'::text)),
     CONSTRAINT pgsnap_dumpjob_dumptype_check CHECK ((dumptype = ANY (ARRAY['FULL'::text, 'SCHEMA'::text, 'CLUSTER_SCHEMA'::text, 'SCRIPT'::text, 'CLUSTER'::text]))),
     CONSTRAINT pgsnap_dumpjob_jobtype_check CHECK ((jobtype = ANY (ARRAY['REPEAT'::text, 'SINGLE'::text]))),
     CONSTRAINT pgsnap_dumpjob_pgsnap_restorejob_id_check CHECK ((pgsnap_restorejob_id ~ '^[0-9,]*$'::text)),

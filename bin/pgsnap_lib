@@ -103,7 +103,7 @@ function resolvepghost {
   if [ "${1}" == "local" ]; then
     local pgh=""
   else
-    local pgh="-h ${1}"
+    local pgh="--host=${1}"
   fi
   echo "${pgh}"
 }
@@ -187,6 +187,30 @@ function getpgversion {
     pgv=""
   fi
   echo "${pgv}"
+}
+
+# Checks if a database exists
+# $1 hostname (use local for local pipe connections)
+# $2 port
+# $3 user
+# $4 connect to database
+# $5 check database name
+# returns 0 (not exists) or 1 (exists) 
+function dbexists {
+  local c=`${PGSCBIN}/psql ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "select count(*) from pg_database where datname = '$5';"`
+  echo ${c}
+}
+
+# Check if schema exists
+# $1 hostname (use local for local pipe connections)
+# $2 port
+# $3 user
+# $4 db name
+# $5 schema name
+# returns 0 (not exists) or 1 (exists) 
+function schemaexists {
+  local c=`${PGSCBIN}/psql ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "select count(*) from pg_namespace where nspname = '$5';"`
+  echo ${c}
 }
 
 # Get the actual size of the database, or a specific schema
