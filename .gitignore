@@ -3,5 +3,8 @@
 *.config
 *.tar.gz
 *.org
+*.pyc
+
+defaults.cfg
 
 temp/

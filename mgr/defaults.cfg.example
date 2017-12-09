@@ -1,0 +1,8 @@
+# Central config database
+
+[snapman_database]
+pgscdb = pgsnapman
+pgschost = localhost
+pgscport = 5432
+pgscuser = postgres
+pgscpassword = password
