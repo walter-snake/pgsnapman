@@ -60,13 +60,12 @@ function getbackupstatus {
 # $1 restore job id
 function getrestorejob {
   local data
-  local sql="SELECT r.id, pgsnap_catalog_id, r.dest_dbname, r.restoretype, \
-       r.restoreschema, r.restoreoptions, existing_db, r.cron, r.status, r.comment, \
-       r.jobtype, p.dns_name, p.pgport, p.pgsql_superuser, r.role_handling, r.tblspc_handling, p.status \
-  FROM pgsnap_restorejob r \
-  JOIN pgsql_instance p \
-    ON r.dest_pgsql_instance_id = p.id \
-  WHERE r.id = ${1};"
+  local sql="SELECT id, pgsnap_catalog_id, dest_dbname, restoretype, restoreschema, 
+       restoreoptions, existing_db, cron, status_restorejob, comment, 
+       jobtype, dns_name, pgport, pgsql_superuser, role_handling, tblspc_handling, 
+       status_pgsqlinstance
+  FROM vw_restorejob_instance
+  WHERE id = ${1};"
   data=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --no-password --dbname=${PGSCDB} -c "$sql" -A -t`
   echo "${data}"
 }
@@ -85,7 +84,7 @@ function setpgbinpath {
   # Check postgres server version and binary availability 
   PGVERSION=$(getpgversion "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}")
   if [ "${PGVERSION}" == "" ]; then
-    log "ERROR" "job id ${JOBID} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${MAINTDB}"
+    log "ERROR" "job id ${JOBID} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlfqdn}:${pgsqlport}/${MAINTDB}"
   else
     eval pgbinvar=PGBIN${PGVERSION}
     PGBIN=${!pgbinvar}
@@ -125,16 +124,14 @@ function logend {
 function lockoutusers {
   # disable connections
   log "INFO" "prevent new connections to database ${1}"
-  ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "UPDATE pg_catalog.pg_database SET datallowconn=false WHERE datname='${1}'" --output=/dev/null
+  ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "UPDATE pg_catalog.pg_database SET datallowconn=false WHERE datname='${1}'"   >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
 
   # close connections
   # get list of connected users, loop through and terminate backends
   log "INFO" "terminate existing connections on database $1"
-  ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "select pg_terminate_backend(pid) from pg_stat_activity where datname='${1}'"
-  if [ "$?" != "0" ]; then
-    logend "ERROR" "could not successfully terminate clients, impossible to complete DROP and RENAME operations on database ${1}"
-    cleanupexit 1
-  fi
+  ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "select pg_terminate_backend(pid) from pg_stat_activity where datname='${1}'"   >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
+  ERRCODE=$?
+  if [ $ERRCODE -gt 0 ]; then MSG="could not successfully terminate clients on database ${1}"; fi
 }
 
 # Set acl and allow connections
@@ -142,9 +139,9 @@ function lockoutusers {
 function setaclallowconnect {
   log "INFO" "set acl and allow new connections to database ${1}"
   if [ -e "${DUMP}.database_acl.sql" ]; then
-    ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -f ${DUMP}.database_acl.sql --output=/dev/null
+    ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -f ${DUMP}.database_acl.sql   >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
   fi
-  ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "UPDATE pg_catalog.pg_database SET datallowconn=true WHERE datname='${1}'" --output=/dev/null
+  ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "UPDATE pg_catalog.pg_database SET datallowconn=true WHERE datname='${1}'"   >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
 }
 
 # Drop database
@@ -152,14 +149,18 @@ function setaclallowconnect {
 function dropdatabase {
   # throw everyone out
   lockoutusers $1
-
-  log "INFO" "dropping database $1"
-  # drop, this should succeed, as all connections are dead, and no one can be connected any more (well, a superuser)
-  ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "DROP DATABASE IF EXISTS \"${1}\"" 2>&1 /dev/null
-  if [ "$?" == "0" ]; then
-    log "INFO" "database $1 dropped successfully (or did not exist at all)"
+  if [ ${ERRCODE} -gt 0 ]; then
+    return
   else
-    log "ERROR" "error while dropping database $1"
+   log "INFO" "dropping database $1"
+    # drop, this should succeed, as all connections are dead, and no one can be connected any more (well, a superuser)
+    ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "DROP DATABASE IF EXISTS \"${1}\"" >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
+    ERRCODE=$?
+    if [ ${ERRCODE} -eq 0 ]; then
+      log "INFO" "database $1 dropped successfully (or did not exist at all)"
+    else
+      log "ERROR" "error while dropping database $1"
+    fi
   fi
 }
 
@@ -168,18 +169,24 @@ function dropdatabase {
 # $2 target database name
 function renamedatabase {
   # check if it exists
-  if [ "$(dbexists ${pgsqlhost} ${pgsqlport} ${pgsqlsuperuser} ${MAINTDB} $1 )" == "1" ]; then
-    log "INFO" "database $1 did not exist, not renamed"
+  if [ "$(dbexists ${pgsqlhost} ${pgsqlport} ${pgsqlsuperuser} ${MAINTDB} $1 )" == "0" ]; then
+    log "INFO" "database $1 does not exist, nothing to rename (not an error)"
+    ERRCODE=0
     return
   fi
 
   # throw everyone out
   lockoutusers $1
+  if [ ${ERRCODE} -gt 0 ]; then 
+    MSG="impossible to complete RENAME operation on database ${1}";
+    return
+  fi
 
   log "INFO" "rename database $1->$2"
   # rename, this should succeed, as all connections are dead, and no one can be connected any more (well, a superuser)
-  ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "ALTER DATABASE \"${1}\" RENAME TO \"${2}\"" 2>&1 /dev/null
-  if [ "$?" == "0" ]; then
+  ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "ALTER DATABASE \"${1}\" RENAME TO \"${2}\"" >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
+  ERRCODE=$?
+  if [ ${ERRCODE} -eq 0 ]; then
     log "INFO" "database $1 renamed successfully"
   else
     log "ERROR" "error while renaming database $1->$2"
@@ -206,23 +213,38 @@ function setDBSETTINGS {
   DBSETTINGS=`cat "${DUMP}.database_settings.list"`
 }
 
-# Create temp database
+# Create database
 # $1 target database name
 # $2 use tablespace [USE_TBLSPC|NO_TBLSPC]
 function createdatabase {
-  # check if it already exists
-  if [ "$(dbexists ${pgsqlhost} ${pgsqlport} ${pgsqlsuperuser} ${MAINTDB} ${1} )" == "1" ]; then
-    log "INFO" "database already exists"
-    echo 0
-  else
-    # create the database
-    if [ "$2" == "USE_TBLSPC" ] &&  [ "$(getfieldvalue "${DBSETTINGS}" 7)" != "" ]; then
-      local tblspc="--tablespace=$(getfieldvalue "${DBSETTINGS}" 7)"
-    fi
-    log "INFO" "creating database $1"
-    ${PGBIN}/createdb ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --maintenance-db=${MAINTDB} -E $(getfieldvalue "${DBSETTINGS}" 3) --lc-collate=$(getfieldvalue "${DBSETTINGS}" 4) --lc-ctype=$(getfieldvalue "${DBSETTINGS}" 5) --template=template0 ${tblspc} "$1" 2> /dev/null
-    echo $?
+  # create the database
+  if [ "$2" == "USE_TBLSPC" ] &&  [ "$(getfieldvalue "${DBSETTINGS}" 7)" != "" ]; then
+    local tblspc="--tablespace=$(getfieldvalue "${DBSETTINGS}" 7)"
   fi
+  log "INFO" "creating database $1"
+  ${PGBIN}/createdb ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --maintenance-db=${MAINTDB} -E $(getfieldvalue "${DBSETTINGS}" 3) --lc-collate=$(getfieldvalue "${DBSETTINGS}" 4) --lc-ctype=$(getfieldvalue "${DBSETTINGS}" 5) --template=template0 ${tblspc} "$1"  >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
+  echo $?
+}
+
+# Create schema
+# $1 schema name
+function createschema {
+  log "INFO" "creating schema: ${restoreschema}"
+  # strip the quotes
+  local schema=$(echo ${restoreschema} | sed 's/"//g')
+  # 2 modes: when schema creation info is present in the dump, use it, otherwise, just create one (owner will be the owner of the database, no acl)
+  # 1: no information (we inspect the dump here without the schema restriction!)
+  if [ "`${PGBIN}/pg_restore -l --create ${restoreoptions} ${DUMP} | grep SCHEMA`" == "" ]; then
+    ${PGBIN}/psql  ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${RESTOREDB} -c 'CREATE SCHEMA '${restoreschema}' AUTHORIZATION '"$(getfieldvalue "${DBSETTINGS}" 2)"';' >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1  
+  else
+    # collect toc entries for this schema
+    ${PGBIN}/pg_restore -l --create ${restoreoptions} ${DUMP} | grep -E "SCHEMA\ -\ ${schema}\ " > ${TEMPDIR}/$$.0.pgsnap_restore.schema
+    ${PGBIN}/pg_restore -l --create ${restoreoptions} ${DUMP} | grep -E "COMMENT\ -\ SCHEMA\ ${schema}\ " >> ${TEMPDIR}/$$.0.pgsnap_restore.schema
+    ${PGBIN}/pg_restore -l --create ${restoreoptions} ${DUMP} | grep -E "ACL\ -\ ${schema}\ " >> ${TEMPDIR}/$$.0.pgsnap_restore.schema
+    # do the restore, using these entries
+    ${PGBIN}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${RESTOREDB} -L ${TEMPDIR}/$$.0.pgsnap_restore.schema ${DUMP} >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
+  fi
+  echo $?
 }
 
 # Set database owner
@@ -230,12 +252,12 @@ function createdatabase {
 function setdatabaseowner {
   log "INFO" "setting owner on database $1 to $(getfieldvalue "${DBSETTINGS}" 2)"
   # Set owner (failure does not produce an error)
-  echo "ALTER DATABASE \"$1\" OWNER TO \"$(getfieldvalue "${DBSETTINGS}" 2)\";" | ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} --no-password > /dev/null
+  echo "ALTER DATABASE \"$1\" OWNER TO \"$(getfieldvalue "${DBSETTINGS}" 2)\";" | ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} --no-password   >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
 }
 
 # Create the roles, neccessary for this database
 function prepareroles {
-  log "INFO" "preparing roles for restore job ${JOBID} (original database: ${dbname})"
+  log "INFO" "preparing roles for restore job ${JOBID}"
   # check and create database owner
   createrole $(getfieldvalue "${DBSETTINGS}" 2)
   # check and create other roles
@@ -297,9 +319,8 @@ function hastablespace {
 
 # SQL restore
 function run_sql_restore {
-  echo "${INITIMESTAMP} ============== start restore =============================================================" >> ${LOGDIR}/pgsnap_restore_cluster.log
   snaplog "INFO" "starting cluster dump restore: psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} ${restoreoptions}"; 
-  gunzip -c ${DUMP}.sql | ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} ${restoreoptions} --output=/dev/null 2>> ${LOGDIR}/pgsnap_restore_cluster.log
+  gunzip -c ${DUMP}.sql | ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} ${restoreoptions} --output=/dev/null  >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
   if [ "$?" == "0" ]; then
     snaplog "INFO" "finished restoring cluster dump"; 
     RESULT="COMPLETED"
@@ -319,7 +340,9 @@ function run_dir_restore {
   # Same for restore of a specific schema!
   # Check if DATABASE creation data is present in the dump toc, if not, restore straight into target, this is typically the case
   # when doing a partial restore (table, schema, or based on an partial dump):
-  if [ "`${PGBIN}/pg_restore -l --create ${restoreoptions} ${DUMP} | grep DATABASE`" == "" ]; then
+  # Due to schema quoting difficulties, we add a specific check on schema (knowing that when specifying a schema, the database
+  # create option is NEVER available)
+  if [ "`${PGBIN}/pg_restore -l --create ${restoreoptions} ${DUMP} | grep DATABASE`" == "" ] || [ "${restoreschema}" != "*" ]; then
     DIRECTRESTORE=YES
     RESTOREDB="${dbname}"
   else
@@ -327,78 +350,93 @@ function run_dir_restore {
     RESTOREDB="${dbname}_$$"
   fi
 
-  # When requested, prepare roles (only a little useless work when doing DATA only, maybe we process too many roles, but that's not too bad)
-  if [ "${rolehandling}" == "USE_ROLE" ]; then
-    prepareroles
-  fi
-  # and tablespaces, only when not data only restore (tablespaces are verified only)
-  if [ "${tblspchandling}" == "USE_TBLSPC" ] && [ "${restoretype}" != "DATA" ]; then
-    checktablespaces
-    if [ "${ERRCODE}" != "0" ]; then
-      return
+  # The entire following block must be skipped when a DATAonly restore is requested, it is al structure related stuff
+  if [ "${restoretype}" != "DATA" ]; then
+    # When requested, prepare roles (only a little useless work when doing DATA only, maybe we process too many roles, but that's not too bad)
+    if [ "${rolehandling}" == "USE_ROLE" ]; then
+      prepareroles
     fi
-  fi
-
-  # Drop database before creation (risky, but possible, could come in handy when space is restricted)
-  if [ "${existingdb}" == "DROP_BEFORE" ]; then
-    ec="$(dropdatabase "${dbname}")"
-  fi
-
-  # Check if database exists, create if neccessary (a temp database will never exist, but the check doesn't hurt)
-  t=$(dbexists "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}" "${RESTOREDB}" )
-  if [ ${t} -eq 1 ]; then
-    log "INFO" "database ${RESTOREDB} already exists"
-  else
-    # create database
-    local ec=$(createdatabase ${RESTOREDB} ${tblspchandling})
-    # if this fails, we'll bail out
-    if [ "$ec" != "0" ]; then
-      MSG="database creation failed for database ${RESTOREDB}"
-      RESULT="ERROR"
-      return
+    # and tablespaces, only when not data only restore (tablespaces are verified only)
+    if [ "${tblspchandling}" == "USE_TBLSPC" ] && [ "${restoretype}" != "DATA" ]; then
+      checktablespaces
+      if [ "${ERRCODE}" != "0" ]; then return; fi
     fi
-  fi
 
-  # Check if the schema exists, create if required (which is, when there's no CREATE SCHEMA in the output, but restore of a specific schema is requested)
-  if  [ "${restoreschema}" != "*" ] && [ "`${PGBIN}/pg_restore -l --create ${restoreoptions} ${DUMP} | grep 'CREATE SCHEMA'`" == "" ]; then 
-    log "INFO" "schema required, check for existence"
-    t=$(schemaexists "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${RESTOREDB}"  "${restoreschema}" )
+    # Drop database before creation (risky, but possible, could come in handy when space is restricted)
+    if [ "${existingdb}" == "DROP_BEFORE" ]; then
+      dropdatabase "${dbname}"
+      if [ $ERRCODE -gt 0 ]; then return; fi
+    fi
+
+    # Check if database exists, create if neccessary (a temp database will never exist, but the check doesn't hurt)
+    t=$(dbexists "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}" "${RESTOREDB}" )
     if [ ${t} -eq 0 ]; then
-      log "INFO" "creating schema: ${restoreschema}"
-      ${PGBIN}/psql  ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${RESTOREDB} -c "CREATE SCHEMA ${restoreschema} AUTHORIZATION \"$(getfieldvalue "${DBSETTINGS}" 2)\";" 2>>/dev/null
+      # create database
+      local ec=$(createdatabase ${RESTOREDB} ${tblspchandling})
+      # if this fails, we'll bail out
+      if [ "$ec" != "0" ]; then
+        MSG="database creation failed for database ${RESTOREDB}"
+        RESULT="ERROR"
+        return
+      fi
+    fi
+
+    # Check if schema creation information is present; create if required, skip when doing a DATA only restore
+    if [ "`${PGBIN}/pg_restore -l --create ${restoreoptions} ${DUMP} | grep 'SCHEMA'`" == "" ] || [ "${restoreschema}" != "*" ]; then 
+      log "INFO" "existing schema required, check for existence"
+      t=$(schemaexists "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${RESTOREDB}"  "${restoreschema}" )
+      if [ ${t} -eq 0 ]; then
+        ec=$(createschema "${restoreschema}")
+        if [ "$ec" != "0" ]; then
+          MSG="schema creation failed for ${restoreschema}"
+          RESULT="ERROR"
+          return
+        fi
+      fi
     fi
   fi
 
   # restore, depends on DATA/SCHEMA/FULL
   log "INFO" "processing - restore to database ${RESTOREDB} started"
-  snaplog "INFO" "restore started: pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${RESTOREDB} ${restoreoptions} ${DUMP}"
-  ${PGBIN}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${RESTOREDB} ${restoreoptions} "${DUMP}" 2>> ${LOGDIR}/pgsnap_restore_database.log
+  if [ "${restoreschema}" == "*" ]; then
+    snaplog "INFO" "restore started: pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${RESTOREDB} ${restoreoptions} ${DUMP}"
+    eval "${PGBIN}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${RESTOREDB} ${restoreoptions} ${DUMP} >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1"
+  else
+    snaplog "INFO" "restore started: pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${RESTOREDB} --schema=${restoreschema} ${restoreoptions} ${DUMP}"
+    eval "${PGBIN}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${RESTOREDB} --schema=${restoreschema} ${restoreoptions} ${DUMP} >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1"
+  fi
+  # sjek ze results
   if [ "$?" == "0" ]; then
     log "INFO" "processing - restore to database ${RESTOREDB} completed"
   elif [ "${DIRECTRESTORE}" == "YES" ]; then
-    MSG="processing - restore to database ${RESTOREDB} failed, abort restore (hint: data-only or specific schema restore need an existing database)"
+    MSG="processing - restore to database ${RESTOREDB} failed; details: $$.${JOBID}.pgsnap_restore.log"
     RESULT="ERROR"
     return
   else
-    MSG="processing - restore to database ${RESTOREDB} failed, abort restore, trying to drop database"
+    MSG="processing - restore to database ${RESTOREDB} failed, trying to drop temp database; details: $$.${JOBID}.pgsnap_restore.log"
     RESULT="ERROR"
     ec=$(dropdatabase "${RESTOREDB}")
     return
   fi
-  
+ 
+  # When restored in a temp database, move stuff in place 
   # restore type DATA or restore from a dump of a specific schema: no database manipulation
   if [ "${DIRECTRESTORE}" == "NO" ]; then
    # drop/move original after restore
     if [ "${existingdb}" == "DROP" ]; then
-      ec="$(dropdatabase "${dbname}")"
+      dropdatabase "${dbname}"
+      if [ ${ERRCODE} -gt 0 ]; then return; fi 
     elif  [ "${existingdb}" == "RENAME" ]; then
       # always drop existing backup in rename scenario
-      ec="$(dropdatabase "${dbname}_pgsnapman_rs_bak")"
-      ec="$(renamedatabase "${dbname}" "${dbname}_pgsnapman_rs_bak")"
+      dropdatabase "${dbname}_pgsnapman_rs_bak"
+      if [ ${ERRCODE} -gt 0 ]; then return; fi 
+      renamedatabase "${dbname}" "${dbname}_pgsnapman_rs_bak"
+      if [ ${ERRCODE} -gt 0 ]; then return; fi 
     fi
-  
+
     # move in place
-    ec="$(renamedatabase "${RESTOREDB}" "${dbname}")"
+    renamedatabase "${RESTOREDB}" "${dbname}"
+    if [ ${ERRCODE} -gt 0 ]; then return; fi 
   
     # Only when USE_ROLE
     if [ "${rolehandling}" == "USE_ROLE" ]; then
@@ -407,9 +445,10 @@ function run_dir_restore {
       # set global acl and allow connections
       setaclallowconnect ${dbname}
     fi
-  fi  
+  fi 
+ 
   # end DATA exclusion
-  MSG="finished restore of database $(getfieldvalue "${DBSETTINGS}" 1) -> ${dbname}"
+  MSG="finished restore of database $(getfieldvalue "${DBSETTINGS}" 1) -> ${pgsqlfqdn}:${pgsqlport}/${dbname}"
   RESULT="COMPLETED"
 }
 
@@ -441,7 +480,6 @@ if [ "${restorejob}" == "" ]; then
   logend "ERROR" "job id ${JOBID} not found or of wrong type (${STARTTYPE})"
   cleanupexit 1
 fi
-
 # Get the various restore job fields
 catalogid="$(getfieldvalue "${restorejob}" 2)"
 dbname="$(getfieldvalue "${restorejob}" 3)"
@@ -453,7 +491,7 @@ cron="$(getfieldvalue "${restorejob}" 8)"
 status="$(getfieldvalue "${restorejob}" 9)"
 comment="$(getfieldvalue "${restorejob}" 10)"
 jobtype="$(getfieldvalue "${restorejob}" 11)"
-pgsqlhost="$(getfieldvalue "${restorejob}" 12)"
+pgsqlfqdn="$(getfieldvalue "${restorejob}" 12)"
 pgsqlport="$(getfieldvalue "${restorejob}" 13)"
 pgsqlsuperuser="$(getfieldvalue "${restorejob}" 14)"
 rolehandling="$(getfieldvalue "${restorejob}" 15)"
@@ -492,7 +530,7 @@ if [ ! -e ${DUMP}.catalog.dat ] || [ "$(getbackupstatus ${DUMP}.catalog.dat)" !=
   cleanupexit 1
 fi
 
-pgsqlhost=$(resolvepghost ${pgsqlhost})
+pgsqlhost=$(resolvepghost ${pgsqlfqdn})
 
 # Set postgres destination server version (also connection test)
 setpgbinpath
@@ -511,9 +549,6 @@ else
   if [ "${restoretype}" == "SCHEMA" ]; then 
     restoreoptions="${restoreoptions} --schema-only"
   fi
-  if [ "${restoreschema}" != "*" ]; then
-    restoreoptions="${restoreoptions} --schema=${restoreschema}"
-  fi
   if [ "${rolehandling}" == "NO_ROLE" ]; then
     restoreoptions="${restoreoptions} --no-owner --no-privileges"
   fi
@@ -527,7 +562,7 @@ if [ "${VERBOSITY}" == "VERBOSE" ]; then
   echo ""
   echo "dump catalog id         ${catalogid}"
   echo ""
-  echo "destination host:       ${pgsqlhost} (version: $PGVERSION)"
+  echo "destination host:       ${pgsqlfqdn} (version: $PGVERSION)"
   echo "destination port:       ${pgsqlport}"
   echo "destination db name:    ${dbname}"
   echo "destination superuser:  ${pgsqlsuperuser}"
@@ -569,12 +604,20 @@ fi
 if [ $errcode -gt 0 ]; then
   MSG="aborted as job status could not be set, indicates a catalog database error"
 else
+  snaplog "INFO" "logging details to: $$.${JOBID}.pgsnap_restore.log"
   if [ "${dumptype}" == "DIR" ]; then
-    #run_dir_restore
-    run_dir_restore > /dev/null
+    if [ "${VERBOSITY}" == "VERBOSE" ]; then
+      run_dir_restore
+    else
+      run_dir_restore > /dev/null
+    fi
   elif  [ "${dumptype}" == "SQL" ]; then
     # we can't get rid of all console output within the function, must be done here
-    run_sql_restore > /dev/null
+    if [ "${VERBOSITY}" == "VERBOSE" ]; then
+      run_sql_restore
+    else
+      run_sql_restore > /dev/null
+    fi
   fi
 fi
 logend "$RESULT" "$MSG"

@@ -177,17 +177,24 @@ fi
 # RESTORE jobs
 c=0
 if [ "${2}" != "DUMP" ]; then
-talk "Checking for single run restore jobs"
-sql="select r.id as restore_id, c.id as catalog_id from pgsnap_restorejob r join pgsnap_catalog c on r.pgsnap_catalog_id = c.id \
-  where r.status = 'ACTIVE' \
-    and r.jobtype = 'SINGLE' \
-    and r.cron = '* * * * *' \
-    and r.id::text like '${id}'
-    and c.bu_worker_id = ${BUWORKERID};"
-  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}" --output="${TEMPDIR}/$$.0.singlerestorejobs.list"
-  if [ "`cat ${TEMPDIR}/$$.0.singlerestorejobs.list`" == "" ]; then
+  talk "Checking for single run restore jobs"
+  sql="select count(*) from pgsnap_restorejob r join pgsnap_catalog c on r.pgsnap_catalog_id = c.id \
+    where r.status = 'ACTIVE' \
+      and r.jobtype = 'SINGLE' \
+      and r.cron = '* * * * *' \
+      and r.id::text like '${id}'
+      and c.bu_worker_id = ${BUWORKERID};"
+    c=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}"`
+  if [ $c -eq 0 ]; then
     talk "Nothing to do"
   else
+    sql="select r.id as restore_id, c.id as catalog_id from pgsnap_restorejob r join pgsnap_catalog c on r.pgsnap_catalog_id = c.id \
+      where r.status = 'ACTIVE' \
+        and r.jobtype = 'SINGLE' \
+        and r.cron = '* * * * *' \
+        and r.id::text like '${id}'
+        and c.bu_worker_id = ${BUWORKERID};"
+    ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}" --output="${TEMPDIR}/$$.0.singlerestorejobs.list"
     # Start the restores
     talk "Start the restore jobs..."
     snaplog "INFO" "single restore jobs found, starting"
@@ -195,5 +202,4 @@ sql="select r.id as restore_id, c.id as catalog_id from pgsnap_restorejob r join
   fi
   talk ""
 fi
-
 cleanupexit 0

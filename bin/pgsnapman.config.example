@@ -61,3 +61,7 @@ MAINTDB=postgres
 # Verify percentage
 VERIFYPERC=25
 
+# Keep restore log for this many days
+KEEPRESTORELOG=7
+
+

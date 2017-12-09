@@ -58,27 +58,35 @@ fi
 
 # Prepare for starting a custom script
 # Writes out all current variables to a temp file
+# Downloads required script
+# $1 script name
 function preparescriptrun {
-  echo "JOBID=${jobid}" > ${TEMPDIR}/$$.scriptinit.temp
-  echo "INITIMESTAMP=${INITIMESTAMP}" >> ${TEMPDIR}/$$.scriptinit.temp
-  echo "VERBOSITY=${VERBOSITY}" >> ${TEMPDIR}/$$.scriptinit.temp
-  echo "STARTTYPE=${STARTTYPE}" >> ${TEMPDIR}/$$.scriptinit.temp
-  echo "SINGLERUNPID=${SINGLERUNPID}" >> ${TEMPDIR}/$$.scriptinit.temp
-  echo "JOBDIR=${jobdir}" >> ${TEMPDIR}/$$.scriptinit.temp
-  echo "BUNAME=${buname}" >> ${TEMPDIR}/$$.scriptinit.temp
-  echo "PGSQLHOST=\"${pgsqlhost}\"" >> ${TEMPDIR}/$$.scriptinit.temp
-  echo "PGSQLPORT=${pgsqlport}" >> ${TEMPDIR}/$$.scriptinit.temp
-  echo "PGSQLSUPERUSER=${pgsqlsuperuser}" >> ${TEMPDIR}/$$.scriptinit.temp
-  echo "PGSQLDBNAME=${dbname}" >> ${TEMPDIR}/$$.scriptinit.temp
-  echo "SCHEMA=${schema}" >> ${TEMPDIR}/$$.scriptinit.temp
-  echo "ROOTDIR=${ROOTDIR}" >> ${TEMPDIR}/$$.scriptinit.temp
-  echo "LOGDIR=${LOGDIR}" >> ${TEMPDIR}/$$.scriptinit.temp
-  echo "TEMPDIR=${TEMPDIR}" >> ${TEMPDIR}/$$.scriptinit.temp
-  echo "UPLOADDIR=${UPLOADDIR}" >> ${TEMPDIR}/$$.scriptinit.temp
-  echo "PGBIN=${pgbin}" >> ${TEMPDIR}/$$.scriptinit.temp
-  echo "PGSNAPMANLOG=${PGSNAPMANLOG}" >> ${TEMPDIR}/$$.scriptinit.temp
-  echo "TOOL_LOG=${TOOL_LOG}" >> ${TEMPDIR}/$$.scriptinit.temp
-  mkdir ${jobdir}/${buname}
+  echo "JOBID=${jobid}" > ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
+  echo "INITIMESTAMP=${INITIMESTAMP}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
+  echo "VERBOSITY=${VERBOSITY}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
+  echo "STARTTYPE=${STARTTYPE}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
+  echo "SINGLERUNPID=${SINGLERUNPID}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
+  echo "JOBDIR=${jobdir}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
+  echo "BUNAME=${buname}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
+  echo "PGSQLHOST=\"${pgsqlhost}\"" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
+  echo "PGSQLPORT=${pgsqlport}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
+  echo "PGSQLSUPERUSER=${pgsqlsuperuser}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
+  echo "PGSQLDBNAME=${dbname}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
+  echo "SCHEMA=${schema}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
+  echo "ROOTDIR=${ROOTDIR}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
+  echo "LOGDIR=${LOGDIR}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
+  echo "TEMPDIR=${TEMPDIR}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
+  echo "UPLOADDIR=${UPLOADDIR}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
+  echo "PGBIN=${pgbin}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
+  echo "PGSNAPMANLOG=${PGSNAPMANLOG}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
+  echo "TOOL_LOG=${TOOL_LOG}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
+  if [ "${jobdir}" == "" ] || [ "${buname}" == "" ]; then
+    ERRCODE=1
+  else   
+    mkdir ${jobdir}/${buname}
+    # Download script
+    ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT get_scriptcode ('${1}');" > ${SCRIPTDIR}/${1}
+  fi
 }
 
 # Get the global ACL's from the database (stored in sql format)
@@ -173,7 +181,7 @@ function startpgsnapjob {
   # Check postgres server version and binary availability 
   pgversion=$(getpgversion "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${dbname}")
   if [ "${pgversion}" == "" ]; then
-    MSG="job id ${jobid} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}"
+    MSG="job id ${jobid} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlfqdn}:${pgsqlport}/${dbname}"
     log "ERROR" "${MSG}"
     ERRORS=1
   else
@@ -203,15 +211,15 @@ function startpgsnapjob {
     elif  [ "${butype}" == "SCRIPT" ]; then
     # Script dumps (custom script)
       local scriptname=`echo "${dumpoptions}" | cut -d ' ' -f 1`
+      preparescriptrun "${scriptname}"
       if [ ! -e "${SCRIPTDIR}/${scriptname}" ]; then
         snaplog "ERROR" "script not found: ${SCRIPTDIR}/${scriptname}"
         cleanupexit 1
       else
-        preparescriptrun
         snaplog "INFO" "script started: ${SCRIPTDIR}/${dumpoptions}"
         # Separate script name from its own options
         local scriptoptions=`echo "${dumpoptions}" | awk '{ print substr($0, length($1)+1) }'`
-        ${SCRIPTDIR}/${scriptname} ${TEMPDIR}/$$.scriptinit.temp >> ${jobdir}/${buname}.log
+        ${SCRIPTDIR}/${scriptname} ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp >> ${jobdir}/${buname}.log
         local ec=$?
         if [ "$ec" != "0" ]; then
           MSG="job id ${jobid} - script exited with code ${ec} for ${jobdir}/${buname}"

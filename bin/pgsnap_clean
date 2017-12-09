@@ -90,19 +90,18 @@ function cleanupjob {
   ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" -A -t -F '|' --output=${TEMPDIR}/$$.removedumps.list 2>> ${LOGDIR}/pgsnap_clean.keepcatids.log
   # Loop through all catalog entries, and remove them
   while read line; do
-    talk "INFO remove from catalog: $(getfieldvalue "${line}" 1) $(getfieldvalue "${line}" 2) $(getfieldvalue "${line}" 3)"
-    log "INFO" "remove from catalog: $(getfieldvalue "${line}" 1) $(getfieldvalue "${line}" 2) $(getfieldvalue "${line}" 3)"
     # Set status to REMOVING, so you know you shouldn't start a restore job from this one.
-    setcatalogdbstatus $(getfieldvalue "${line}" 1) "REMOVING"
     local path="$(getfieldvalue "${line}" 4)"
     local path=`echo "${path}" | sed -E 's/.sql.gz$//g'`
     # Check if the path is safe, if so proceed
     if [ "$(issafetoremove "${path}")" == "NO" ]; then
-      log "WARNING" "path unsafe to remove or restore job running [${path}]"
+      talk "WARNING path unsafe to remove [${path}]"
     elif [ "$(isrestorerunning "${path}")" == "YES" ]; then
-        talk "WARNING" "restore job running [${path}]"
-        log "WARNING" "restore job running [${path}]"
+      talk "WARNING restore job running [${path}]"
     else
+      talk "INFO remove from catalog: $(getfieldvalue "${line}" 1) $(getfieldvalue "${line}" 2) $(getfieldvalue "${line}" 3)"
+      log "INFO" "remove from catalog: $(getfieldvalue "${line}" 1) $(getfieldvalue "${line}" 2) $(getfieldvalue "${line}" 3)"
+      setcatalogdbstatus $(getfieldvalue "${line}" 1) "REMOVING"
       local checksumfile=${path}.chksum
       # Possibly slow when cleaning up tons of backups, as files will be checked multiple times. But, this is
       # only the case when there are indeed many links, and typically when cleaning on a daily basis, it is the
@@ -113,9 +112,9 @@ function cleanupjob {
       dedupstore_clean ${checksumfile}
       # Remove everything else
       rm -rf ${path}*
+      # Remove the entry from the catalog db altogether
+      removefromcatalogdb $(getfieldvalue "${line}" 1)
     fi
-    # Remove the entry from the catalog db altogether
-    removefromcatalogdb $(getfieldvalue "${line}" 1)
   done < ${TEMPDIR}/$$.removedumps.list
   rm -f ${TEMPDIR}/$$.removedumps.list
 }
@@ -168,12 +167,12 @@ function dedupstore_clean {
   if [ ! -e "${1}" ]; then
     return
   fi
+  excludedir=$(echo "${1}" | sed 's/.chksum//')
   log "INFO" "processing dedupdata: $1"
   if [ "${VERBOSITY}" == "VERBOSE" ]; then
     echo "INFO processing dedupdata: $1"
     echo "INFO searching for links"
-    echo "------------------------------------"
-    echo "Checked files (* marked for removal)"
+    echo "INFO checked files (* marked for removal)"
   fi
   # Create new empty temo file to store files to remove in
   echo -n "" > ${TEMPDIR}/$$.0.datafiles.rm
@@ -181,7 +180,6 @@ function dedupstore_clean {
   while read line; do
     chksum=$(getfieldvalue "${line}" 1 " ")
     local idxpath="$(getdedupindexedpath ${chksum})"
-    ##echo "indexedpath: ${idxpath}"
     c=`find -L ${DUMPSNAP}/ -samefile ${idxpath} | wc -l | sed 's/ //g'`
     if [ $c -eq 0 ]; then
       echo "$line" >> ${TEMPDIR}/$$.0.datafiles.rm
@@ -194,14 +192,14 @@ function dedupstore_clean {
       fi
     fi
   done < ${1}
-
+  talk "-------------------"
   # Go through list of files to remove from dedupstore
   if [ -e "${TEMPDIR}/$$.0.datafiles.rm" ]; then
     while read line; do
       chksum=$(getfieldvalue "${line}" 1 " ")
       rmfile=$(getdedupindexedpath "${chksum}")
       talk "* remove file: ${rmfile}"
-      rm -f "${rmfile}"
+      #rm -f "${rmfile}"
     done < ${TEMPDIR}/$$.0.datafiles.rm
   fi
 }
@@ -352,6 +350,9 @@ else
       gzip "${LOGDIR}/`basename ${f}`.${filetimestamp}"
     fi
   done
+
+  # Restore log clean up
+  find ${LOGDIR} -type f -name '*.pgsnap_restore.log' -mtime ${KEEPRESTORELOG} -delete
 
   # Retention policy-cleaning
   cleanupcatalog

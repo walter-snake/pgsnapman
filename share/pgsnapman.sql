@@ -503,8 +503,9 @@ CREATE TABLE pgsnap_dumpjob (
     jobtype text DEFAULT 'REPEAT'::text,
     pgsnap_restorejob_id text,
     date_added timestamp with time zone DEFAULT now(),
-    CONSTRAINT pgsnap_dumpjob_cron_check CHECK ((cron ~ '^([,/\*0-9]+\ ){4}[,/\*0-9]+$'::text)),
-    CONSTRAINT pgsnap_dumpjob_dumpschema_check CHECK ((dumpschema ~ '\*|.+'::text)),
+    CONSTRAINT pgsnap_dumpjob_cron_check CHECK ((cron ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
+    CONSTRAINT pgsnap_dumpjob_dbname_check CHECK ((dbname ~ '^[^".]*$'::text)),
+    CONSTRAINT pgsnap_dumpjob_dumpschema_check CHECK ((dumpschema ~ '^[^".]*$'::text)),
     CONSTRAINT pgsnap_dumpjob_dumptype_check CHECK ((dumptype = ANY (ARRAY['FULL'::text, 'SCHEMA'::text, 'CLUSTER_SCHEMA'::text, 'SCRIPT'::text, 'CLUSTER'::text]))),
     CONSTRAINT pgsnap_dumpjob_jobtype_check CHECK ((jobtype = ANY (ARRAY['REPEAT'::text, 'SINGLE'::text]))),
     CONSTRAINT pgsnap_dumpjob_pgsnap_restorejob_id_check CHECK ((pgsnap_restorejob_id ~ '^[0-9,]*$'::text)),
@@ -569,6 +570,10 @@ CREATE TABLE pgsnap_worker (
     cron_upload text DEFAULT '*/5 * * * *'::text,
     status text DEFAULT 'ACTIVE'::text,
     date_added timestamp with time zone DEFAULT now(),
+    CONSTRAINT pgsnap_worker_cron_cacheconfig_check CHECK ((cron_cacheconfig ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
+    CONSTRAINT pgsnap_worker_cron_clean_check CHECK ((cron_clean ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
+    CONSTRAINT pgsnap_worker_cron_singlejob_check CHECK ((cron_singlejob ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
+    CONSTRAINT pgsnap_worker_cron_upload_check CHECK ((cron_upload ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
     CONSTRAINT pgsnap_worker_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
 );
 
@@ -758,10 +763,11 @@ CREATE TABLE pgsnap_restorejob (
     role_handling text DEFAULT 'USE_ROLE'::text,
     tblspc_handling text DEFAULT 'NO_TBLSPC'::text,
     date_added timestamp with time zone DEFAULT now(),
-    CONSTRAINT pgsnap_restorejob_cron_check CHECK ((cron ~ '^([,/\*0-9]+\ ){4}[,/\*0-9]+$'::text)),
+    CONSTRAINT pgsnap_restorejob_cron_check CHECK ((cron ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
+    CONSTRAINT pgsnap_restorejob_dest_dbname_check CHECK ((dest_dbname ~ '^[^".]*$'::text)),
     CONSTRAINT pgsnap_restorejob_existing_db_check CHECK ((existing_db = ANY (ARRAY['DROP'::text, 'RENAME'::text, 'DROP_BEFORE'::text]))),
     CONSTRAINT pgsnap_restorejob_jobtype_check CHECK ((jobtype = ANY (ARRAY['SINGLE'::text, 'REPEAT'::text, 'TRIGGER'::text]))),
-    CONSTRAINT pgsnap_restorejob_restoreschema_check CHECK ((length(restoreschema) > 0)),
+    CONSTRAINT pgsnap_restorejob_restoreschema_check CHECK ((restoreschema ~ '^[^".]*$'::text)),
     CONSTRAINT pgsnap_restorejob_restoretype_check CHECK ((restoretype = ANY (ARRAY['FULL'::text, 'DATA'::text, 'SCHEMA'::text]))),
     CONSTRAINT pgsnap_restorejob_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
 );
@@ -946,6 +952,35 @@ CREATE VIEW vw_pgsql_instance_bu_window_length AS
     pgsql_instance.bu_window_start AS start_hour,
     ((date_part('hour'::text, (((('20000102T'::text || pgsql_instance.bu_window_end) || ':00'::text))::timestamp with time zone - ((('20000101T'::text || pgsql_instance.bu_window_start) || ':00'::text))::timestamp with time zone)))::integer * 60) AS length_min
    FROM pgsql_instance;
+
+
+--
+-- Name: vw_restorejob_instance; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW vw_restorejob_instance AS
+ SELECT r.id,
+    r.pgsnap_catalog_id,
+    r.dest_dbname,
+    r.restoretype,
+        CASE
+            WHEN (r.restoreschema ~ '^[\*_0-9a-z]+$'::text) THEN r.restoreschema
+            ELSE (('"'::text || r.restoreschema) || '"'::text)
+        END AS restoreschema,
+    r.restoreoptions,
+    r.existing_db,
+    r.cron,
+    r.status AS status_restorejob,
+    r.comment,
+    r.jobtype,
+    p.dns_name,
+    p.pgport,
+    p.pgsql_superuser,
+    r.role_handling,
+    r.tblspc_handling,
+    p.status AS status_pgsqlinstance
+   FROM (pgsnap_restorejob r
+     JOIN pgsql_instance p ON ((r.dest_pgsql_instance_id = p.id)));
 
 
 --

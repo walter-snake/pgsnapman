@@ -103,7 +103,7 @@ function resolvepghost {
   if [ "${1}" == "local" ]; then
     local pgh=""
   else
-    local pgh="--host=${1}"
+    local pgh="-h${1}"
   fi
   echo "${pgh}"
 }
@@ -197,7 +197,7 @@ function getpgversion {
 # $5 check database name
 # returns 0 (not exists) or 1 (exists) 
 function dbexists {
-  local c=`${PGSCBIN}/psql ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "select count(*) from pg_database where datname = '$5';"`
+  local c=`${PGSCBIN}/psql ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "select count(*) from pg_database where datname = trim(both '\"' from '$5');"`
   echo ${c}
 }
 
@@ -209,7 +209,7 @@ function dbexists {
 # $5 schema name
 # returns 0 (not exists) or 1 (exists) 
 function schemaexists {
-  local c=`${PGSCBIN}/psql ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "select count(*) from pg_namespace where nspname = '$5';"`
+  local c=`${PGSCBIN}/psql ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "select count(*) from pg_namespace where nspname = trim(both '\"' from '$5');"`
   echo ${c}
 }
 
@@ -234,7 +234,7 @@ function getdbsize {
     FROM pg_class c \
     LEFT JOIN pg_namespace n ON n.oid = c.relnamespace \
     WHERE relkind = 'r' ) a ) a \
-    WHERE table_schema LIKE '$5' \
+    WHERE table_schema = trim(both '\"' from '$5') \
     GROUP BY table_schema;"
   fi
   local dbsize=`${pgbin}/psql ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "${sql}"`
