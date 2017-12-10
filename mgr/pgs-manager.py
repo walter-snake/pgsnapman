@@ -10,31 +10,6 @@ import ConfigParser
 import getpass
 from prettytable import PrettyTable
 from prettytable import from_db_cursor
-
-config = ConfigParser.RawConfigParser(allow_no_value=True)
-config.read('defaults.cfg')
-PGSCHOST=config.get('snapman_database', 'pgschost')
-PGSCPORT=config.get('snapman_database', 'pgscport')
-PGSCUSER=config.get('snapman_database', 'pgscuser')
-PGSCDB=config.get('snapman_database', 'pgscdb')
-PGSCPASSWORD=config.get('snapman_database', 'pgscpassword')
-
-print('')
-print('+-----------------------------------+')
-print('|  pgsnapman job & catalog manager  |')
-print('+-----------------------------------+')
-print('')
-print('Verifying database connection...')
-if PGSCPASSWORD == '':
-  PGSCPASSWORD=getpass.getpass('password: ')
-try:
-  conn = psycopg2.connect('host={} port={} dbname={} user={} password={}'.format(PGSCHOST, PGSCPORT, PGSCDB, PGSCUSER, PGSCPASSWORD))
-  cur = conn.cursor()
-  conn.close()
-except:
-  print('Could not connect to database, check settings in default.cfg')
-  sys.exit(1)
-print ''
   
 def listDbView(viewname, title, search = 'true'):
   if search.find(';') >= 0:
@@ -64,6 +39,7 @@ def listDetails(tablename, id, title):
   colnames = [desc[0] for desc in cur.description]
   print ''
   print title
+  print ''.ljust(48, '-')
   for c in colnames:
     print(c.ljust(26) + str(rec[c]))
   print ''
@@ -72,19 +48,85 @@ def setTableColumn(tablename, column, id, value, showresults = False):
   if column.find(';') >= 0:
     print 'invalid column name'
     return
-  sql = "update {} set {} = %s where id = %s;".format(tablename, column)
+  setnull=False
+  if value == None:
+    sql = "update {} set {} = null where id = %s;".format(tablename, column)
+    setnull = True
+  elif value.strip() == '':
+    sql = "update {} set {} = null where id = %s;".format(tablename, column)
+    setnull = True
+  else:
+    sql = "update {} set {} = %s where id = %s;".format(tablename, column)
   conn = psycopg2.connect('host={} port={} dbname={} user={} password={}'.format(PGSCHOST, PGSCPORT, PGSCDB, PGSCUSER, PGSCPASSWORD))  
   cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
   try:
-    cur.execute(sql, (value, id ,))
+    if setnull:
+      cur.execute(sql, (id ,))
+    else:
+      cur.execute(sql, (value, id ,))
   except psycopg2.Error as e:
     print e.pgerror
   conn.commit()
   conn.close()
   if showresults:
     listDetails(tablename, id, 'Verify update results')  
+
+def editRecord(tablename, id, editcols):
+  conn = psycopg2.connect('host={} port={} dbname={} user={} password={}'.format(PGSCHOST, PGSCPORT, PGSCDB, PGSCUSER, PGSCPASSWORD))  
+  cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+  sql = 'select * from ' + tablename + ' where id = %s;'
+  cur.execute(sql, (id ,))
+  row=cur.fetchone()
+  conn.close()
+  print('Enter new values:')
+  print('  (use exactly one space to clear a field):')
+  print ''.ljust(48, '-')
+  for c in editcols:
+    if row[c] == None:
+      dispval = ''
+    else:
+      dispval = row[c]
+    newval = raw_input(('{} [{}]'.format(c, dispval)).ljust(26, ' ') + ': ')
+    if newval == ' ':
+      row[c] = ''
+    elif newval.strip() != '':
+      row[c] = newval.strip()
+  print('')
+  print('Edited values:')
+  print ''.ljust(48, '-')
+  for c in editcols:
+    print('{}'.format(c).ljust(26, ' ') + str(row[c]))
+  yn = raw_input('Save new values [yN]? ')
+  if yn == 'y':
+    for c in editcols:
+      setTableColumn(tablename, c, id, row[c])
+    listDetails(tablename, id, 'Verify update results')
+  print('')
   
+  #print(diffset())
+#  cols = "select * from  where table_name = %s;"
+#  sql = "select * from  where id = %s;".format(tablename, column)
+
+def intersect(a, b):
+    return list(set(a) & set(b))
+
+def diffset(a, b):
+    return list(set(a) - set(b))
+
+def showHeader():
+  print """
++--------------------------------------------------+
+|                                                  |
+|                PgSnapMan manager                 |
+|                                                  |
+| W.Boasson, 2017                                  |
+| License: GPL3                                    |
+|                                                  |
++--------------------------------------------------+
+"""
+
 def showHelp():
+
   print """
 Available commands
 ==================
@@ -103,6 +145,7 @@ worker management
   worker list+<id>
   worker add
   worker status [ACTIVE|HALTED]
+  worker edit <id>
   worker delete [dns_name]
   
 postgres management
@@ -111,6 +154,7 @@ postgres management
   postgres list+<id>
   postgres add
   postgres status [ACTIVE|HALTED]
+  postgres edit <id>
   postgres delete [dns_name:port]
 
 catalog management
@@ -140,6 +184,7 @@ dump job management
 -------------------
   dumpjob list
   dumpjob list+<id>
+  dumbjob edit <id>
   """  
 
 def workerTask(task):
@@ -149,6 +194,11 @@ def workerTask(task):
       listDetails('pgsnap_worker', task.split('+')[1].strip(), 'PgSnapMan worker details')
     else:
       listDbView('mgr_worker', 'Registered PgSnapMan workers')
+  elif t == 's': # set status
+    tokens = task.split(' ')
+    id = tokens[2]
+    status = tokens[3]
+    setTableColumn('pgsnap_worker', 'status', id, status, True)
 
 def instanceTask(task):
   t = task.split(' ')[1][:1]
@@ -157,6 +207,11 @@ def instanceTask(task):
       listDetails('pgsql_instance', task.split('+')[1].strip(), 'Postgres instance details')
     else:
       listDbView('mgr_instance', 'Registered Postgres instances')
+  elif t == 's': # set status
+    tokens = task.split(' ')
+    id = tokens[2]
+    status = tokens[3]
+    setTableColumn('pgsql_instance', 'status', id, status, True)
 
 def dumpjobTask(task):
   t = task.split(' ')[1][:1]
@@ -170,8 +225,10 @@ def dumpjobTask(task):
     id = tokens[2]
     status = tokens[3]
     setTableColumn('pgsnap_dumpjob', 'status', id, status, True)
-    
-
+  elif t == 'e': # edit record
+    tokens = task.split(' ')
+    id = tokens[2]
+    editRecord('pgsnap_dumpjob', id, ['cron', 'dumpoptions', 'status', 'dumptype'])
       
 def catalogTask(task):
   t = task.split(' ')[1][:1]
@@ -197,25 +254,59 @@ def processCommand(cmd):
   task = cmd.strip()
   if task[:1].lower() == 'q':
     sys.exit(0)
-  try:
-    if task[:1].lower() == 'h':
-      showHelp()
-    elif task[:1].lower() == 'w':
-      workerTask(task)
-    elif task[:1].lower() == 'p':
-      instanceTask(task)
-    elif task[:1].lower() == 'c':
-      catalogTask(task)
-    elif task[:1].lower() == 'm':
-      messageTask(task)
-    elif task[:1].lower() == 'd':
-      dumpjobTask(task)
-    elif task[:1].lower() == 'r':
-      restoreTask(task)
-  except:
-    print('Invalid command, options (like a non-existing id)')
+#  try:
+  if task[:1].lower() == 'h':
+    showHelp()
+  elif task[:1].lower() == 'w':
+    workerTask(task)
+  elif task[:1].lower() == 'p':
+    instanceTask(task)
+  elif task[:1].lower() == 'c':
+    catalogTask(task)
+  elif task[:1].lower() == 'm':
+    messageTask(task)
+  elif task[:1].lower() == 'd':
+    dumpjobTask(task)
+  elif task[:1].lower() == 'r':
+    restoreTask(task)
+#  except Exception:
+#    print Exception
+#    print('Invalid command, options (like a non-existing id)')
       
+# ================================================================
 # 'MAIN'
+# ================================================================
+
+showHeader()
+
+if len(sys.argv) > 1:
+  if sys.argv[1][:1] == 'h':
+    showHelp()
+    sys.exit(0)
+
+config = ConfigParser.RawConfigParser(allow_no_value=True)
+config.read('defaults.cfg')
+PGSCHOST=config.get('snapman_database', 'pgschost')
+PGSCPORT=config.get('snapman_database', 'pgscport')
+PGSCUSER=config.get('snapman_database', 'pgscuser')
+PGSCDB=config.get('snapman_database', 'pgscdb')
+PGSCPASSWORD=config.get('snapman_database', 'pgscpassword')
+
+print('PgSnapMan catalog: {}@{}:{}/{}'.format(PGSCUSER, PGSCHOST, str(PGSCPORT), PGSCDB))
+print('')
+sys.stdout.write('Verifying database connection... ')
+if PGSCPASSWORD == '':
+  PGSCPASSWORD=getpass.getpass('password: ')
+try:
+  conn = psycopg2.connect('host={} port={} dbname={} user={} password={}'.format(PGSCHOST, PGSCPORT, PGSCDB, PGSCUSER, PGSCPASSWORD))
+  cur = conn.cursor()
+  conn.close()
+  print('ok')
+except:
+  print('\nCould not connect to database, check settings in default.cfg')
+  sys.exit(1)
+print ''
+
 cmd = ''
 if len(sys.argv) > 1:
   for a in range(1, len(sys.argv)):
