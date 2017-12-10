@@ -7,6 +7,8 @@ import sys
 import os
 import ConfigParser
 import getpass
+from prettytable import PrettyTable
+from prettytable import from_db_cursor
 
 config = ConfigParser.RawConfigParser(allow_no_value=True)
 config.read('defaults.cfg')
@@ -31,21 +33,19 @@ try:
 except:
   print('Could not connect to database, check settings in default.cfg')
   sys.exit(1)
+print ''
   
 def listScripts():
   conn = psycopg2.connect('host={} port={} dbname={} user={} password={}'.format(PGSCHOST, PGSCPORT, PGSCDB, PGSCUSER, PGSCPASSWORD))
   cur = conn.cursor()
   cur.execute('SELECT id, scriptname FROM pgsnap_script;')
-  rows = cur.fetchall()
   print('')
   print('Available scripts:')
-  print('| id   | scriptname' )
-  print('+------|--------------------' )
-  for row in rows:
-    print('|' + str(row[0]).rjust(5,' ') + ' | ' + row[1])
-  print('')
+  t = from_db_cursor(cur)
+  print t
   conn.commit()
   conn.close()
+  print('')
 
 def deleteScript():
   print('')
@@ -56,6 +56,7 @@ def deleteScript():
   conn.commit()
   conn.close()
   print('')
+  listScripts()
   
 def uploadScript():
   print('')
@@ -70,15 +71,17 @@ def uploadScript():
   conn.commit()
   conn.close()
   print('')
+  listScripts()
+  
 
 while True:
- task=raw_input('List, Upload, Delete, Quit [LUDQ]: ')
- if task[:1].upper() == 'L':
+ task=raw_input('List, Upload, Delete, Quit [l|u|d|q]: ')
+ if task[:1].lower() == 'l':
    listScripts()
- elif task[:1].upper() == 'U':
+ elif task[:1].lower() == 'u':
    uploadScript()
- elif task[:1].upper() == 'D':
+ elif task[:1].lower() == 'd':
    deleteScript()
- elif task[:1].upper() == 'Q':
+ elif task[:1].lower() == 'q':
    sys.exit(0)
 

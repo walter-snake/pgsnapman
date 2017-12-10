@@ -402,15 +402,6 @@ CREATE FUNCTION put_restorelog(resjobid integer, bupath text) RETURNS integer
 
 
 --
--- Name: put_singlerun(integer, text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION put_singlerun(job_id integer, job_class text) RETURNS void
-    LANGUAGE sql
-    AS $_$INSERT INTO pgsnap_singlerun (jobid, jobclass) values ($1, $2);$_$;
-
-
---
 -- Name: set_catalogstatus(integer, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -642,6 +633,85 @@ CREATE VIEW instance_compact AS
 
 
 --
+-- Name: mgr_catalog; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW mgr_catalog AS
+ SELECT c.id,
+    ((c.pgsql_dns_name || ':'::text) || c.pgsql_port) AS pgsql_instance,
+    ((c.dbname || '.'::text) || c.dumpschema) AS dbname,
+    c.dumptype,
+    to_char(c.starttime, 'YYYY-MM-DD HH:MI:SS'::text) AS starttime,
+    (c.endtime - c.starttime) AS duration,
+    c.status,
+    c.verified,
+    c.keep,
+    c.message,
+    w.dns_name AS pgsnap_worker
+   FROM (pgsnap_catalog c
+     JOIN pgsnap_worker w ON ((w.id = c.bu_worker_id)))
+  ORDER BY c.starttime;
+
+
+--
+-- Name: mgr_dumpjob; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW mgr_dumpjob AS
+ SELECT vw_dumpjob_worker_instance.id,
+    vw_dumpjob_worker_instance.pgsnap_worker_dns_name AS pgs_worker,
+    ((vw_dumpjob_worker_instance.pgsql_instance_dns_name || ':'::text) || vw_dumpjob_worker_instance.pgsql_instance_port) AS pgsql_instance,
+    vw_dumpjob_worker_instance.jobtype,
+    ((vw_dumpjob_worker_instance.dbname || '.'::text) || vw_dumpjob_worker_instance.dumpschema) AS dbname_schema,
+    vw_dumpjob_worker_instance.dumptype,
+    vw_dumpjob_worker_instance.dumpoptions,
+    vw_dumpjob_worker_instance.cron,
+    vw_dumpjob_worker_instance.comment,
+    vw_dumpjob_worker_instance.status,
+    vw_dumpjob_worker_instance.pgsnap_restorejob_id AS restorejob
+   FROM vw_dumpjob_worker_instance
+  ORDER BY ((vw_dumpjob_worker_instance.pgsql_instance_dns_name || ':'::text) || vw_dumpjob_worker_instance.pgsql_instance_port), ((vw_dumpjob_worker_instance.dbname || '.'::text) || vw_dumpjob_worker_instance.dumpschema);
+
+
+--
+-- Name: mgr_instance; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW mgr_instance AS
+ SELECT p.id,
+    p.dns_name,
+    p.pgport,
+    p.pgsql_superuser AS superuser,
+    p.status,
+    p.bu_window_start AS hour_start,
+    p.bu_window_end AS hour_end,
+    (((w.dns_name || ' ['::text) || p.pgsnap_worker_id_default) || ']'::text) AS def_worker,
+    p.comment,
+    to_char(p.date_added, 'YYYY-MM-DD HH:MI:SS'::text) AS date_added
+   FROM (pgsql_instance p
+     LEFT JOIN pgsnap_worker w ON ((w.id = p.pgsnap_worker_id_default)))
+  ORDER BY p.dns_name, p.pgport;
+
+
+--
+-- Name: mgr_worker; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW mgr_worker AS
+ SELECT pgsnap_worker.id,
+    pgsnap_worker.dns_name,
+    pgsnap_worker.status,
+    pgsnap_worker.cron_cacheconfig,
+    pgsnap_worker.cron_singlejob,
+    pgsnap_worker.cron_clean,
+    pgsnap_worker.cron_upload,
+    pgsnap_worker.comment,
+    to_char(pgsnap_worker.date_added, 'YYYY-MM-DD HH:MI:SS'::text) AS date_added
+   FROM pgsnap_worker
+  ORDER BY pgsnap_worker.dns_name;
+
+
+--
 -- Name: pgsnap_catalog_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -759,7 +829,7 @@ CREATE TABLE pgsnap_restorejob (
     comment text,
     jobtype text DEFAULT 'SINGLE'::text,
     cron text DEFAULT '* * * * *'::text NOT NULL,
-    pgsnap_catalog_id integer DEFAULT (-1),
+    pgsnap_catalog_id integer,
     role_handling text DEFAULT 'USE_ROLE'::text,
     tblspc_handling text DEFAULT 'NO_TBLSPC'::text,
     date_added timestamp with time zone DEFAULT now(),
@@ -1070,6 +1140,14 @@ ALTER TABLE ONLY pgsnap_catalog
 
 
 --
+-- Name: pgsnap_default_pkey; Type: CONSTRAINT; Schema: public; Owner: -; Tablespace: 
+--
+
+ALTER TABLE ONLY pgsnap_default
+    ADD CONSTRAINT pgsnap_default_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: pgsnap_dumpjob_pkey; Type: CONSTRAINT; Schema: public; Owner: -; Tablespace: 
 --
 
@@ -1126,10 +1204,38 @@ ALTER TABLE ONLY pgsql_instance
 
 
 --
+-- Name: fki_pgsnap_catalog_pgsnap_worker; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE INDEX fki_pgsnap_catalog_pgsnap_worker ON pgsnap_catalog USING btree (bu_worker_id);
+
+
+--
 -- Name: fki_pgsnap_dumpjob_pgsnap_worker; Type: INDEX; Schema: public; Owner: -; Tablespace: 
 --
 
 CREATE INDEX fki_pgsnap_dumpjob_pgsnap_worker ON pgsnap_dumpjob USING btree (pgsnap_worker_id);
+
+
+--
+-- Name: fki_pgsnap_restorejob_pgsql_instance; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE INDEX fki_pgsnap_restorejob_pgsql_instance ON pgsnap_restorejob USING btree (dest_pgsql_instance_id);
+
+
+--
+-- Name: pgsnap_default_key_idx; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE UNIQUE INDEX pgsnap_default_key_idx ON pgsnap_default USING btree (key);
+
+
+--
+-- Name: pgsnap_script_scriptname_idx; Type: INDEX; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE UNIQUE INDEX pgsnap_script_scriptname_idx ON pgsnap_script USING btree (scriptname);
 
 
 --
@@ -1154,6 +1260,14 @@ CREATE TRIGGER insert_pgsnap_dumpjob BEFORE INSERT ON pgsnap_dumpjob FOR EACH RO
 
 
 --
+-- Name: fk_pgsnap_catalog_pgsnap_worker; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY pgsnap_catalog
+    ADD CONSTRAINT fk_pgsnap_catalog_pgsnap_worker FOREIGN KEY (bu_worker_id) REFERENCES pgsnap_worker(id);
+
+
+--
 -- Name: fk_pgsnap_dumpjob_pgsnap_worker; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1167,6 +1281,30 @@ ALTER TABLE ONLY pgsnap_dumpjob
 
 ALTER TABLE ONLY pgsnap_dumpjob
     ADD CONSTRAINT fk_pgsnap_dumpjob_pgsql_instance FOREIGN KEY (pgsql_instance_id) REFERENCES pgsql_instance(id);
+
+
+--
+-- Name: fk_pgsnap_restorejob_pgsnap_catalog; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY pgsnap_restorejob
+    ADD CONSTRAINT fk_pgsnap_restorejob_pgsnap_catalog FOREIGN KEY (pgsnap_catalog_id) REFERENCES pgsnap_catalog(id);
+
+
+--
+-- Name: fk_pgsnap_restorejob_pgsql_instance; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY pgsnap_restorejob
+    ADD CONSTRAINT fk_pgsnap_restorejob_pgsql_instance FOREIGN KEY (dest_pgsql_instance_id) REFERENCES pgsql_instance(id);
+
+
+--
+-- Name: fk_pgsnap_restorelog_pgsnap_restorejob; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY pgsnap_restorelog
+    ADD CONSTRAINT fk_pgsnap_restorelog_pgsnap_restorejob FOREIGN KEY (pgsnap_restorejob_id) REFERENCES pgsnap_restorejob(id);
 
 
 --

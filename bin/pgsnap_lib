@@ -364,9 +364,6 @@ ERROR=""
 MSG=""
 ERRCODE=0
 
-# Set hostname
-FQDN=`hostname -f`
-
 # Try to find the config file, check and read
 if [ ! -e ${CONFIGFILE} ]; then
   CONFIGFILE=${SCRIPTPATH}/pgsnapman.config
@@ -376,6 +373,13 @@ if [ -e ${CONFIGFILE} ]; then
 else
   echo "pgsnapman config file not found: "${CONFIGFILE}
   cleanupexit 1
+fi
+
+# Set hostname
+if [ "${WORKER_DNS_NAME}" != "" ]; then
+  FQDN="${WORKER_DNS_NAME}"
+else 
+  FQDN=`hostname -f`
 fi
 
 # Test existing root dir

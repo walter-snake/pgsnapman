@@ -85,7 +85,9 @@ function preparescriptrun {
   else   
     mkdir ${jobdir}/${buname}
     # Download script
-    ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT get_scriptcode ('${1}');" > ${SCRIPTDIR}/${1}
+    if [ ! -e ${SCRIPTDIR}/${1} ]; then
+      ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT get_scriptcode ('${1}');" > ${SCRIPTDIR}/${1}
+    fi
   fi
 }
 

@@ -1,0 +1,1417 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<architect-project version="1.0" appversion="1.0.6">
+ <project-name>pgsnapman-db</project-name>
+ <print-settings numCopies="1" zoom="1.0" pageNumbersPrinted="true" orientation="1" paperWidth="612.0" paperHeight="792.0" leftBorder="50.0" rightBorder="50.0" topBorder="50.0" bottomBorder="50.0" />
+ <project-data-sources>
+  <data-source id="DS0">
+   <property key="Logical" value="PlayPen Database" />
+  </data-source>
+  <data-source id="DS2">
+   <property key="Connection Type" value="PostgreSQL" />
+   <property key="Logical" value="pgsnapman" />
+   <property key="JDBC URL" value="jdbc:postgresql://172.16.130.1:5432/pgsnapman" />
+   <property key="UID" value="wouterb" />
+   <property key="PWD" value="password" />
+   <property key="ca.sqlpower.architect.etl.kettle.database" value="" />
+   <property key="ca.sqlpower.architect.etl.kettle.port" value="" />
+   <property key="ca.sqlpower.architect.etl.kettle.hostname" value="" />
+   <property key="ca.sqlpower.architect.etl.kettle.repos.login" value="" />
+   <property key="ca.sqlpower.architect.etl.kettle.repos.password" value="" />
+  </data-source>
+ </project-data-sources>
+ <source-databases>
+  <database id="DB0" populated="true" UUID="103e83a0-47ba-4ae4-b1f9-73d40fc031ed" dbcs-ref="DS2" name="pgsnapman" physicalName="pgsnapman" >
+   <catalog id="CAT1" populated="true" UUID="8b800fb1-f1d2-49b3-9afa-e40f040d2fca" name="pgsnapman" nativeTerm="database" physicalName="pgsnapman" >
+    <schema id="SCH2" populated="false" UUID="f4d7f014-c020-498d-b6b6-86ff29eb75d4" name="information_schema" nativeTerm="schema" physicalName="information_schema" >
+    </schema>
+    <schema id="SCH3" populated="false" UUID="23af42b8-48b2-44c7-9af8-40ea5036ab8d" name="pg_catalog" nativeTerm="schema" physicalName="pg_catalog" >
+    </schema>
+    <schema id="SCH4" populated="false" UUID="1b310328-8bbb-48d9-bdc9-19307c6f7989" name="pg_toast_temp_1" nativeTerm="schema" physicalName="pg_toast_temp_1" >
+    </schema>
+    <schema id="SCH5" populated="true" UUID="becf9d18-dfd1-4a6d-9b1c-a08b21522c7e" name="public" nativeTerm="schema" physicalName="public" >
+     <table id="TAB6" populated="true" UUID="4c70aeae-4799-482e-9c73-efd665ee8f0a" name="pgsnap_catalog" objectType="TABLE" physicalName="pgsnap_catalog" >
+      <remarks></remarks>
+      <folder id="FOLTAB61" populated="true" name="Columns" physicalName="Columns" type="1">
+       <column id="COL7" populated="true" UUID="d0aa6994-22fc-44e4-9099-f0768f57c9e8" autoIncrement="true" defaultValue="nextval(&apos;pgsnap_catalog_id_seq&apos;::regclass)" name="id" nullable="0" physicalName="id" precision="10" primaryKeySeq="0" referenceCount="1" scale="0" sourceDataTypeName="serial" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL8" populated="true" UUID="7a2a5b87-451d-4c31-9864-5c69a183e171" autoIncrement="false" name="pgsnap_dumpjob_id" nullable="1" physicalName="pgsnap_dumpjob_id" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL9" populated="true" UUID="38d3beea-1a7d-4d1d-8738-03dbd11f58d8" autoIncrement="false" name="starttime" nullable="1" physicalName="starttime" precision="35" referenceCount="1" scale="6" sourceDataTypeName="timestamptz" type="93" >
+        <remarks></remarks>
+       </column>
+       <column id="COL10" populated="true" UUID="e7a91e03-905d-486d-8478-b87cc006513d" autoIncrement="false" name="endtime" nullable="1" physicalName="endtime" precision="35" referenceCount="1" scale="6" sourceDataTypeName="timestamptz" type="93" >
+        <remarks></remarks>
+       </column>
+       <column id="COL11" populated="true" UUID="e39f6ceb-ca0e-473c-84ea-eeb8e20d30e3" autoIncrement="false" name="status" nullable="1" physicalName="status" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL12" populated="true" UUID="0ae84d0a-aa8c-4458-be89-251efa75a71e" autoIncrement="false" name="bu_name" nullable="1" physicalName="bu_name" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL13" populated="true" UUID="34a07fd9-0066-4853-bbc7-73dae45f73f3" autoIncrement="false" name="bu_location" nullable="1" physicalName="bu_location" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL14" populated="true" UUID="765a1424-60e6-491c-9e00-423ce8c95914" autoIncrement="false" name="dbsize" nullable="1" physicalName="dbsize" precision="20" referenceCount="1" scale="0" sourceDataTypeName="int8" type="-5" >
+        <remarks></remarks>
+       </column>
+       <column id="COL15" populated="true" UUID="47c59514-cef0-4386-98bf-f46d3116344b" autoIncrement="false" name="dumpsize" nullable="1" physicalName="dumpsize" precision="20" referenceCount="1" scale="0" sourceDataTypeName="int8" type="-5" >
+        <remarks></remarks>
+       </column>
+       <column id="COL16" populated="true" UUID="2082aeec-24d2-4b13-887d-8cbea8a0546a" autoIncrement="false" name="dbname" nullable="1" physicalName="dbname" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL17" populated="true" UUID="8b5b68ae-a1cd-4813-bfd4-d704883a690e" autoIncrement="false" name="dumpschema" nullable="1" physicalName="dumpschema" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL18" populated="true" UUID="b15617e9-9dd5-44d3-a127-8c856131898b" autoIncrement="false" name="dumptype" nullable="1" physicalName="dumptype" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL19" populated="true" UUID="8717784e-b572-430a-b0fe-dc3848a9737f" autoIncrement="false" defaultValue="&apos;NO&apos;::text" name="verified" nullable="1" physicalName="verified" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL20" populated="true" UUID="46a5dd01-d1a3-4d5b-95ec-992664680249" autoIncrement="false" defaultValue="&apos;AUTO&apos;::text" name="keep" nullable="1" physicalName="keep" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL21" populated="true" UUID="1f2b58c8-3eeb-4f56-bacb-59b93cf10040" autoIncrement="false" name="bu_extension" nullable="1" physicalName="bu_extension" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL22" populated="true" UUID="5c2cc68d-8139-4f95-b383-494e6b9a621d" autoIncrement="false" name="pgversion" nullable="1" physicalName="pgversion" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL23" populated="true" UUID="13bb2bbd-489f-4050-9742-0b03f6822f95" autoIncrement="false" name="bu_worker_id" nullable="1" physicalName="bu_worker_id" precision="10" referenceCount="2" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL24" populated="true" UUID="7703e5d3-37a6-4511-8bea-580d65e8500a" autoIncrement="false" name="message" nullable="1" physicalName="message" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL25" populated="true" UUID="54347611-1e4e-404d-a09d-f1770e3d24b0" autoIncrement="false" name="pgsql_dns_name" nullable="1" physicalName="pgsql_dns_name" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL26" populated="true" UUID="f6413121-03e9-4a88-ae7f-005a77645ae9" autoIncrement="false" name="pgsql_port" nullable="1" physicalName="pgsql_port" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       </folder>
+       <folder id="FOLTAB63" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+       </folder>
+       <folder id="FOLTAB62" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+       </folder>
+       <folder id="FOLTAB64" populated="true" name="Indices" physicalName="Indices" type="4">
+       <index id="IDX27" populated="true" UUID="1bb0bf06-c360-4579-ba22-610a4bcc8068" clustered="false" index-type="BTREE" name="pgsnap_catalog_pkey" physicalName="pgsnap_catalog_pkey" primaryKeyIndex="true" unique="true" >
+        <index-column id="IDC28" populated="true" UUID="c6640907-f418-4891-8dd3-f8cdf7f8394d" ascendingOrDescending="UNSPECIFIED" column-ref="COL7" name="id" physicalName="id" />
+       </index>
+       <index id="IDX29" populated="true" UUID="0871f661-524f-4c90-aff2-aee013af9443" clustered="false" index-type="BTREE" name="fki_pgsnap_catalog_pgsnap_worker" physicalName="fki_pgsnap_catalog_pgsnap_worker" primaryKeyIndex="false" unique="false" >
+        <index-column id="IDC30" populated="true" UUID="b48d0d91-0480-4e8a-b49d-aa6cc336c7a1" ascendingOrDescending="UNSPECIFIED" column-ref="COL23" name="bu_worker_id" physicalName="bu_worker_id" />
+       </index>
+      </folder>
+     </table>
+     <table id="TAB31" populated="true" UUID="ff3147d0-5a17-4eec-9dfb-392b112cba5f" name="pgsnap_default" objectType="TABLE" physicalName="pgsnap_default" >
+      <remarks></remarks>
+      <folder id="FOLTAB311" populated="true" name="Columns" physicalName="Columns" type="1">
+       <column id="COL32" populated="true" UUID="06f2ae9a-84cf-4faa-996f-a7e2e12fd3c7" autoIncrement="true" defaultValue="nextval(&apos;pgsnap_default_id_seq&apos;::regclass)" name="id" nullable="0" physicalName="id" precision="10" primaryKeySeq="0" referenceCount="1" scale="0" sourceDataTypeName="serial" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL33" populated="true" UUID="b2ec74b0-9179-4ba8-89b2-bdb2a60cbdba" autoIncrement="false" name="key" nullable="1" physicalName="key" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL34" populated="true" UUID="c5922f7a-b5c0-4dc3-a42f-0679a56307c7" autoIncrement="false" name="value" nullable="1" physicalName="value" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       </folder>
+       <folder id="FOLTAB313" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+       </folder>
+       <folder id="FOLTAB312" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+       </folder>
+       <folder id="FOLTAB314" populated="true" name="Indices" physicalName="Indices" type="4">
+       <index id="IDX35" populated="true" UUID="9c7361c4-1b97-4059-9d66-55e736cd0bef" clustered="false" index-type="BTREE" name="pgsnap_default_pkey" physicalName="pgsnap_default_pkey" primaryKeyIndex="true" unique="true" >
+        <index-column id="IDC36" populated="true" UUID="97d68786-478b-4c71-b4f9-215cbd639c34" ascendingOrDescending="UNSPECIFIED" column-ref="COL32" name="id" physicalName="id" />
+       </index>
+       <index id="IDX37" populated="true" UUID="e8e11427-a559-42fb-b383-bfc85e70ed43" clustered="false" index-type="BTREE" name="pgsnap_default_key_idx" physicalName="pgsnap_default_key_idx" primaryKeyIndex="false" unique="true" >
+        <index-column id="IDC38" populated="true" UUID="299d63d5-932b-4724-8017-c667f3069fdc" ascendingOrDescending="UNSPECIFIED" column-ref="COL33" name="key" physicalName="key" />
+       </index>
+      </folder>
+     </table>
+     <table id="TAB39" populated="true" UUID="86102d5b-4c4a-41a7-b8a6-9c4903888636" name="pgsnap_dumpjob" objectType="TABLE" physicalName="pgsnap_dumpjob" >
+      <remarks></remarks>
+      <folder id="FOLTAB391" populated="true" name="Columns" physicalName="Columns" type="1">
+       <column id="COL40" populated="true" UUID="872be923-f8ca-4333-91c3-f0aad5e10077" autoIncrement="true" defaultValue="nextval(&apos;pgsnap_dumpjob_id_seq&apos;::regclass)" name="id" nullable="0" physicalName="id" precision="10" primaryKeySeq="0" referenceCount="1" scale="0" sourceDataTypeName="serial" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL41" populated="true" UUID="0c38ad73-287d-41d7-9703-ff0c98e788c5" autoIncrement="false" name="pgsnap_worker_id" nullable="0" physicalName="pgsnap_worker_id" precision="10" referenceCount="2" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL42" populated="true" UUID="1524fd51-bda9-453f-8ec0-363aefbbfa27" autoIncrement="false" name="pgsql_instance_id" nullable="0" physicalName="pgsql_instance_id" precision="10" referenceCount="2" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL43" populated="true" UUID="9bbdbb8b-e167-452a-9350-6af5b6ae9b9b" autoIncrement="false" name="dbname" nullable="0" physicalName="dbname" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL44" populated="true" UUID="409c3f47-ca0b-47a8-8d44-5a7aeaf5a5ef" autoIncrement="false" defaultValue="&apos;FULL&apos;::text" name="dumptype" nullable="1" physicalName="dumptype" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL45" populated="true" UUID="9ea0848e-bfd2-4d7b-9f10-d01a8e469fba" autoIncrement="false" defaultValue="&apos;*&apos;::text" name="dumpschema" nullable="1" physicalName="dumpschema" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL46" populated="true" UUID="2bca953d-8c70-40aa-993a-de65feef48f4" autoIncrement="false" name="dumpoptions" nullable="1" physicalName="dumpoptions" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL47" populated="true" UUID="aa3ee942-9c3e-4e11-9224-2ce538e9eb4e" autoIncrement="false" defaultValue="14" name="keep_daily" nullable="1" physicalName="keep_daily" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL48" populated="true" UUID="e0d0dbbc-40f0-4c85-a1ce-9f5feea22295" autoIncrement="false" defaultValue="2" name="keep_weekly" nullable="1" physicalName="keep_weekly" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL49" populated="true" UUID="b4139cdb-6257-4ea4-88fc-ca47174e41eb" autoIncrement="false" defaultValue="5" name="keep_monthly" nullable="1" physicalName="keep_monthly" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL50" populated="true" UUID="48bd9ac5-2cb9-4883-8ba9-d3b88d346673" autoIncrement="false" defaultValue="2" name="keep_yearly" nullable="1" physicalName="keep_yearly" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL51" populated="true" UUID="dfcf2361-37b6-4b78-b405-a663a6f4981b" autoIncrement="false" name="comment" nullable="1" physicalName="comment" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL52" populated="true" UUID="20aa4faa-d223-4ac9-b8bd-fc224c229557" autoIncrement="false" name="cron" nullable="0" physicalName="cron" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL53" populated="true" UUID="f3c9748e-30d2-4fa2-881f-72a8ac515bbf" autoIncrement="false" defaultValue="&apos;ACTIVE&apos;::text" name="status" nullable="1" physicalName="status" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL54" populated="true" UUID="ecba83b2-732f-48d6-9811-b197c033d5e6" autoIncrement="false" defaultValue="&apos;REPEAT&apos;::text" name="jobtype" nullable="1" physicalName="jobtype" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL55" populated="true" UUID="2f7bde2b-bc7d-4051-8c3a-cd3da0b41397" autoIncrement="false" name="pgsnap_restorejob_id" nullable="1" physicalName="pgsnap_restorejob_id" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL56" populated="true" UUID="92a5063c-39ad-442b-bba5-a228fd6cc82f" autoIncrement="false" defaultValue="now()" name="date_added" nullable="1" physicalName="date_added" precision="35" referenceCount="1" scale="6" sourceDataTypeName="timestamptz" type="93" >
+        <remarks></remarks>
+       </column>
+       </folder>
+       <folder id="FOLTAB393" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+       </folder>
+       <folder id="FOLTAB392" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+       </folder>
+       <folder id="FOLTAB394" populated="true" name="Indices" physicalName="Indices" type="4">
+       <index id="IDX57" populated="true" UUID="2ed6fcb6-c05b-4500-bc6f-2f49fb4c620b" clustered="false" index-type="BTREE" name="pgsnap_dumpjob_pkey" physicalName="pgsnap_dumpjob_pkey" primaryKeyIndex="true" unique="true" >
+        <index-column id="IDC58" populated="true" UUID="b53332ad-99c1-4417-a950-d295ebe1b4ca" ascendingOrDescending="UNSPECIFIED" column-ref="COL40" name="id" physicalName="id" />
+       </index>
+       <index id="IDX59" populated="true" UUID="45a99037-b4e5-4d76-9bd5-026664ed9c55" clustered="false" index-type="BTREE" name="fki_pgsnap_dumpjob_pgsnap_worker" physicalName="fki_pgsnap_dumpjob_pgsnap_worker" primaryKeyIndex="false" unique="false" >
+        <index-column id="IDC60" populated="true" UUID="a57ae3fe-0156-438b-9404-c2da657d3504" ascendingOrDescending="UNSPECIFIED" column-ref="COL41" name="pgsnap_worker_id" physicalName="pgsnap_worker_id" />
+       </index>
+      </folder>
+     </table>
+     <table id="TAB61" populated="true" UUID="42a0e32f-3cbf-4fc6-a7e7-3d23af7afc2d" name="pgsnap_message" objectType="TABLE" physicalName="pgsnap_message" >
+      <remarks></remarks>
+      <folder id="FOLTAB611" populated="true" name="Columns" physicalName="Columns" type="1">
+       <column id="COL62" populated="true" UUID="d61189d4-d7bc-450c-abcc-d604c19cd315" autoIncrement="true" defaultValue="nextval(&apos;pgsnap_message_id_seq&apos;::regclass)" name="id" nullable="0" physicalName="id" precision="10" primaryKeySeq="0" referenceCount="1" scale="0" sourceDataTypeName="serial" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL63" populated="true" UUID="cf0d6565-5cba-4a65-a0c3-9d28d6deb3ed" autoIncrement="false" name="level" nullable="1" physicalName="level" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL64" populated="true" UUID="1b6f34d8-d7b4-4557-ace8-5d36007f8b22" autoIncrement="false" name="pgsnap_tool" nullable="1" physicalName="pgsnap_tool" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL65" populated="true" UUID="be2fcee4-7dc8-40fa-aed1-d87af2a43371" autoIncrement="false" name="logtime" nullable="1" physicalName="logtime" precision="35" referenceCount="1" scale="6" sourceDataTypeName="timestamptz" type="93" >
+        <remarks></remarks>
+       </column>
+       <column id="COL66" populated="true" UUID="ef23f61f-c4ae-4a99-b1ab-50bebabb73aa" autoIncrement="false" name="message" nullable="1" physicalName="message" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL67" populated="true" UUID="014a179b-a34d-44ec-8d2c-d266bff15086" autoIncrement="false" name="jobclass" nullable="1" physicalName="jobclass" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL68" populated="true" UUID="6612d93c-d352-405c-8ccd-31b42e558b00" autoIncrement="false" name="jobid" nullable="1" physicalName="jobid" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       </folder>
+       <folder id="FOLTAB613" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+       </folder>
+       <folder id="FOLTAB612" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+       </folder>
+       <folder id="FOLTAB614" populated="true" name="Indices" physicalName="Indices" type="4">
+       <index id="IDX69" populated="true" UUID="0047f2ed-ccb0-47e0-83c2-ab7259a040b9" clustered="false" index-type="BTREE" name="pgsnap_message_pkey" physicalName="pgsnap_message_pkey" primaryKeyIndex="true" unique="true" >
+        <index-column id="IDC70" populated="true" UUID="dfa9ce43-bf6a-465a-8063-986c1bb39d49" ascendingOrDescending="UNSPECIFIED" column-ref="COL62" name="id" physicalName="id" />
+       </index>
+      </folder>
+     </table>
+     <table id="TAB71" populated="true" UUID="77253e01-d8ee-41eb-9592-1ad568cd8f46" name="pgsnap_restorejob" objectType="TABLE" physicalName="pgsnap_restorejob" >
+      <remarks></remarks>
+      <folder id="FOLTAB711" populated="true" name="Columns" physicalName="Columns" type="1">
+       <column id="COL72" populated="true" UUID="736217f3-f7e5-4f89-be4f-8e6a2fee3a9a" autoIncrement="true" defaultValue="nextval(&apos;pgsnap_restorejob_id_seq&apos;::regclass)" name="id" nullable="0" physicalName="id" precision="10" primaryKeySeq="0" referenceCount="1" scale="0" sourceDataTypeName="serial" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL73" populated="true" UUID="81ebfbf6-96d5-4381-8897-dd48ccc8f91c" autoIncrement="false" name="dest_pgsql_instance_id" nullable="0" physicalName="dest_pgsql_instance_id" precision="10" referenceCount="2" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL74" populated="true" UUID="73b75658-38f0-459c-8d81-9ff529688bf3" autoIncrement="false" name="dest_dbname" nullable="0" physicalName="dest_dbname" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL75" populated="true" UUID="7039cf82-cc30-4e22-bc26-3bbada639075" autoIncrement="false" defaultValue="&apos;FULL&apos;::text" name="restoretype" nullable="1" physicalName="restoretype" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL76" populated="true" UUID="8f26e6f0-af32-488f-aa88-fa8bd5ed7515" autoIncrement="false" defaultValue="&apos;*&apos;::text" name="restoreschema" nullable="0" physicalName="restoreschema" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL77" populated="true" UUID="6c61f568-4b6c-4f8e-a35d-edf54032e5c3" autoIncrement="false" defaultValue="&apos;&apos;::text" name="restoreoptions" nullable="1" physicalName="restoreoptions" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL78" populated="true" UUID="4581e245-65c3-403c-b5ff-6715226b948e" autoIncrement="false" defaultValue="&apos;RENAME&apos;::text" name="existing_db" nullable="1" physicalName="existing_db" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL79" populated="true" UUID="b926cae2-cad5-468f-afbd-1c4ece3d9d79" autoIncrement="false" defaultValue="&apos;ACTIVE&apos;::text" name="status" nullable="1" physicalName="status" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL80" populated="true" UUID="3a6325f1-b9c3-466f-b6aa-69a3bb7c2d1a" autoIncrement="false" name="comment" nullable="1" physicalName="comment" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL81" populated="true" UUID="05f4fd64-1daf-41f7-8832-b1e8aaae2a77" autoIncrement="false" defaultValue="&apos;SINGLE&apos;::text" name="jobtype" nullable="1" physicalName="jobtype" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL82" populated="true" UUID="5f232665-4508-4357-bfe6-b7690de06387" autoIncrement="false" defaultValue="&apos;* * * * *&apos;::text" name="cron" nullable="0" physicalName="cron" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL83" populated="true" UUID="0117df43-01bf-42cd-8558-b9db7c2072f1" autoIncrement="false" name="pgsnap_catalog_id" nullable="1" physicalName="pgsnap_catalog_id" precision="10" referenceCount="2" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL84" populated="true" UUID="15467f9e-487d-4064-b2fb-139a408d651f" autoIncrement="false" defaultValue="&apos;USE_ROLE&apos;::text" name="role_handling" nullable="1" physicalName="role_handling" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL85" populated="true" UUID="01c22c22-242d-419c-84f5-7c2d9ef3d0ce" autoIncrement="false" defaultValue="&apos;NO_TBLSPC&apos;::text" name="tblspc_handling" nullable="1" physicalName="tblspc_handling" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL86" populated="true" UUID="876ed9d8-dec9-40b7-88bf-32e6b6291eba" autoIncrement="false" defaultValue="now()" name="date_added" nullable="1" physicalName="date_added" precision="35" referenceCount="1" scale="6" sourceDataTypeName="timestamptz" type="93" >
+        <remarks></remarks>
+       </column>
+       </folder>
+       <folder id="FOLTAB713" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+       </folder>
+       <folder id="FOLTAB712" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+       </folder>
+       <folder id="FOLTAB714" populated="true" name="Indices" physicalName="Indices" type="4">
+       <index id="IDX87" populated="true" UUID="9f9173b0-91dc-4a22-bf6f-339cb8391ee2" clustered="false" index-type="BTREE" name="pgsnap_restorejob_pkey" physicalName="pgsnap_restorejob_pkey" primaryKeyIndex="true" unique="true" >
+        <index-column id="IDC88" populated="true" UUID="fde29510-659f-4d5b-a71e-88690bfa4af3" ascendingOrDescending="UNSPECIFIED" column-ref="COL72" name="id" physicalName="id" />
+       </index>
+       <index id="IDX89" populated="true" UUID="a88a4349-d1e1-4ada-8e10-f3502cafa919" clustered="false" index-type="BTREE" name="fki_pgsnap_restorejob_pgsql_instance" physicalName="fki_pgsnap_restorejob_pgsql_instance" primaryKeyIndex="false" unique="false" >
+        <index-column id="IDC90" populated="true" UUID="46a5df8e-9a5f-42b9-b9b3-a0b99f080b71" ascendingOrDescending="UNSPECIFIED" column-ref="COL73" name="dest_pgsql_instance_id" physicalName="dest_pgsql_instance_id" />
+       </index>
+      </folder>
+     </table>
+     <table id="TAB91" populated="true" UUID="817278d7-440b-4969-8b39-b095e7ca5be3" name="pgsnap_restorelog" objectType="TABLE" physicalName="pgsnap_restorelog" >
+      <remarks></remarks>
+      <folder id="FOLTAB911" populated="true" name="Columns" physicalName="Columns" type="1">
+       <column id="COL92" populated="true" UUID="34c85977-2ae3-4528-acaf-36a53b4a860e" autoIncrement="true" defaultValue="nextval(&apos;pgsnap_restorelog_id_seq&apos;::regclass)" name="id" nullable="0" physicalName="id" precision="10" primaryKeySeq="0" referenceCount="1" scale="0" sourceDataTypeName="serial" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL93" populated="true" UUID="b874742a-c9ca-479b-9556-4c70233b4fc7" autoIncrement="false" name="pgsnap_restorejob_id" nullable="1" physicalName="pgsnap_restorejob_id" precision="10" referenceCount="2" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL94" populated="true" UUID="49e4b6e7-9ff2-40af-83f0-bae9c0d21776" autoIncrement="false" defaultValue="now()" name="starttime" nullable="1" physicalName="starttime" precision="35" referenceCount="1" scale="6" sourceDataTypeName="timestamptz" type="93" >
+        <remarks></remarks>
+       </column>
+       <column id="COL95" populated="true" UUID="b0b4bb86-f701-4e69-927f-1a55b52c7998" autoIncrement="false" name="endtime" nullable="1" physicalName="endtime" precision="35" referenceCount="1" scale="6" sourceDataTypeName="timestamptz" type="93" >
+        <remarks></remarks>
+       </column>
+       <column id="COL96" populated="true" UUID="5d5b070c-ba2a-43aa-a321-c003354ab279" autoIncrement="false" defaultValue="&apos;RUNNING&apos;::text" name="status" nullable="1" physicalName="status" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL97" populated="true" UUID="eb14dbbc-c82b-4c5b-b1fd-be2012e457aa" autoIncrement="false" name="bu_path" nullable="1" physicalName="bu_path" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL98" populated="true" UUID="22892358-f568-4d06-9996-4308ec0d2ee7" autoIncrement="false" name="message" nullable="1" physicalName="message" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       </folder>
+       <folder id="FOLTAB913" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+       </folder>
+       <folder id="FOLTAB912" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+       </folder>
+       <folder id="FOLTAB914" populated="true" name="Indices" physicalName="Indices" type="4">
+       <index id="IDX99" populated="true" UUID="4e5afc30-1113-472c-a21c-fd653b81cb9b" clustered="false" index-type="BTREE" name="pgsnap_restorelog_pkey" physicalName="pgsnap_restorelog_pkey" primaryKeyIndex="true" unique="true" >
+        <index-column id="IDC100" populated="true" UUID="0ef24183-7573-4458-a498-1eaff07aa7bf" ascendingOrDescending="UNSPECIFIED" column-ref="COL92" name="id" physicalName="id" />
+       </index>
+      </folder>
+     </table>
+     <table id="TAB101" populated="true" UUID="df34bc31-b2c6-4edd-9736-bf9b80267785" name="pgsnap_script" objectType="TABLE" physicalName="pgsnap_script" >
+      <remarks></remarks>
+      <folder id="FOLTAB1011" populated="true" name="Columns" physicalName="Columns" type="1">
+       <column id="COL102" populated="true" UUID="ada081d8-e02e-4ddc-baa4-839d36750ec7" autoIncrement="true" defaultValue="nextval(&apos;pgsnap_script_id_seq&apos;::regclass)" name="id" nullable="0" physicalName="id" precision="10" primaryKeySeq="0" referenceCount="1" scale="0" sourceDataTypeName="serial" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL103" populated="true" UUID="a2bab081-b269-415c-8847-1f12ea42e7f9" autoIncrement="false" name="scriptname" nullable="1" physicalName="scriptname" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL104" populated="true" UUID="870d1211-b798-4fee-baa2-a4177df35e47" autoIncrement="false" name="scriptcode" nullable="1" physicalName="scriptcode" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL105" populated="true" UUID="cb1146ba-c38f-48ce-8856-0614d2e28bd9" autoIncrement="false" defaultValue="now()" name="date_added" nullable="1" physicalName="date_added" precision="35" referenceCount="1" scale="6" sourceDataTypeName="timestamptz" type="93" >
+        <remarks></remarks>
+       </column>
+       </folder>
+       <folder id="FOLTAB1013" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+       </folder>
+       <folder id="FOLTAB1012" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+       </folder>
+       <folder id="FOLTAB1014" populated="true" name="Indices" physicalName="Indices" type="4">
+       <index id="IDX106" populated="true" UUID="25567737-1ff0-4d3d-a48d-1c18fd8f3625" clustered="false" index-type="BTREE" name="pgsnap_script_pkey" physicalName="pgsnap_script_pkey" primaryKeyIndex="true" unique="true" >
+        <index-column id="IDC107" populated="true" UUID="b6ea3557-b0c9-43de-836d-9d8f315a66e4" ascendingOrDescending="UNSPECIFIED" column-ref="COL102" name="id" physicalName="id" />
+       </index>
+       <index id="IDX108" populated="true" UUID="6643107d-55cf-47a9-860e-b8fcfeb5f185" clustered="false" index-type="BTREE" name="pgsnap_script_scriptname_idx" physicalName="pgsnap_script_scriptname_idx" primaryKeyIndex="false" unique="true" >
+        <index-column id="IDC109" populated="true" UUID="bf7af349-4460-4413-b537-dce7393e0d51" ascendingOrDescending="UNSPECIFIED" column-ref="COL103" name="scriptname" physicalName="scriptname" />
+       </index>
+      </folder>
+     </table>
+     <table id="TAB110" populated="true" UUID="db6968cd-2d49-4363-8a4e-6f85a28bef88" name="pgsnap_worker" objectType="TABLE" physicalName="pgsnap_worker" >
+      <remarks></remarks>
+      <folder id="FOLTAB1101" populated="true" name="Columns" physicalName="Columns" type="1">
+       <column id="COL111" populated="true" UUID="92534a11-2221-487a-9457-0824b07aca89" autoIncrement="true" defaultValue="nextval(&apos;pgsnap_worker_id_seq&apos;::regclass)" name="id" nullable="0" physicalName="id" precision="10" primaryKeySeq="0" referenceCount="1" scale="0" sourceDataTypeName="serial" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL112" populated="true" UUID="2e38b1c0-9cab-4250-9582-5cf44310c93a" autoIncrement="false" name="dns_name" nullable="0" physicalName="dns_name" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL113" populated="true" UUID="29b890fa-8c05-43c7-bbcd-5db1de19bacb" autoIncrement="false" name="comment" nullable="1" physicalName="comment" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL114" populated="true" UUID="3de89ae6-0e81-4695-a958-73b41b145f4e" autoIncrement="false" defaultValue="&apos;15 20 * * *&apos;::text" name="cron_cacheconfig" nullable="1" physicalName="cron_cacheconfig" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL115" populated="true" UUID="ca65e9a8-a3a1-4769-98b3-da88289d59a8" autoIncrement="false" defaultValue="&apos;* * * * *&apos;::text" name="cron_singlejob" nullable="1" physicalName="cron_singlejob" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL116" populated="true" UUID="e1b4fbe5-96d5-449c-97d1-f106d045fcf2" autoIncrement="false" defaultValue="&apos;15 18 * * *&apos;::text" name="cron_clean" nullable="1" physicalName="cron_clean" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL117" populated="true" UUID="6c54249a-666a-47c0-abca-ffa87a28af08" autoIncrement="false" defaultValue="&apos;*/5 * * * *&apos;::text" name="cron_upload" nullable="1" physicalName="cron_upload" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL118" populated="true" UUID="76e16200-6db9-448b-81b1-06c2f241dc8a" autoIncrement="false" defaultValue="&apos;ACTIVE&apos;::text" name="status" nullable="1" physicalName="status" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL119" populated="true" UUID="9e4805fc-299e-4e69-9374-cec412de4475" autoIncrement="false" defaultValue="now()" name="date_added" nullable="1" physicalName="date_added" precision="35" referenceCount="1" scale="6" sourceDataTypeName="timestamptz" type="93" >
+        <remarks></remarks>
+       </column>
+       </folder>
+       <folder id="FOLTAB1103" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+       </folder>
+       <folder id="FOLTAB1102" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+       </folder>
+       <folder id="FOLTAB1104" populated="true" name="Indices" physicalName="Indices" type="4">
+       <index id="IDX120" populated="true" UUID="3ab2b770-940a-49b2-8594-ff7da0b83830" clustered="false" index-type="BTREE" name="pgsnap_worker_pkey" physicalName="pgsnap_worker_pkey" primaryKeyIndex="true" unique="true" >
+        <index-column id="IDC121" populated="true" UUID="0bc501b1-21c5-425d-a4c5-faa1c595d1d6" ascendingOrDescending="UNSPECIFIED" column-ref="COL111" name="id" physicalName="id" />
+       </index>
+       <index id="IDX122" populated="true" UUID="ccf619a3-6b68-4d84-8d4e-084516eb6f1b" clustered="false" index-type="BTREE" name="pgsnap_worker_dns_name_idx" physicalName="pgsnap_worker_dns_name_idx" primaryKeyIndex="false" unique="true" >
+        <index-column id="IDC123" populated="true" UUID="09b297dc-16e8-4e59-9c8b-29d807f154f6" ascendingOrDescending="UNSPECIFIED" column-ref="COL112" name="dns_name" physicalName="dns_name" />
+       </index>
+      </folder>
+     </table>
+     <table id="TAB124" populated="true" UUID="fa7cec6e-46c5-44a1-b626-cf9e799836fd" name="pgsql_instance" objectType="TABLE" physicalName="pgsql_instance" >
+      <remarks></remarks>
+      <folder id="FOLTAB1241" populated="true" name="Columns" physicalName="Columns" type="1">
+       <column id="COL125" populated="true" UUID="51aac0d8-b9b8-45a7-9bf6-3d40181858bc" autoIncrement="true" defaultValue="nextval(&apos;pgsql_instance_id_seq&apos;::regclass)" name="id" nullable="0" physicalName="id" precision="10" primaryKeySeq="0" referenceCount="1" scale="0" sourceDataTypeName="serial" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL126" populated="true" UUID="5bee8ee5-3368-48e8-bca4-03cb26c60996" autoIncrement="false" name="dns_name" nullable="0" physicalName="dns_name" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL127" populated="true" UUID="b2a2eef3-e268-40c3-8be0-b2e78156140b" autoIncrement="false" name="pgport" nullable="1" physicalName="pgport" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL128" populated="true" UUID="b4e7161d-1412-4f32-8433-9eeae6ca529e" autoIncrement="false" name="comment" nullable="1" physicalName="comment" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL129" populated="true" UUID="81c589a8-5682-473c-8f71-bde1aa870db8" autoIncrement="false" defaultValue="&apos;postgres&apos;::text" name="pgsql_superuser" nullable="1" physicalName="pgsql_superuser" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL130" populated="true" UUID="ba905c36-d71b-4332-8c95-445d3a650f35" autoIncrement="false" defaultValue="&apos;ACTIVE&apos;::text" name="status" nullable="1" physicalName="status" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL131" populated="true" UUID="f2f903c7-6470-4d64-b919-c9d90cb98773" autoIncrement="false" defaultValue="2" name="bu_window_start" nullable="1" physicalName="bu_window_start" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL132" populated="true" UUID="ab762c6d-2b8c-4015-992c-8c3ad992d687" autoIncrement="false" defaultValue="6" name="bu_window_end" nullable="1" physicalName="bu_window_end" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL133" populated="true" UUID="c3de1469-7145-4f65-adc8-072b5d0d74a4" autoIncrement="false" name="pgsnap_worker_id_default" nullable="1" physicalName="pgsnap_worker_id_default" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL134" populated="true" UUID="4f9c3c94-2083-4db1-811e-249e16932e6a" autoIncrement="false" defaultValue="now()" name="date_added" nullable="1" physicalName="date_added" precision="35" referenceCount="1" scale="6" sourceDataTypeName="timestamptz" type="93" >
+        <remarks></remarks>
+       </column>
+       </folder>
+       <folder id="FOLTAB1243" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+       </folder>
+       <folder id="FOLTAB1242" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+       </folder>
+       <folder id="FOLTAB1244" populated="true" name="Indices" physicalName="Indices" type="4">
+       <index id="IDX135" populated="true" UUID="1a1a852e-9278-4e84-ac87-befeaee555af" clustered="false" index-type="BTREE" name="pgsql_instance_pkey" physicalName="pgsql_instance_pkey" primaryKeyIndex="true" unique="true" >
+        <index-column id="IDC136" populated="true" UUID="1fe76c65-bee2-44ef-8431-5ede3f7bd0b9" ascendingOrDescending="UNSPECIFIED" column-ref="COL125" name="id" physicalName="id" />
+       </index>
+       <index id="IDX137" populated="true" UUID="6f325a36-7cb1-4907-982b-3ee6c42c96aa" clustered="false" index-type="BTREE" name="pgsql_instance_dns_name_pgport_idx" physicalName="pgsql_instance_dns_name_pgport_idx" primaryKeyIndex="false" unique="true" >
+        <index-column id="IDC138" populated="true" UUID="e422419f-305a-43de-b472-45d45fd4fe54" ascendingOrDescending="UNSPECIFIED" column-ref="COL126" name="dns_name" physicalName="dns_name" />
+        <index-column id="IDC139" populated="true" UUID="a1e3139d-16e2-4a50-a1ea-dbadbf1a4d25" ascendingOrDescending="UNSPECIFIED" column-ref="COL127" name="pgport" physicalName="pgport" />
+       </index>
+      </folder>
+     </table>
+     <table id="TAB140" populated="true" UUID="8c42488c-bc14-4c2c-86e0-27d5092a33ac" name="catalog_compact" objectType="VIEW" physicalName="catalog_compact" >
+      <remarks></remarks>
+      <folder id="FOLTAB1401" populated="true" name="Columns" physicalName="Columns" type="1">
+       <column id="COL141" populated="true" UUID="fe210957-f7d9-457b-a338-aff2e73a8730" autoIncrement="false" name="id" nullable="1" physicalName="id" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL142" populated="true" UUID="ccff34c8-9024-4b42-9fc9-b8970009b943" autoIncrement="false" name="dns_name" nullable="1" physicalName="dns_name" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL143" populated="true" UUID="6ff7c4e0-ff84-4c33-81fa-923064b4a92f" autoIncrement="false" name="pgport" nullable="1" physicalName="pgport" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL144" populated="true" UUID="ba041b10-d1d7-4161-8f07-3dad3a6b32fd" autoIncrement="false" name="dbname" nullable="1" physicalName="dbname" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL145" populated="true" UUID="d40b244e-9196-4cfc-92ed-90ef1bdbe0d9" autoIncrement="false" name="dumptype" nullable="1" physicalName="dumptype" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL146" populated="true" UUID="0b090d84-61e0-4f0a-8062-a9f3ab2bdeab" autoIncrement="false" name="bu_name" nullable="1" physicalName="bu_name" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL147" populated="true" UUID="45a4b337-e1d7-46a4-9eb8-126f71522c5a" autoIncrement="false" name="starttime" nullable="1" physicalName="starttime" precision="35" referenceCount="1" scale="6" sourceDataTypeName="timestamptz" type="93" >
+        <remarks></remarks>
+       </column>
+       <column id="COL148" populated="true" UUID="51b5d689-e62a-4de1-872f-cd51d55b858c" autoIncrement="false" name="duration" nullable="1" physicalName="duration" precision="49" referenceCount="1" scale="6" sourceDataTypeName="interval" type="1111" >
+        <remarks></remarks>
+       </column>
+       <column id="COL149" populated="true" UUID="2f4975f8-7da7-409f-867d-6befe97d9937" autoIncrement="false" name="status" nullable="1" physicalName="status" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL150" populated="true" UUID="8c0390d6-eb53-4de5-9a5d-2cc01dab1e5a" autoIncrement="false" name="verified" nullable="1" physicalName="verified" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL151" populated="true" UUID="40a07606-231f-4cbe-aab8-350ba2fbf4d0" autoIncrement="false" name="keep" nullable="1" physicalName="keep" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL152" populated="true" UUID="a9f33760-9ba6-438b-8b84-17521c89d563" autoIncrement="false" name="dbsize" nullable="1" physicalName="dbsize" precision="20" referenceCount="1" scale="0" sourceDataTypeName="int8" type="-5" >
+        <remarks></remarks>
+       </column>
+       <column id="COL153" populated="true" UUID="bd6b6c3f-eaa9-478e-a3b1-f1cd4e89b09f" autoIncrement="false" name="dumpsize" nullable="1" physicalName="dumpsize" precision="20" referenceCount="1" scale="0" sourceDataTypeName="int8" type="-5" >
+        <remarks></remarks>
+       </column>
+       </folder>
+       <folder id="FOLTAB1403" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+       </folder>
+       <folder id="FOLTAB1402" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+       </folder>
+       <folder id="FOLTAB1404" populated="true" name="Indices" physicalName="Indices" type="4">
+       <index id="IDX154" populated="true" UUID="7c5946c1-bb03-479b-bd0b-b996d2cbc920" clustered="false" name="catalog_compact_pk" physicalName="catalog_compact_pk" primaryKeyIndex="true" unique="false" >
+       </index>
+      </folder>
+     </table>
+     <table id="TAB155" populated="true" UUID="85017840-40e2-4250-8301-de78d9de57af" name="dumpjob_compact" objectType="VIEW" physicalName="dumpjob_compact" >
+      <remarks></remarks>
+      <folder id="FOLTAB1551" populated="true" name="Columns" physicalName="Columns" type="1">
+       <column id="COL156" populated="true" UUID="001a27f4-b488-4295-bcf6-2d6f0401c623" autoIncrement="false" name="id" nullable="1" physicalName="id" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL157" populated="true" UUID="75d46717-4da3-47ed-9ea6-923673d7a431" autoIncrement="false" name="pgs_worker" nullable="1" physicalName="pgs_worker" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL158" populated="true" UUID="89f8f0d5-9ada-40d5-9854-19b6d709903a" autoIncrement="false" name="pgsql_instance" nullable="1" physicalName="pgsql_instance" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL159" populated="true" UUID="e2da16e7-fb1d-447c-908c-c3d253004e09" autoIncrement="false" name="jobtype" nullable="1" physicalName="jobtype" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL160" populated="true" UUID="8d21dd96-571a-490d-9282-e0179a0e7d57" autoIncrement="false" name="dbname_schema" nullable="1" physicalName="dbname_schema" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL161" populated="true" UUID="c8e84d6e-2ffe-4339-a5e2-4615a4cf6a41" autoIncrement="false" name="dumptype" nullable="1" physicalName="dumptype" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL162" populated="true" UUID="085c0323-7b3a-4367-be58-747acef10362" autoIncrement="false" name="dumpoptions" nullable="1" physicalName="dumpoptions" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL163" populated="true" UUID="4cb1a4b5-1dcb-4db2-a001-c9310b7358bf" autoIncrement="false" name="cron" nullable="1" physicalName="cron" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL164" populated="true" UUID="d6afa905-d120-4c03-ae76-33fa7a1a2060" autoIncrement="false" name="comment" nullable="1" physicalName="comment" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL165" populated="true" UUID="549698d9-6e3d-4b78-8bc0-edea08626bcc" autoIncrement="false" name="status" nullable="1" physicalName="status" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL166" populated="true" UUID="1a68398e-01e8-47fe-b499-166be91fc9e2" autoIncrement="false" name="restorejob" nullable="1" physicalName="restorejob" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       </folder>
+       <folder id="FOLTAB1553" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+       </folder>
+       <folder id="FOLTAB1552" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+       </folder>
+       <folder id="FOLTAB1554" populated="true" name="Indices" physicalName="Indices" type="4">
+       <index id="IDX167" populated="true" UUID="bff6f333-6958-46e6-a966-1dd4b0f8c72d" clustered="false" name="dumpjob_compact_pk" physicalName="dumpjob_compact_pk" primaryKeyIndex="true" unique="false" >
+       </index>
+      </folder>
+     </table>
+     <table id="TAB168" populated="true" UUID="e89265bf-0eb9-40ab-9f5f-78fa2e491a8f" name="instance_compact" objectType="VIEW" physicalName="instance_compact" >
+      <remarks></remarks>
+      <folder id="FOLTAB1681" populated="true" name="Columns" physicalName="Columns" type="1">
+       <column id="COL169" populated="true" UUID="aed6d20a-5f57-4119-8f6f-1090d3ad4005" autoIncrement="false" name="id" nullable="1" physicalName="id" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL170" populated="true" UUID="2445e59a-de8e-4326-bf58-7a00bd24c9a4" autoIncrement="false" name="instance" nullable="1" physicalName="instance" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL171" populated="true" UUID="2e6551d1-7185-4abf-b0bf-567b0f26e537" autoIncrement="false" name="status" nullable="1" physicalName="status" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL172" populated="true" UUID="5d5ecd56-a7c2-4c40-89e6-9f5eb773c769" autoIncrement="false" name="def_start_hour" nullable="1" physicalName="def_start_hour" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL173" populated="true" UUID="e330dc0f-07bc-4593-a268-19e37627b894" autoIncrement="false" name="def_end_hour" nullable="1" physicalName="def_end_hour" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL174" populated="true" UUID="fb0e8b30-cf5a-4e26-b4c0-6fd46ae70dc0" autoIncrement="false" name="default_worker" nullable="1" physicalName="default_worker" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       </folder>
+       <folder id="FOLTAB1683" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+       </folder>
+       <folder id="FOLTAB1682" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+       </folder>
+       <folder id="FOLTAB1684" populated="true" name="Indices" physicalName="Indices" type="4">
+       <index id="IDX175" populated="true" UUID="323a9cca-0772-4d7b-8467-59d92a421584" clustered="false" name="instance_compact_pk" physicalName="instance_compact_pk" primaryKeyIndex="true" unique="false" >
+       </index>
+      </folder>
+     </table>
+     <table id="TAB176" populated="true" UUID="c4ef5e09-807c-4fb8-99f9-c6a8c350132f" name="restorejob_compact" objectType="VIEW" physicalName="restorejob_compact" >
+      <remarks></remarks>
+      <folder id="FOLTAB1761" populated="true" name="Columns" physicalName="Columns" type="1">
+       <column id="COL177" populated="true" UUID="cff26db5-ba94-4122-bb02-0296b382264d" autoIncrement="false" name="id" nullable="1" physicalName="id" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL178" populated="true" UUID="5f608d72-4895-40f8-881d-087e61a2cdb3" autoIncrement="false" name="pgs_worker" nullable="1" physicalName="pgs_worker" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL179" populated="true" UUID="b4119377-f276-4d7d-88a0-1c227ecf1452" autoIncrement="false" name="pgsql_instance" nullable="1" physicalName="pgsql_instance" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL180" populated="true" UUID="9f5ff025-2e38-40a0-bcb2-2023636a0cb5" autoIncrement="false" name="dest_dbname" nullable="1" physicalName="dest_dbname" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL181" populated="true" UUID="0a2f71ec-61fe-4f13-96d4-ab76e0e6227f" autoIncrement="false" name="restoretype" nullable="1" physicalName="restoretype" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL182" populated="true" UUID="c1c54578-1b32-497f-b7be-69f8b919d6dd" autoIncrement="false" name="restoreschema" nullable="1" physicalName="restoreschema" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL183" populated="true" UUID="968a38d0-5ef1-496f-b6dc-349e038df5c7" autoIncrement="false" name="restoreoptions" nullable="1" physicalName="restoreoptions" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL184" populated="true" UUID="0523059b-8a38-4c91-8f8b-9091fcf0a662" autoIncrement="false" name="cron" nullable="1" physicalName="cron" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL185" populated="true" UUID="61684764-c637-443f-b3d3-7382ff879c02" autoIncrement="false" name="comment" nullable="1" physicalName="comment" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       </folder>
+       <folder id="FOLTAB1763" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+       </folder>
+       <folder id="FOLTAB1762" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+       </folder>
+       <folder id="FOLTAB1764" populated="true" name="Indices" physicalName="Indices" type="4">
+       <index id="IDX186" populated="true" UUID="7b36261d-32ef-4856-965b-9beaa103163b" clustered="false" name="restorejob_compact_pk" physicalName="restorejob_compact_pk" primaryKeyIndex="true" unique="false" >
+       </index>
+      </folder>
+     </table>
+     <table id="TAB187" populated="true" UUID="e64b7ac2-b005-441e-9167-8d8525f0333a" name="vw_dumpjob_worker_instance" objectType="VIEW" physicalName="vw_dumpjob_worker_instance" >
+      <remarks></remarks>
+      <folder id="FOLTAB1871" populated="true" name="Columns" physicalName="Columns" type="1">
+       <column id="COL188" populated="true" UUID="2b6ed951-ed3d-4c90-b40e-40b29e07c9b7" autoIncrement="false" name="id" nullable="1" physicalName="id" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL189" populated="true" UUID="30203904-79f4-4a7a-943a-f40d7aa60871" autoIncrement="false" name="pgsnap_worker_id" nullable="1" physicalName="pgsnap_worker_id" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL190" populated="true" UUID="efa59e17-43c9-4714-a491-641ac039ff03" autoIncrement="false" name="pgsql_instance_id" nullable="1" physicalName="pgsql_instance_id" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL191" populated="true" UUID="f1fbcb7b-84c5-48fa-b03c-d8195829ccd9" autoIncrement="false" name="dbname" nullable="1" physicalName="dbname" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL192" populated="true" UUID="4f0fedcd-23c5-4650-98f5-2e04c894c9f2" autoIncrement="false" name="dumptype" nullable="1" physicalName="dumptype" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL193" populated="true" UUID="9964d37d-c81f-4fde-a84b-12245e39087e" autoIncrement="false" name="dumpschema" nullable="1" physicalName="dumpschema" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL194" populated="true" UUID="3468fc38-0bdf-4913-b2d7-d0e83507a1e0" autoIncrement="false" name="cron" nullable="1" physicalName="cron" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL195" populated="true" UUID="f98b7142-c869-433a-9bfa-7090214e8ab7" autoIncrement="false" name="keep_daily" nullable="1" physicalName="keep_daily" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL196" populated="true" UUID="d53b751c-576b-4287-80d4-9586aa75e5b8" autoIncrement="false" name="keep_weekly" nullable="1" physicalName="keep_weekly" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL197" populated="true" UUID="4eea11fa-9680-4ddc-beb9-e571dc319468" autoIncrement="false" name="keep_monthly" nullable="1" physicalName="keep_monthly" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL198" populated="true" UUID="4c1d1971-6ab2-4a39-adb4-efa22502cc74" autoIncrement="false" name="keep_yearly" nullable="1" physicalName="keep_yearly" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL199" populated="true" UUID="a89b6374-24f8-4e56-87df-967fe8f39f99" autoIncrement="false" name="comment" nullable="1" physicalName="comment" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL200" populated="true" UUID="54f24371-7f45-4a39-bc27-404f0b580e28" autoIncrement="false" name="status" nullable="1" physicalName="status" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL201" populated="true" UUID="e64aa30c-b9e3-4cd5-8c2a-5d18f57f3c64" autoIncrement="false" name="jobtype" nullable="1" physicalName="jobtype" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL202" populated="true" UUID="6f593bdb-3d46-4c42-a16e-fdf4632b293e" autoIncrement="false" name="pgsnap_worker_dns_name" nullable="1" physicalName="pgsnap_worker_dns_name" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL203" populated="true" UUID="486e7e1f-63c8-460f-b315-2a66bf86664c" autoIncrement="false" name="pgsql_instance_dns_name" nullable="1" physicalName="pgsql_instance_dns_name" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL204" populated="true" UUID="13188fb6-ca93-48d5-afd9-3b8d012ded21" autoIncrement="false" name="pgsql_instance_port" nullable="1" physicalName="pgsql_instance_port" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL205" populated="true" UUID="fbef57a7-1b87-4fe5-b196-68bbbf533152" autoIncrement="false" name="pgsql_instance_superuser" nullable="1" physicalName="pgsql_instance_superuser" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL206" populated="true" UUID="4e433945-5e82-4b36-8e58-b23d5f5bf828" autoIncrement="false" name="pgsnap_restorejob_id" nullable="1" physicalName="pgsnap_restorejob_id" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL207" populated="true" UUID="6de513c5-a2d3-4394-a73e-5b318c9ba11a" autoIncrement="false" name="dumpoptions" nullable="1" physicalName="dumpoptions" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       </folder>
+       <folder id="FOLTAB1873" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+       </folder>
+       <folder id="FOLTAB1872" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+       </folder>
+       <folder id="FOLTAB1874" populated="true" name="Indices" physicalName="Indices" type="4">
+       <index id="IDX208" populated="true" UUID="40f95129-5eb8-4245-b83d-df802cd6b071" clustered="false" name="vw_dumpjob_worker_instance_pk" physicalName="vw_dumpjob_worker_instance_pk" primaryKeyIndex="true" unique="false" >
+       </index>
+      </folder>
+     </table>
+     <table id="TAB209" populated="true" UUID="80d240c5-f68b-4dc8-b388-ac84d21dfb21" name="vw_instance" objectType="VIEW" physicalName="vw_instance" >
+      <remarks></remarks>
+      <folder id="FOLTAB2091" populated="true" name="Columns" physicalName="Columns" type="1">
+       <column id="COL210" populated="true" UUID="797bf33e-a1f3-4aa0-b66d-0a8232bc8d51" autoIncrement="false" name="id" nullable="1" physicalName="id" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL211" populated="true" UUID="7b1c3a2c-dc7b-4d69-b1aa-8d7522f028e6" autoIncrement="false" name="dns_name" nullable="1" physicalName="dns_name" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL212" populated="true" UUID="09bc832b-b0c5-4b0f-a98c-e85826793e86" autoIncrement="false" name="pgport" nullable="1" physicalName="pgport" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL213" populated="true" UUID="0927d77a-8d98-48ca-82d8-e28ac5085169" autoIncrement="false" name="comment" nullable="1" physicalName="comment" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL214" populated="true" UUID="ce4a9e33-c6ac-4c62-a8f4-f97f28ca4964" autoIncrement="false" name="pgsql_superuser" nullable="1" physicalName="pgsql_superuser" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL215" populated="true" UUID="9929d663-0245-4519-a282-798e83434c39" autoIncrement="false" name="status" nullable="1" physicalName="status" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL216" populated="true" UUID="960cf56b-f8db-4f7c-b595-ed2695503b9a" autoIncrement="false" name="bu_window_start" nullable="1" physicalName="bu_window_start" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL217" populated="true" UUID="be085855-1502-4be9-8f91-9ea5e0c0a260" autoIncrement="false" name="bu_window_end" nullable="1" physicalName="bu_window_end" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL218" populated="true" UUID="b4464b1f-224b-4b36-82f3-6ac6e7be14f0" autoIncrement="false" name="pgsql_worker_id_default" nullable="1" physicalName="pgsql_worker_id_default" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       </folder>
+       <folder id="FOLTAB2093" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+       </folder>
+       <folder id="FOLTAB2092" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+       </folder>
+       <folder id="FOLTAB2094" populated="true" name="Indices" physicalName="Indices" type="4">
+       <index id="IDX219" populated="true" UUID="cf3ff1cb-7548-41ad-bf2e-5d55989a09b5" clustered="false" name="vw_instance_pk" physicalName="vw_instance_pk" primaryKeyIndex="true" unique="false" >
+       </index>
+      </folder>
+     </table>
+     <table id="TAB220" populated="true" UUID="54e4a2cb-f4a2-4de6-b382-be171033c7c7" name="vw_link_restore_catalog" objectType="VIEW" physicalName="vw_link_restore_catalog" >
+      <remarks></remarks>
+      <folder id="FOLTAB2201" populated="true" name="Columns" physicalName="Columns" type="1">
+       <column id="COL221" populated="true" UUID="37ea1da4-c798-4008-b0ba-1fdd2183d419" autoIncrement="false" name="restorelog_id" nullable="1" physicalName="restorelog_id" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL222" populated="true" UUID="d7b0692f-0469-4664-aa76-1671e0e52645" autoIncrement="false" name="catalog_id" nullable="1" physicalName="catalog_id" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       </folder>
+       <folder id="FOLTAB2203" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+       </folder>
+       <folder id="FOLTAB2202" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+       </folder>
+       <folder id="FOLTAB2204" populated="true" name="Indices" physicalName="Indices" type="4">
+       <index id="IDX223" populated="true" UUID="a4306381-0ecc-44a7-9c39-54c81cee68d4" clustered="false" name="vw_link_restore_catalog_pk" physicalName="vw_link_restore_catalog_pk" primaryKeyIndex="true" unique="false" >
+       </index>
+      </folder>
+     </table>
+     <table id="TAB224" populated="true" UUID="a786c9bc-2944-4d0b-827d-46295e0f9784" name="vw_pgsql_instance_bu_window_length" objectType="VIEW" physicalName="vw_pgsql_instance_bu_window_length" >
+      <remarks></remarks>
+      <folder id="FOLTAB2241" populated="true" name="Columns" physicalName="Columns" type="1">
+       <column id="COL225" populated="true" UUID="aaff383d-84e7-4b0f-b20f-d3f54fd34aac" autoIncrement="false" name="id" nullable="1" physicalName="id" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL226" populated="true" UUID="aca6a933-1e21-4b64-8048-570e8f085a44" autoIncrement="false" name="start_hour" nullable="1" physicalName="start_hour" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL227" populated="true" UUID="684c729f-90c6-436c-bebd-cd871308b571" autoIncrement="false" name="length_min" nullable="1" physicalName="length_min" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       </folder>
+       <folder id="FOLTAB2243" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+       </folder>
+       <folder id="FOLTAB2242" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+       </folder>
+       <folder id="FOLTAB2244" populated="true" name="Indices" physicalName="Indices" type="4">
+       <index id="IDX228" populated="true" UUID="ec0dadf5-7699-4934-860f-fb06906c74cc" clustered="false" name="vw_pgsql_instance_bu_window_length_pk" physicalName="vw_pgsql_instance_bu_window_length_pk" primaryKeyIndex="true" unique="false" >
+       </index>
+      </folder>
+     </table>
+     <table id="TAB229" populated="true" UUID="2ece0a06-2aa3-4dc2-a8de-05086e410a43" name="vw_restorejob_instance" objectType="VIEW" physicalName="vw_restorejob_instance" >
+      <remarks></remarks>
+      <folder id="FOLTAB2291" populated="true" name="Columns" physicalName="Columns" type="1">
+       <column id="COL230" populated="true" UUID="6ffbc511-c64e-424d-9d14-2a0f20dc9448" autoIncrement="false" name="id" nullable="1" physicalName="id" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL231" populated="true" UUID="1036a307-e11d-400b-b482-1ea2319352d0" autoIncrement="false" name="pgsnap_catalog_id" nullable="1" physicalName="pgsnap_catalog_id" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL232" populated="true" UUID="72ed8d02-aded-4655-a938-619f4ae5ad5e" autoIncrement="false" name="dest_dbname" nullable="1" physicalName="dest_dbname" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL233" populated="true" UUID="3450f1e8-7a5c-4b1c-9b8e-0dca3915525b" autoIncrement="false" name="restoretype" nullable="1" physicalName="restoretype" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL234" populated="true" UUID="3f24a0a0-8358-4802-bbf4-eece4580a9d2" autoIncrement="false" name="restoreschema" nullable="1" physicalName="restoreschema" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL235" populated="true" UUID="5d57894b-3063-440b-9721-c293f662d4c5" autoIncrement="false" name="restoreoptions" nullable="1" physicalName="restoreoptions" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL236" populated="true" UUID="3fe29367-7253-4511-99d9-cc16822f71c7" autoIncrement="false" name="existing_db" nullable="1" physicalName="existing_db" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL237" populated="true" UUID="6fc56352-05bd-44bf-bc7f-9c4bb4fb2207" autoIncrement="false" name="cron" nullable="1" physicalName="cron" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL238" populated="true" UUID="2ff69617-edbd-4dbd-95f1-546638e351f6" autoIncrement="false" name="status_restorejob" nullable="1" physicalName="status_restorejob" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL239" populated="true" UUID="96cc2b9d-a657-4faf-8c05-4a63ade31fc8" autoIncrement="false" name="comment" nullable="1" physicalName="comment" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL240" populated="true" UUID="8a8ea79c-4f2a-4872-af23-b15b1f20c145" autoIncrement="false" name="jobtype" nullable="1" physicalName="jobtype" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL241" populated="true" UUID="4a1b6bed-2615-48eb-91d2-a86f3da838bd" autoIncrement="false" name="dns_name" nullable="1" physicalName="dns_name" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL242" populated="true" UUID="b86d23ed-dc51-45c2-b4b0-361110d1da04" autoIncrement="false" name="pgport" nullable="1" physicalName="pgport" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL243" populated="true" UUID="7582a434-eeca-4546-bf6a-db697eed04ae" autoIncrement="false" name="pgsql_superuser" nullable="1" physicalName="pgsql_superuser" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL244" populated="true" UUID="cbf3d33e-b0c5-40a5-906d-0e494e70d9c2" autoIncrement="false" name="role_handling" nullable="1" physicalName="role_handling" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL245" populated="true" UUID="a978919c-624b-4fe9-8d41-e0df8d78b726" autoIncrement="false" name="tblspc_handling" nullable="1" physicalName="tblspc_handling" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL246" populated="true" UUID="0db152d4-5137-4161-aaff-7395886d770e" autoIncrement="false" name="status_pgsqlinstance" nullable="1" physicalName="status_pgsqlinstance" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       </folder>
+       <folder id="FOLTAB2293" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+       </folder>
+       <folder id="FOLTAB2292" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+       </folder>
+       <folder id="FOLTAB2294" populated="true" name="Indices" physicalName="Indices" type="4">
+       <index id="IDX247" populated="true" UUID="1cf4b081-7c7e-4b71-8ba7-0c36d352406f" clustered="false" name="vw_restorejob_instance_pk" physicalName="vw_restorejob_instance_pk" primaryKeyIndex="true" unique="false" >
+       </index>
+      </folder>
+     </table>
+     <table id="TAB248" populated="true" UUID="9176c2c5-15b8-4a53-8882-27cdf421b523" name="vw_worker" objectType="VIEW" physicalName="vw_worker" >
+      <remarks></remarks>
+      <folder id="FOLTAB2481" populated="true" name="Columns" physicalName="Columns" type="1">
+       <column id="COL249" populated="true" UUID="892134cb-04b6-4cd9-9bcc-7a157eea13f2" autoIncrement="false" name="id" nullable="1" physicalName="id" precision="10" referenceCount="1" scale="0" sourceDataTypeName="int4" type="4" >
+        <remarks></remarks>
+       </column>
+       <column id="COL250" populated="true" UUID="ca1ec07c-4e61-4363-829e-cf1e0ca57d5c" autoIncrement="false" name="dns_name" nullable="1" physicalName="dns_name" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL251" populated="true" UUID="d2a438b1-d0ac-4f34-b558-6efac80ef0e8" autoIncrement="false" name="comment" nullable="1" physicalName="comment" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL252" populated="true" UUID="978d6397-6b0a-4c23-bbdd-f9e2557aec58" autoIncrement="false" name="cron_cacheconfig" nullable="1" physicalName="cron_cacheconfig" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL253" populated="true" UUID="b20e1015-c76c-48bf-8b33-b8f807beb2ec" autoIncrement="false" name="cron_singlejob" nullable="1" physicalName="cron_singlejob" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL254" populated="true" UUID="fb45403c-0a34-433a-a262-8e460584b1cf" autoIncrement="false" name="cron_clean" nullable="1" physicalName="cron_clean" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       <column id="COL255" populated="true" UUID="e15b3032-89e5-49de-b47e-f6590f0cb2d8" autoIncrement="false" name="cron_upload" nullable="1" physicalName="cron_upload" precision="2147483647" referenceCount="1" scale="0" sourceDataTypeName="text" type="12" >
+        <remarks></remarks>
+       </column>
+       </folder>
+       <folder id="FOLTAB2483" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+       </folder>
+       <folder id="FOLTAB2482" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+       </folder>
+       <folder id="FOLTAB2484" populated="true" name="Indices" physicalName="Indices" type="4">
+       <index id="IDX256" populated="true" UUID="ea82c4db-ff99-40f4-b3f9-e09d9a7ec45f" clustered="false" name="vw_worker_pk" physicalName="vw_worker_pk" primaryKeyIndex="true" unique="false" >
+       </index>
+      </folder>
+     </table>
+    </schema>
+   </catalog>
+   <relationships>
+    <relationship id="REL257" populated="true" UUID="bcc9c72c-3e0d-4e62-a261-7a1274cc4b87" deferrability="7" deleteRule="3" fk-table-ref="TAB71" fkCardinality="7" identifying="false" name="fk_pgsnap_restorejob_pgsnap_catalog" physicalName="fk_pgsnap_restorejob_pgsnap_catalog" pk-table-ref="TAB6" pkCardinality="2" updateRule="3" >
+     <column-mapping id="CMP258" populated="true" UUID="124b278a-fee6-49ab-af1f-270dd685e986" fk-column-ref="COL83" name="Column Mapping" physicalName="Column Mapping" pk-column-ref="COL7" />
+    </relationship>
+    <relationship id="REL259" populated="true" UUID="d19cacdf-1796-4bfc-8c0c-bb4cbddf977a" deferrability="7" deleteRule="3" fk-table-ref="TAB91" fkCardinality="7" identifying="false" name="fk_pgsnap_restorelog_pgsnap_restorejob" physicalName="fk_pgsnap_restorelog_pgsnap_restorejob" pk-table-ref="TAB71" pkCardinality="2" updateRule="3" >
+     <column-mapping id="CMP260" populated="true" UUID="ece8b85c-292d-4ef5-97fb-3b5976bf0c65" fk-column-ref="COL93" name="Column Mapping" physicalName="Column Mapping" pk-column-ref="COL72" />
+    </relationship>
+    <relationship id="REL261" populated="true" UUID="f474017d-6ba7-4b99-ab8e-620a337c1912" deferrability="7" deleteRule="3" fk-table-ref="TAB6" fkCardinality="7" identifying="false" name="fk_pgsnap_catalog_pgsnap_worker" physicalName="fk_pgsnap_catalog_pgsnap_worker" pk-table-ref="TAB110" pkCardinality="2" updateRule="3" >
+     <column-mapping id="CMP262" populated="true" UUID="c941f5a1-f835-42b0-9ff8-a14f398a86ed" fk-column-ref="COL23" name="Column Mapping" physicalName="Column Mapping" pk-column-ref="COL111" />
+    </relationship>
+    <relationship id="REL263" populated="true" UUID="fef13123-a986-406f-b893-baf075eef6c3" deferrability="7" deleteRule="3" fk-table-ref="TAB39" fkCardinality="7" identifying="false" name="fk_pgsnap_dumpjob_pgsnap_worker" physicalName="fk_pgsnap_dumpjob_pgsnap_worker" pk-table-ref="TAB110" pkCardinality="2" updateRule="3" >
+     <column-mapping id="CMP264" populated="true" UUID="d476e4e4-c132-485b-82d6-071c53a08186" fk-column-ref="COL41" name="Column Mapping" physicalName="Column Mapping" pk-column-ref="COL111" />
+    </relationship>
+    <relationship id="REL265" populated="true" UUID="17ad2070-1975-4b76-99d5-76edc51fa94c" deferrability="7" deleteRule="3" fk-table-ref="TAB39" fkCardinality="7" identifying="false" name="fk_pgsnap_dumpjob_pgsql_instance" physicalName="fk_pgsnap_dumpjob_pgsql_instance" pk-table-ref="TAB124" pkCardinality="2" updateRule="3" >
+     <column-mapping id="CMP266" populated="true" UUID="ce6a639c-e486-4970-90a6-e18b9c01fb99" fk-column-ref="COL42" name="Column Mapping" physicalName="Column Mapping" pk-column-ref="COL125" />
+    </relationship>
+    <relationship id="REL267" populated="true" UUID="cee1deec-214e-48e4-9d10-48aa40609a3e" deferrability="7" deleteRule="3" fk-table-ref="TAB71" fkCardinality="7" identifying="false" name="fk_pgsnap_restorejob_pgsql_instance" physicalName="fk_pgsnap_restorejob_pgsql_instance" pk-table-ref="TAB124" pkCardinality="2" updateRule="3" >
+     <column-mapping id="CMP268" populated="true" UUID="f0edaf44-56d3-45de-833f-2e2d47dabbbb" fk-column-ref="COL73" name="Column Mapping" physicalName="Column Mapping" pk-column-ref="COL125" />
+    </relationship>
+   </relationships>
+  </database>
+ </source-databases>
+ <target-database id="ppdb" dbcs-ref="DS0">
+  <table id="TAB270" populated="true" UUID="17b0b4af-db54-46ab-967a-4c26541cd649" name="pgsnap_catalog" objectType="TABLE" physicalName="pgsnap_catalog" >
+   <remarks></remarks>
+   <folder id="FOLTAB2701" populated="true" name="Columns" physicalName="Columns" type="1">
+    <column id="COL271" populated="true" UUID="605946dc-edf1-4e09-b76c-989bea5568b6" autoIncrement="true" defaultValue="nextval(&apos;pgsnap_catalog_id_seq&apos;::regclass)" name="id" nullable="0" physicalName="id" precision="0" primaryKeySeq="0" referenceCount="1" scale="0" source-column-ref="COL7" sourceDataTypeName="serial" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL272" populated="true" UUID="47d0e49c-3074-4bdf-b6e8-558384df950a" autoIncrement="false" defaultValue="" name="pgsnap_dumpjob_id" nullable="1" physicalName="pgsnap_dumpjob_id" precision="0" referenceCount="1" scale="0" source-column-ref="COL8" sourceDataTypeName="int4" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL273" populated="true" UUID="e7100168-9aeb-49e5-a5ef-b63313c6f813" autoIncrement="false" defaultValue="" name="starttime" nullable="1" physicalName="starttime" precision="0" referenceCount="1" scale="0" source-column-ref="COL9" sourceDataTypeName="timestamptz" type="93" userDefinedTypeUUID="6497d8de-0e00-40d6-a42e-e2adca83be64" >
+     <remarks></remarks>
+    </column>
+    <column id="COL274" populated="true" UUID="59652b7b-a28c-41e6-a423-e78a48db2b8d" autoIncrement="false" defaultValue="" name="endtime" nullable="1" physicalName="endtime" precision="0" referenceCount="1" scale="0" source-column-ref="COL10" sourceDataTypeName="timestamptz" type="93" userDefinedTypeUUID="6497d8de-0e00-40d6-a42e-e2adca83be64" >
+     <remarks></remarks>
+    </column>
+    <column id="COL275" populated="true" UUID="db1d9f9a-5b85-4447-9f23-1f2e5e26ecee" autoIncrement="false" defaultValue="" name="status" nullable="1" physicalName="status" precision="0" referenceCount="1" scale="0" source-column-ref="COL11" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL276" populated="true" UUID="41ad4561-7984-41fe-b545-bd9cdf51ab27" autoIncrement="false" defaultValue="" name="bu_name" nullable="1" physicalName="bu_name" precision="0" referenceCount="1" scale="0" source-column-ref="COL12" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL277" populated="true" UUID="d25f38b5-e084-477b-852b-2181acc83510" autoIncrement="false" defaultValue="" name="bu_location" nullable="1" physicalName="bu_location" precision="0" referenceCount="1" scale="0" source-column-ref="COL13" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL278" populated="true" UUID="b49d9b47-cacb-4150-a410-1608cb8dccc7" autoIncrement="false" defaultValue="" name="dbsize" nullable="1" physicalName="dbsize" precision="0" referenceCount="1" scale="0" source-column-ref="COL14" sourceDataTypeName="int8" type="-5" userDefinedTypeUUID="433cc8af-284d-4abb-8ef7-08ebcb34dbf1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL279" populated="true" UUID="6ea16449-1011-4890-aabf-7517da0ae340" autoIncrement="false" defaultValue="" name="dumpsize" nullable="1" physicalName="dumpsize" precision="0" referenceCount="1" scale="0" source-column-ref="COL15" sourceDataTypeName="int8" type="-5" userDefinedTypeUUID="433cc8af-284d-4abb-8ef7-08ebcb34dbf1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL280" populated="true" UUID="670fe2b6-f06d-4728-aa86-eb92071dd9c7" autoIncrement="false" defaultValue="" name="dbname" nullable="1" physicalName="dbname" precision="0" referenceCount="1" scale="0" source-column-ref="COL16" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL281" populated="true" UUID="53020f60-d44a-4310-bba6-240d00d00592" autoIncrement="false" defaultValue="" name="dumpschema" nullable="1" physicalName="dumpschema" precision="0" referenceCount="1" scale="0" source-column-ref="COL17" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL282" populated="true" UUID="1fe11f6c-7748-459e-b6ec-bad5a0f2035c" autoIncrement="false" defaultValue="" name="dumptype" nullable="1" physicalName="dumptype" precision="0" referenceCount="1" scale="0" source-column-ref="COL18" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL283" populated="true" UUID="211db7ef-22dd-44b2-907c-1a7a0b7fa0ac" autoIncrement="false" defaultValue="&apos;NO&apos;::text" name="verified" nullable="1" physicalName="verified" precision="0" referenceCount="1" scale="0" source-column-ref="COL19" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL284" populated="true" UUID="e2a06b88-10f6-423f-baa9-5eb7078d6b7b" autoIncrement="false" defaultValue="&apos;AUTO&apos;::text" name="keep" nullable="1" physicalName="keep" precision="0" referenceCount="1" scale="0" source-column-ref="COL20" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL285" populated="true" UUID="a1d64496-9b0a-48e7-a35d-ec45b8198dbb" autoIncrement="false" defaultValue="" name="bu_extension" nullable="1" physicalName="bu_extension" precision="0" referenceCount="1" scale="0" source-column-ref="COL21" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL286" populated="true" UUID="7a4d218d-70b6-455e-a769-9f86b378783f" autoIncrement="false" defaultValue="" name="pgversion" nullable="1" physicalName="pgversion" precision="0" referenceCount="1" scale="0" source-column-ref="COL22" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL287" populated="true" UUID="8463e833-98ea-44c9-9845-d539a854f00e" autoIncrement="false" defaultValue="" name="bu_worker_id" nullable="0" physicalName="bu_worker_id" precision="0" referenceCount="2" scale="0" source-column-ref="COL23" sourceDataTypeName="int4" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL288" populated="true" UUID="ab7b695a-33a3-491a-b839-2f9022b5af92" autoIncrement="false" defaultValue="" name="message" nullable="1" physicalName="message" precision="0" referenceCount="1" scale="0" source-column-ref="COL24" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL289" populated="true" UUID="84ddfaf4-8866-479e-8229-88525c5b6b47" autoIncrement="false" defaultValue="" name="pgsql_dns_name" nullable="1" physicalName="pgsql_dns_name" precision="0" referenceCount="1" scale="0" source-column-ref="COL25" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL290" populated="true" UUID="9fc86007-664e-4668-9881-aa9664e09a4c" autoIncrement="false" defaultValue="" name="pgsql_port" nullable="1" physicalName="pgsql_port" precision="0" referenceCount="1" scale="0" source-column-ref="COL26" sourceDataTypeName="int4" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    </folder>
+    <folder id="FOLTAB2703" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+    </folder>
+    <folder id="FOLTAB2702" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+    </folder>
+    <folder id="FOLTAB2704" populated="true" name="Indices" physicalName="Indices" type="4">
+    <index id="IDX291" populated="true" UUID="4467075d-3e08-42c0-b7ed-d5a66efdf5d7" clustered="false" index-type="BTREE" name="pgsnap_catalog_pkey" physicalName="pgsnap_catalog_pkey" primaryKeyIndex="true" unique="true" >
+     <index-column id="IDC292" populated="true" UUID="1b0dd79a-a216-40de-b680-feda15b31b9a" ascendingOrDescending="UNSPECIFIED" column-ref="COL271" name="id" physicalName="id" />
+    </index>
+    <index id="IDX293" populated="true" UUID="0eda9ac4-a0a8-4025-89b7-e54c589411e7" clustered="false" index-type="BTREE" name="fki_pgsnap_catalog_pgsnap_worker" physicalName="fki_pgsnap_catalog_pgsnap_worker" primaryKeyIndex="false" unique="false" >
+     <index-column id="IDC294" populated="true" UUID="21495ab3-e87f-4223-aa59-0123aaed5fe5" ascendingOrDescending="UNSPECIFIED" column-ref="COL287" name="bu_worker_id" physicalName="bu_worker_id" />
+    </index>
+   </folder>
+  </table>
+  <table id="TAB295" populated="true" UUID="d766d20e-b27a-4189-a087-e696d315003f" name="pgsnap_default" objectType="TABLE" physicalName="pgsnap_default" >
+   <remarks></remarks>
+   <folder id="FOLTAB2951" populated="true" name="Columns" physicalName="Columns" type="1">
+    <column id="COL296" populated="true" UUID="7bf4b1c0-119d-4f7e-b238-c35c0d40b2ed" autoIncrement="true" defaultValue="nextval(&apos;pgsnap_default_id_seq&apos;::regclass)" name="id" nullable="0" physicalName="id" precision="0" primaryKeySeq="0" referenceCount="1" scale="0" source-column-ref="COL32" sourceDataTypeName="serial" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL297" populated="true" UUID="39a120ef-af05-4e87-be92-a5a71b77de17" autoIncrement="false" defaultValue="" name="key" nullable="1" physicalName="key" precision="0" referenceCount="1" scale="0" source-column-ref="COL33" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL298" populated="true" UUID="aca28d8f-685d-4f99-af0c-8af60aa0138a" autoIncrement="false" defaultValue="" name="value" nullable="1" physicalName="value" precision="0" referenceCount="1" scale="0" source-column-ref="COL34" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    </folder>
+    <folder id="FOLTAB2953" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+    </folder>
+    <folder id="FOLTAB2952" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+    </folder>
+    <folder id="FOLTAB2954" populated="true" name="Indices" physicalName="Indices" type="4">
+    <index id="IDX299" populated="true" UUID="2341103b-26f6-4b4a-bb0e-b74828e5fb3b" clustered="false" index-type="BTREE" name="pgsnap_default_pkey" physicalName="pgsnap_default_pkey" primaryKeyIndex="true" unique="true" >
+     <index-column id="IDC300" populated="true" UUID="07d4a5cf-93cd-430c-a119-5efd07de5c63" ascendingOrDescending="UNSPECIFIED" column-ref="COL296" name="id" physicalName="id" />
+    </index>
+    <index id="IDX301" populated="true" UUID="b095797a-9e8d-413d-871b-f580284e75d3" clustered="false" index-type="BTREE" name="pgsnap_default_key_idx" physicalName="pgsnap_default_key_idx" primaryKeyIndex="false" unique="true" >
+     <index-column id="IDC302" populated="true" UUID="4e211c90-b75e-41f7-84b6-55ebbbacb0ce" ascendingOrDescending="UNSPECIFIED" column-ref="COL297" name="key" physicalName="key" />
+    </index>
+   </folder>
+  </table>
+  <table id="TAB303" populated="true" UUID="c89c2e29-e569-4c92-978a-e463b67902de" name="pgsnap_dumpjob" objectType="TABLE" physicalName="pgsnap_dumpjob" >
+   <remarks></remarks>
+   <folder id="FOLTAB3031" populated="true" name="Columns" physicalName="Columns" type="1">
+    <column id="COL304" populated="true" UUID="29f1205f-4b64-4d5c-912c-4540674e3dd5" autoIncrement="true" defaultValue="nextval(&apos;pgsnap_dumpjob_id_seq&apos;::regclass)" name="id" nullable="0" physicalName="id" precision="0" primaryKeySeq="0" referenceCount="1" scale="0" source-column-ref="COL40" sourceDataTypeName="serial" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL305" populated="true" UUID="9e5f5a43-2f06-48e6-93e1-830f9ad25c7e" autoIncrement="false" defaultValue="" name="pgsnap_worker_id" nullable="0" physicalName="pgsnap_worker_id" precision="0" referenceCount="2" scale="0" source-column-ref="COL41" sourceDataTypeName="int4" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL306" populated="true" UUID="db8df73b-5346-47d3-8f7e-50ecb8798218" autoIncrement="false" defaultValue="" name="pgsql_instance_id" nullable="0" physicalName="pgsql_instance_id" precision="0" referenceCount="2" scale="0" source-column-ref="COL42" sourceDataTypeName="int4" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL307" populated="true" UUID="7753f420-3425-4d39-929d-802223dd38ce" autoIncrement="false" defaultValue="" name="dbname" nullable="0" physicalName="dbname" precision="0" referenceCount="1" scale="0" source-column-ref="COL43" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL308" populated="true" UUID="e0165dd1-53e3-4124-82eb-e18d3da141e9" autoIncrement="false" defaultValue="&apos;FULL&apos;::text" name="dumptype" nullable="1" physicalName="dumptype" precision="0" referenceCount="1" scale="0" source-column-ref="COL44" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL309" populated="true" UUID="5e2044e1-8057-4655-8ad3-9d9225f3f917" autoIncrement="false" defaultValue="&apos;*&apos;::text" name="dumpschema" nullable="1" physicalName="dumpschema" precision="0" referenceCount="1" scale="0" source-column-ref="COL45" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL310" populated="true" UUID="e6d35a22-4858-4502-bae2-ad46bb83613d" autoIncrement="false" defaultValue="" name="dumpoptions" nullable="1" physicalName="dumpoptions" precision="0" referenceCount="1" scale="0" source-column-ref="COL46" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL311" populated="true" UUID="7b3c3423-a86a-432d-b62f-c21f2a81f16f" autoIncrement="false" defaultValue="14" name="keep_daily" nullable="1" physicalName="keep_daily" precision="0" referenceCount="1" scale="0" source-column-ref="COL47" sourceDataTypeName="int4" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL312" populated="true" UUID="c29be4c8-4e0f-4a1a-8756-f0b74173e935" autoIncrement="false" defaultValue="2" name="keep_weekly" nullable="1" physicalName="keep_weekly" precision="0" referenceCount="1" scale="0" source-column-ref="COL48" sourceDataTypeName="int4" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL313" populated="true" UUID="bdbbf51c-5ba0-4b16-be48-a27789153e9f" autoIncrement="false" defaultValue="5" name="keep_monthly" nullable="1" physicalName="keep_monthly" precision="0" referenceCount="1" scale="0" source-column-ref="COL49" sourceDataTypeName="int4" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL314" populated="true" UUID="4fc93ab3-dcf9-4dc7-93c1-9f63614fe88f" autoIncrement="false" defaultValue="2" name="keep_yearly" nullable="1" physicalName="keep_yearly" precision="0" referenceCount="1" scale="0" source-column-ref="COL50" sourceDataTypeName="int4" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL315" populated="true" UUID="8d661597-df33-4429-89c9-060be86fbd72" autoIncrement="false" defaultValue="" name="comment" nullable="1" physicalName="comment" precision="0" referenceCount="1" scale="0" source-column-ref="COL51" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL316" populated="true" UUID="ca1579d0-afa6-4d57-9e5e-ade33996fc9c" autoIncrement="false" defaultValue="" name="cron" nullable="0" physicalName="cron" precision="0" referenceCount="1" scale="0" source-column-ref="COL52" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL317" populated="true" UUID="8c0aef52-f3c6-49c0-ab88-ea2266b1f277" autoIncrement="false" defaultValue="&apos;ACTIVE&apos;::text" name="status" nullable="1" physicalName="status" precision="0" referenceCount="1" scale="0" source-column-ref="COL53" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL318" populated="true" UUID="7ede34fc-593c-4430-aed3-816c2ff16e90" autoIncrement="false" defaultValue="&apos;REPEAT&apos;::text" name="jobtype" nullable="1" physicalName="jobtype" precision="0" referenceCount="1" scale="0" source-column-ref="COL54" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL319" populated="true" UUID="adb9fd4f-e5c7-445b-b141-368cacf3427d" autoIncrement="false" defaultValue="" name="pgsnap_restorejob_id" nullable="1" physicalName="pgsnap_restorejob_id" precision="0" referenceCount="1" scale="0" source-column-ref="COL55" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL320" populated="true" UUID="ae5caf34-8ced-4788-89a5-b8bf0de0b715" autoIncrement="false" defaultValue="now()" name="date_added" nullable="1" physicalName="date_added" precision="0" referenceCount="1" scale="0" source-column-ref="COL56" sourceDataTypeName="timestamptz" type="93" userDefinedTypeUUID="6497d8de-0e00-40d6-a42e-e2adca83be64" >
+     <remarks></remarks>
+    </column>
+    </folder>
+    <folder id="FOLTAB3033" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+    </folder>
+    <folder id="FOLTAB3032" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+    </folder>
+    <folder id="FOLTAB3034" populated="true" name="Indices" physicalName="Indices" type="4">
+    <index id="IDX321" populated="true" UUID="fa30f5bf-4534-4ad8-b1e5-7082fe3a6bd5" clustered="false" index-type="BTREE" name="pgsnap_dumpjob_pkey" physicalName="pgsnap_dumpjob_pkey" primaryKeyIndex="true" unique="true" >
+     <index-column id="IDC322" populated="true" UUID="0530ec7d-1db9-4944-9046-a899149a8504" ascendingOrDescending="UNSPECIFIED" column-ref="COL304" name="id" physicalName="id" />
+    </index>
+    <index id="IDX323" populated="true" UUID="e758e70e-c60f-4de6-a402-76b61d8cdcd6" clustered="false" index-type="BTREE" name="fki_pgsnap_dumpjob_pgsnap_worker" physicalName="fki_pgsnap_dumpjob_pgsnap_worker" primaryKeyIndex="false" unique="false" >
+     <index-column id="IDC324" populated="true" UUID="3f8ee567-97da-417f-b85c-cf79c1bb29a0" ascendingOrDescending="UNSPECIFIED" column-ref="COL305" name="pgsnap_worker_id" physicalName="pgsnap_worker_id" />
+    </index>
+   </folder>
+  </table>
+  <table id="TAB325" populated="true" UUID="6fe37f53-5a33-4c03-9526-cbb2994ec1ac" name="pgsnap_message" objectType="TABLE" physicalName="pgsnap_message" >
+   <remarks></remarks>
+   <folder id="FOLTAB3251" populated="true" name="Columns" physicalName="Columns" type="1">
+    <column id="COL326" populated="true" UUID="b927a725-393e-49aa-86ac-dd6c0a780cda" autoIncrement="true" defaultValue="nextval(&apos;pgsnap_message_id_seq&apos;::regclass)" name="id" nullable="0" physicalName="id" precision="0" primaryKeySeq="0" referenceCount="1" scale="0" source-column-ref="COL62" sourceDataTypeName="serial" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL327" populated="true" UUID="7e1218c2-9247-41cf-af2a-29a75a52b468" autoIncrement="false" defaultValue="" name="level" nullable="1" physicalName="level" precision="0" referenceCount="1" scale="0" source-column-ref="COL63" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL328" populated="true" UUID="6a781075-f981-4c9f-9ac7-44ad49aea2d6" autoIncrement="false" defaultValue="" name="pgsnap_tool" nullable="1" physicalName="pgsnap_tool" precision="0" referenceCount="1" scale="0" source-column-ref="COL64" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL329" populated="true" UUID="86caeaec-4edf-4e7f-b001-622d3fa0d843" autoIncrement="false" defaultValue="" name="logtime" nullable="1" physicalName="logtime" precision="0" referenceCount="1" scale="0" source-column-ref="COL65" sourceDataTypeName="timestamptz" type="93" userDefinedTypeUUID="6497d8de-0e00-40d6-a42e-e2adca83be64" >
+     <remarks></remarks>
+    </column>
+    <column id="COL330" populated="true" UUID="a8d56b85-7b48-4856-bfe3-ee6cf5a76989" autoIncrement="false" defaultValue="" name="message" nullable="1" physicalName="message" precision="0" referenceCount="1" scale="0" source-column-ref="COL66" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL331" populated="true" UUID="9acec6ef-dfdf-4ca6-ba67-253caae8a066" autoIncrement="false" defaultValue="" name="jobclass" nullable="1" physicalName="jobclass" precision="0" referenceCount="1" scale="0" source-column-ref="COL67" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL332" populated="true" UUID="a540b5a5-606f-45f1-95c3-864cab5a65c0" autoIncrement="false" defaultValue="" name="jobid" nullable="1" physicalName="jobid" precision="0" referenceCount="1" scale="0" source-column-ref="COL68" sourceDataTypeName="int4" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    </folder>
+    <folder id="FOLTAB3253" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+    </folder>
+    <folder id="FOLTAB3252" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+    </folder>
+    <folder id="FOLTAB3254" populated="true" name="Indices" physicalName="Indices" type="4">
+    <index id="IDX333" populated="true" UUID="2fd1b591-883b-41ea-b7f7-3351524b8fd7" clustered="false" index-type="BTREE" name="pgsnap_message_pkey" physicalName="pgsnap_message_pkey" primaryKeyIndex="true" unique="true" >
+     <index-column id="IDC334" populated="true" UUID="2910781c-3d16-408b-84ec-eb4d46113a27" ascendingOrDescending="UNSPECIFIED" column-ref="COL326" name="id" physicalName="id" />
+    </index>
+   </folder>
+  </table>
+  <table id="TAB335" populated="true" UUID="cc406747-6e2e-4b37-b3e9-b7d5cc08845b" name="pgsnap_restorejob" objectType="TABLE" physicalName="pgsnap_restorejob" >
+   <remarks></remarks>
+   <folder id="FOLTAB3351" populated="true" name="Columns" physicalName="Columns" type="1">
+    <column id="COL336" populated="true" UUID="839a21a5-92d4-4d19-8516-189b5850c242" autoIncrement="true" defaultValue="nextval(&apos;pgsnap_restorejob_id_seq&apos;::regclass)" name="id" nullable="0" physicalName="id" precision="0" primaryKeySeq="0" referenceCount="1" scale="0" source-column-ref="COL72" sourceDataTypeName="serial" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL337" populated="true" UUID="0785d3d5-1731-4123-92a0-7e966b40f7ea" autoIncrement="false" defaultValue="" name="dest_pgsql_instance_id" nullable="0" physicalName="dest_pgsql_instance_id" precision="0" referenceCount="2" scale="0" source-column-ref="COL73" sourceDataTypeName="int4" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL338" populated="true" UUID="a0529692-4542-49a6-90e4-2b4f11e0cfad" autoIncrement="false" defaultValue="" name="dest_dbname" nullable="0" physicalName="dest_dbname" precision="0" referenceCount="1" scale="0" source-column-ref="COL74" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL339" populated="true" UUID="8cdf2ffd-89c6-4d05-9aac-3466977a6290" autoIncrement="false" defaultValue="&apos;FULL&apos;::text" name="restoretype" nullable="1" physicalName="restoretype" precision="0" referenceCount="1" scale="0" source-column-ref="COL75" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL340" populated="true" UUID="ca12a5c8-af95-42af-b6e9-89271093f132" autoIncrement="false" defaultValue="&apos;*&apos;::text" name="restoreschema" nullable="0" physicalName="restoreschema" precision="0" referenceCount="1" scale="0" source-column-ref="COL76" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL341" populated="true" UUID="f1ebd87e-1995-46f9-ad1d-7b6ddd83189a" autoIncrement="false" defaultValue="&apos;&apos;::text" name="restoreoptions" nullable="1" physicalName="restoreoptions" precision="0" referenceCount="1" scale="0" source-column-ref="COL77" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL342" populated="true" UUID="8823c19a-f6c9-48e7-8ccc-78ecf5c18605" autoIncrement="false" defaultValue="&apos;RENAME&apos;::text" name="existing_db" nullable="1" physicalName="existing_db" precision="0" referenceCount="1" scale="0" source-column-ref="COL78" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL343" populated="true" UUID="86a21c9c-3e88-4b09-9907-14b632d8cd13" autoIncrement="false" defaultValue="&apos;ACTIVE&apos;::text" name="status" nullable="1" physicalName="status" precision="0" referenceCount="1" scale="0" source-column-ref="COL79" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL344" populated="true" UUID="b6bc121a-f808-43a4-a9b7-4eed7e45f10c" autoIncrement="false" defaultValue="" name="comment" nullable="1" physicalName="comment" precision="0" referenceCount="1" scale="0" source-column-ref="COL80" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL345" populated="true" UUID="786dff2c-015e-40ce-a95d-f71ee3f7ee84" autoIncrement="false" defaultValue="&apos;SINGLE&apos;::text" name="jobtype" nullable="1" physicalName="jobtype" precision="0" referenceCount="1" scale="0" source-column-ref="COL81" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL346" populated="true" UUID="6b176d53-5fe4-4f91-97f3-ba32b8d313fc" autoIncrement="false" defaultValue="&apos;* * * * *&apos;::text" name="cron" nullable="0" physicalName="cron" precision="0" referenceCount="1" scale="0" source-column-ref="COL82" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL347" populated="true" UUID="8a18fba6-8ea5-4890-a502-858714f9ceab" autoIncrement="false" defaultValue="" name="pgsnap_catalog_id" nullable="0" physicalName="pgsnap_catalog_id" precision="0" referenceCount="2" scale="0" source-column-ref="COL83" sourceDataTypeName="int4" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL348" populated="true" UUID="19aac4ab-3efa-4740-be68-d5a142075a45" autoIncrement="false" defaultValue="&apos;USE_ROLE&apos;::text" name="role_handling" nullable="1" physicalName="role_handling" precision="0" referenceCount="1" scale="0" source-column-ref="COL84" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL349" populated="true" UUID="7f069f26-29c7-44de-acce-88745f56dd4e" autoIncrement="false" defaultValue="&apos;NO_TBLSPC&apos;::text" name="tblspc_handling" nullable="1" physicalName="tblspc_handling" precision="0" referenceCount="1" scale="0" source-column-ref="COL85" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL350" populated="true" UUID="c8e25d28-0c13-4e91-8960-fcb037ef1fe2" autoIncrement="false" defaultValue="now()" name="date_added" nullable="1" physicalName="date_added" precision="0" referenceCount="1" scale="0" source-column-ref="COL86" sourceDataTypeName="timestamptz" type="93" userDefinedTypeUUID="6497d8de-0e00-40d6-a42e-e2adca83be64" >
+     <remarks></remarks>
+    </column>
+    </folder>
+    <folder id="FOLTAB3353" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+    </folder>
+    <folder id="FOLTAB3352" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+    </folder>
+    <folder id="FOLTAB3354" populated="true" name="Indices" physicalName="Indices" type="4">
+    <index id="IDX351" populated="true" UUID="d9fbe7e8-ecdb-4f9e-8b50-de07f5d42af6" clustered="false" index-type="BTREE" name="pgsnap_restorejob_pkey" physicalName="pgsnap_restorejob_pkey" primaryKeyIndex="true" unique="true" >
+     <index-column id="IDC352" populated="true" UUID="507e110d-358f-458a-bd9e-52df8616ffec" ascendingOrDescending="UNSPECIFIED" column-ref="COL336" name="id" physicalName="id" />
+    </index>
+    <index id="IDX353" populated="true" UUID="c4e38a6b-d7af-4f75-82ad-b6efd907bcb4" clustered="false" index-type="BTREE" name="fki_pgsnap_restorejob_pgsql_instance" physicalName="fki_pgsnap_restorejob_pgsql_instance" primaryKeyIndex="false" unique="false" >
+     <index-column id="IDC354" populated="true" UUID="8e971bcd-f84d-40ae-87ad-7da7aaff9ac3" ascendingOrDescending="UNSPECIFIED" column-ref="COL337" name="dest_pgsql_instance_id" physicalName="dest_pgsql_instance_id" />
+    </index>
+   </folder>
+  </table>
+  <table id="TAB355" populated="true" UUID="d9d1f9e4-a0a3-402c-81de-5df03cce7061" name="pgsnap_restorelog" objectType="TABLE" physicalName="pgsnap_restorelog" >
+   <remarks></remarks>
+   <folder id="FOLTAB3551" populated="true" name="Columns" physicalName="Columns" type="1">
+    <column id="COL356" populated="true" UUID="879ad8c6-a60a-4714-9f01-c0a91cc8ed36" autoIncrement="true" defaultValue="nextval(&apos;pgsnap_restorelog_id_seq&apos;::regclass)" name="id" nullable="0" physicalName="id" precision="0" primaryKeySeq="0" referenceCount="1" scale="0" source-column-ref="COL92" sourceDataTypeName="serial" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL357" populated="true" UUID="e135d225-68d8-4d3e-9e17-4eda0d950eb5" autoIncrement="false" defaultValue="" name="pgsnap_restorejob_id" nullable="0" physicalName="pgsnap_restorejob_id" precision="0" referenceCount="2" scale="0" source-column-ref="COL93" sourceDataTypeName="int4" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL358" populated="true" UUID="1c6fecb7-a150-4fad-9449-d1012898d004" autoIncrement="false" defaultValue="now()" name="starttime" nullable="1" physicalName="starttime" precision="0" referenceCount="1" scale="0" source-column-ref="COL94" sourceDataTypeName="timestamptz" type="93" userDefinedTypeUUID="6497d8de-0e00-40d6-a42e-e2adca83be64" >
+     <remarks></remarks>
+    </column>
+    <column id="COL359" populated="true" UUID="b21457aa-bc9c-4ecc-a599-74a3b18c3463" autoIncrement="false" defaultValue="" name="endtime" nullable="1" physicalName="endtime" precision="0" referenceCount="1" scale="0" source-column-ref="COL95" sourceDataTypeName="timestamptz" type="93" userDefinedTypeUUID="6497d8de-0e00-40d6-a42e-e2adca83be64" >
+     <remarks></remarks>
+    </column>
+    <column id="COL360" populated="true" UUID="e71f6902-830d-427b-abdc-d0bdecbd1f76" autoIncrement="false" defaultValue="&apos;RUNNING&apos;::text" name="status" nullable="1" physicalName="status" precision="0" referenceCount="1" scale="0" source-column-ref="COL96" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL361" populated="true" UUID="54a4e283-20a6-439c-b5d6-3bc4d1f78045" autoIncrement="false" defaultValue="" name="bu_path" nullable="1" physicalName="bu_path" precision="0" referenceCount="1" scale="0" source-column-ref="COL97" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL362" populated="true" UUID="fbd41518-cc98-4adf-be1a-7c09f840911b" autoIncrement="false" defaultValue="" name="message" nullable="1" physicalName="message" precision="0" referenceCount="1" scale="0" source-column-ref="COL98" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    </folder>
+    <folder id="FOLTAB3553" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+    </folder>
+    <folder id="FOLTAB3552" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+    </folder>
+    <folder id="FOLTAB3554" populated="true" name="Indices" physicalName="Indices" type="4">
+    <index id="IDX363" populated="true" UUID="24176247-75dc-42b0-847c-bca64a17f488" clustered="false" index-type="BTREE" name="pgsnap_restorelog_pkey" physicalName="pgsnap_restorelog_pkey" primaryKeyIndex="true" unique="true" >
+     <index-column id="IDC364" populated="true" UUID="276a54c2-b530-4ac1-ad71-9de452cb666e" ascendingOrDescending="UNSPECIFIED" column-ref="COL356" name="id" physicalName="id" />
+    </index>
+   </folder>
+  </table>
+  <table id="TAB365" populated="true" UUID="afed4f1a-af12-4e45-8ca5-796a59cac8c2" name="pgsnap_script" objectType="TABLE" physicalName="pgsnap_script" >
+   <remarks></remarks>
+   <folder id="FOLTAB3651" populated="true" name="Columns" physicalName="Columns" type="1">
+    <column id="COL366" populated="true" UUID="731c126f-fcca-49e3-966a-917e5083f986" autoIncrement="true" defaultValue="nextval(&apos;pgsnap_script_id_seq&apos;::regclass)" name="id" nullable="0" physicalName="id" precision="0" primaryKeySeq="0" referenceCount="1" scale="0" source-column-ref="COL102" sourceDataTypeName="serial" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL367" populated="true" UUID="0f56bc58-bb61-4784-b49e-fd5ab842e8d3" autoIncrement="false" defaultValue="" name="scriptname" nullable="1" physicalName="scriptname" precision="0" referenceCount="1" scale="0" source-column-ref="COL103" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL368" populated="true" UUID="515cca04-fe9c-40c6-9827-1d559fd3bb71" autoIncrement="false" defaultValue="" name="scriptcode" nullable="1" physicalName="scriptcode" precision="0" referenceCount="1" scale="0" source-column-ref="COL104" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL369" populated="true" UUID="8dc6c797-01c8-4415-89ac-2b9a9f236c69" autoIncrement="false" defaultValue="now()" name="date_added" nullable="1" physicalName="date_added" precision="0" referenceCount="1" scale="0" source-column-ref="COL105" sourceDataTypeName="timestamptz" type="93" userDefinedTypeUUID="6497d8de-0e00-40d6-a42e-e2adca83be64" >
+     <remarks></remarks>
+    </column>
+    </folder>
+    <folder id="FOLTAB3653" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+    </folder>
+    <folder id="FOLTAB3652" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+    </folder>
+    <folder id="FOLTAB3654" populated="true" name="Indices" physicalName="Indices" type="4">
+    <index id="IDX370" populated="true" UUID="efd6f708-f66e-4ecf-98ea-80efdc206efc" clustered="false" index-type="BTREE" name="pgsnap_script_pkey" physicalName="pgsnap_script_pkey" primaryKeyIndex="true" unique="true" >
+     <index-column id="IDC371" populated="true" UUID="d7a7810d-58c5-4101-a882-d1d136d3619e" ascendingOrDescending="UNSPECIFIED" column-ref="COL366" name="id" physicalName="id" />
+    </index>
+    <index id="IDX372" populated="true" UUID="c614d786-4e5b-4415-92e9-81ae5a5c0794" clustered="false" index-type="BTREE" name="pgsnap_script_scriptname_idx" physicalName="pgsnap_script_scriptname_idx" primaryKeyIndex="false" unique="true" >
+     <index-column id="IDC373" populated="true" UUID="d6b27603-cbb2-4c38-b50e-78a209e1d371" ascendingOrDescending="UNSPECIFIED" column-ref="COL367" name="scriptname" physicalName="scriptname" />
+    </index>
+   </folder>
+  </table>
+  <table id="TAB374" populated="true" UUID="68a84c7b-0280-4851-90aa-074a6c59cd43" name="pgsnap_worker" objectType="TABLE" physicalName="pgsnap_worker" >
+   <remarks></remarks>
+   <folder id="FOLTAB3741" populated="true" name="Columns" physicalName="Columns" type="1">
+    <column id="COL375" populated="true" UUID="17c8f307-6856-455c-9540-0bd5b484187c" autoIncrement="true" defaultValue="nextval(&apos;pgsnap_worker_id_seq&apos;::regclass)" name="id" nullable="0" physicalName="id" precision="0" primaryKeySeq="0" referenceCount="1" scale="0" source-column-ref="COL111" sourceDataTypeName="serial" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL376" populated="true" UUID="5034889d-88cd-487b-aee2-dc4f93bf707a" autoIncrement="false" defaultValue="" name="dns_name" nullable="0" physicalName="dns_name" precision="0" referenceCount="1" scale="0" source-column-ref="COL112" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL377" populated="true" UUID="10c612b9-ab53-4fef-82e8-b833f2a0e708" autoIncrement="false" defaultValue="" name="comment" nullable="1" physicalName="comment" precision="0" referenceCount="1" scale="0" source-column-ref="COL113" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL378" populated="true" UUID="87d76598-fe32-4ab0-9078-732c5446c249" autoIncrement="false" defaultValue="&apos;15 20 * * *&apos;::text" name="cron_cacheconfig" nullable="1" physicalName="cron_cacheconfig" precision="0" referenceCount="1" scale="0" source-column-ref="COL114" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL379" populated="true" UUID="85ff7559-dd54-4387-9c16-197003c22908" autoIncrement="false" defaultValue="&apos;* * * * *&apos;::text" name="cron_singlejob" nullable="1" physicalName="cron_singlejob" precision="0" referenceCount="1" scale="0" source-column-ref="COL115" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL380" populated="true" UUID="426b77f7-f4f6-4ae6-b9b2-74c6289109cd" autoIncrement="false" defaultValue="&apos;15 18 * * *&apos;::text" name="cron_clean" nullable="1" physicalName="cron_clean" precision="0" referenceCount="1" scale="0" source-column-ref="COL116" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL381" populated="true" UUID="abc152d0-500a-402e-8557-3660ee243179" autoIncrement="false" defaultValue="&apos;*/5 * * * *&apos;::text" name="cron_upload" nullable="1" physicalName="cron_upload" precision="0" referenceCount="1" scale="0" source-column-ref="COL117" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL382" populated="true" UUID="c4bc0ad4-3fdd-4b80-99aa-9f3bc23989c4" autoIncrement="false" defaultValue="&apos;ACTIVE&apos;::text" name="status" nullable="1" physicalName="status" precision="0" referenceCount="1" scale="0" source-column-ref="COL118" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL383" populated="true" UUID="eeed15b1-b9c1-4f4e-9acc-ada8170da878" autoIncrement="false" defaultValue="now()" name="date_added" nullable="1" physicalName="date_added" precision="0" referenceCount="1" scale="0" source-column-ref="COL119" sourceDataTypeName="timestamptz" type="93" userDefinedTypeUUID="6497d8de-0e00-40d6-a42e-e2adca83be64" >
+     <remarks></remarks>
+    </column>
+    </folder>
+    <folder id="FOLTAB3743" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+    </folder>
+    <folder id="FOLTAB3742" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+    </folder>
+    <folder id="FOLTAB3744" populated="true" name="Indices" physicalName="Indices" type="4">
+    <index id="IDX384" populated="true" UUID="f4117407-16b1-4fb2-abd4-f8bb68ada6c1" clustered="false" index-type="BTREE" name="pgsnap_worker_pkey" physicalName="pgsnap_worker_pkey" primaryKeyIndex="true" unique="true" >
+     <index-column id="IDC385" populated="true" UUID="d32a651e-26c1-4794-826c-452a4afe053b" ascendingOrDescending="UNSPECIFIED" column-ref="COL375" name="id" physicalName="id" />
+    </index>
+    <index id="IDX386" populated="true" UUID="149a3cdb-3c18-41f2-9bd9-6eef69174b7a" clustered="false" index-type="BTREE" name="pgsnap_worker_dns_name_idx" physicalName="pgsnap_worker_dns_name_idx" primaryKeyIndex="false" unique="true" >
+     <index-column id="IDC387" populated="true" UUID="b1572af6-5737-4244-9600-028067a22a99" ascendingOrDescending="UNSPECIFIED" column-ref="COL376" name="dns_name" physicalName="dns_name" />
+    </index>
+   </folder>
+  </table>
+  <table id="TAB388" populated="true" UUID="aec2ca43-ba97-4339-aca8-e2b503a2bfd1" name="pgsql_instance" objectType="TABLE" physicalName="pgsql_instance" >
+   <remarks></remarks>
+   <folder id="FOLTAB3881" populated="true" name="Columns" physicalName="Columns" type="1">
+    <column id="COL389" populated="true" UUID="384ec5d7-d1b9-4c88-b571-4fdbb2f00b41" autoIncrement="true" defaultValue="nextval(&apos;pgsql_instance_id_seq&apos;::regclass)" name="id" nullable="0" physicalName="id" precision="0" primaryKeySeq="0" referenceCount="1" scale="0" source-column-ref="COL125" sourceDataTypeName="serial" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL390" populated="true" UUID="1fc7f325-faa4-48d2-8771-50765763154b" autoIncrement="false" defaultValue="" name="dns_name" nullable="0" physicalName="dns_name" precision="0" referenceCount="1" scale="0" source-column-ref="COL126" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL391" populated="true" UUID="f81f6bda-b0a7-4d38-af64-a50e4f4230da" autoIncrement="false" defaultValue="" name="pgport" nullable="1" physicalName="pgport" precision="0" referenceCount="1" scale="0" source-column-ref="COL127" sourceDataTypeName="int4" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL392" populated="true" UUID="67e7a034-4249-4c81-864d-9ea305bc705e" autoIncrement="false" defaultValue="" name="comment" nullable="1" physicalName="comment" precision="0" referenceCount="1" scale="0" source-column-ref="COL128" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL393" populated="true" UUID="ce22d56a-191c-4a95-a5e0-b697e7235c21" autoIncrement="false" defaultValue="&apos;postgres&apos;::text" name="pgsql_superuser" nullable="1" physicalName="pgsql_superuser" precision="0" referenceCount="1" scale="0" source-column-ref="COL129" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL394" populated="true" UUID="5b6dca2f-67ed-42db-94f0-b30034ca773f" autoIncrement="false" defaultValue="&apos;ACTIVE&apos;::text" name="status" nullable="1" physicalName="status" precision="0" referenceCount="1" scale="0" source-column-ref="COL130" sourceDataTypeName="text" type="-1" userDefinedTypeUUID="9a814859-ab26-4acd-9415-ea82291bcac1" >
+     <remarks></remarks>
+    </column>
+    <column id="COL395" populated="true" UUID="b49d3077-7409-4dcc-a562-7ebc892ffb9c" autoIncrement="false" defaultValue="2" name="bu_window_start" nullable="1" physicalName="bu_window_start" precision="0" referenceCount="1" scale="0" source-column-ref="COL131" sourceDataTypeName="int4" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL396" populated="true" UUID="e25c1858-02be-4928-9f34-e5625d11b5fb" autoIncrement="false" defaultValue="6" name="bu_window_end" nullable="1" physicalName="bu_window_end" precision="0" referenceCount="1" scale="0" source-column-ref="COL132" sourceDataTypeName="int4" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL397" populated="true" UUID="53abd446-cf17-4ab7-9a66-17de04284bab" autoIncrement="false" defaultValue="" name="pgsnap_worker_id_default" nullable="1" physicalName="pgsnap_worker_id_default" precision="0" referenceCount="1" scale="0" source-column-ref="COL133" sourceDataTypeName="int4" type="4" userDefinedTypeUUID="63b011c7-c81f-4c75-8271-632b3c87f727" >
+     <remarks></remarks>
+    </column>
+    <column id="COL398" populated="true" UUID="88e24be5-a19a-4399-ac76-ef8bf38207a3" autoIncrement="false" defaultValue="now()" name="date_added" nullable="1" physicalName="date_added" precision="0" referenceCount="1" scale="0" source-column-ref="COL134" sourceDataTypeName="timestamptz" type="93" userDefinedTypeUUID="6497d8de-0e00-40d6-a42e-e2adca83be64" >
+     <remarks></remarks>
+    </column>
+    </folder>
+    <folder id="FOLTAB3883" populated="true" name="Exported Keys" physicalName="Exported Keys" type="3">
+    </folder>
+    <folder id="FOLTAB3882" populated="true" name="Imported Keys" physicalName="Imported Keys" type="2">
+    </folder>
+    <folder id="FOLTAB3884" populated="true" name="Indices" physicalName="Indices" type="4">
+    <index id="IDX399" populated="true" UUID="1a9da301-aee1-4452-94e6-61786dfe956d" clustered="false" index-type="BTREE" name="pgsql_instance_pkey" physicalName="pgsql_instance_pkey" primaryKeyIndex="true" unique="true" >
+     <index-column id="IDC400" populated="true" UUID="f74a8e3e-2251-426f-b092-a72164f94584" ascendingOrDescending="UNSPECIFIED" column-ref="COL389" name="id" physicalName="id" />
+    </index>
+    <index id="IDX401" populated="true" UUID="85c08cdb-5896-4995-b4ae-12797c2e098a" clustered="false" index-type="BTREE" name="pgsql_instance_dns_name_pgport_idx" physicalName="pgsql_instance_dns_name_pgport_idx" primaryKeyIndex="false" unique="true" >
+     <index-column id="IDC402" populated="true" UUID="375b79f9-bd20-4d19-96d6-40b4aa48e5d3" ascendingOrDescending="UNSPECIFIED" column-ref="COL390" name="dns_name" physicalName="dns_name" />
+     <index-column id="IDC403" populated="true" UUID="093ec860-1690-483f-9f8e-ec2250207d19" ascendingOrDescending="UNSPECIFIED" column-ref="COL391" name="pgport" physicalName="pgport" />
+    </index>
+   </folder>
+  </table>
+  <relationships>
+   <relationship id="REL404" populated="true" UUID="2a917c94-91a8-4f1d-b6da-f0d723a459f3" deferrability="7" deleteRule="3" fk-table-ref="TAB335" fkCardinality="7" identifying="false" name="fk_pgsnap_restorejob_pgsnap_catalog" physicalName="fk_pgsnap_restorejob_pgsnap_catalog" pk-table-ref="TAB270" pkCardinality="2" updateRule="3" >
+    <column-mapping id="CMP405" populated="true" UUID="3224b509-3939-48dc-bbc4-cb986b9e3496" fk-column-ref="COL347" name="Column Mapping" physicalName="Column Mapping" pk-column-ref="COL271" />
+   </relationship>
+   <relationship id="REL406" populated="true" UUID="5e396927-41e0-4ce6-b83f-a0f1c8ae9f4a" deferrability="7" deleteRule="3" fk-table-ref="TAB355" fkCardinality="7" identifying="false" name="fk_pgsnap_restorelog_pgsnap_restorejob" physicalName="fk_pgsnap_restorelog_pgsnap_restorejob" pk-table-ref="TAB335" pkCardinality="2" updateRule="3" >
+    <column-mapping id="CMP407" populated="true" UUID="bcf0faab-2fe8-4228-8b8a-8971a77b32d1" fk-column-ref="COL357" name="Column Mapping" physicalName="Column Mapping" pk-column-ref="COL336" />
+   </relationship>
+   <relationship id="REL408" populated="true" UUID="90a01c76-58d5-4f5f-a6d9-ac9d71dfe298" deferrability="7" deleteRule="3" fk-table-ref="TAB270" fkCardinality="7" identifying="false" name="fk_pgsnap_catalog_pgsnap_worker" physicalName="fk_pgsnap_catalog_pgsnap_worker" pk-table-ref="TAB374" pkCardinality="2" updateRule="3" >
+    <column-mapping id="CMP409" populated="true" UUID="d14b9491-60f5-44bd-9fda-4cab3c24ad47" fk-column-ref="COL287" name="Column Mapping" physicalName="Column Mapping" pk-column-ref="COL375" />
+   </relationship>
+   <relationship id="REL410" populated="true" UUID="0e107070-2fdc-4e39-8500-7d1f52e5162d" deferrability="7" deleteRule="3" fk-table-ref="TAB303" fkCardinality="7" identifying="false" name="fk_pgsnap_dumpjob_pgsnap_worker" physicalName="fk_pgsnap_dumpjob_pgsnap_worker" pk-table-ref="TAB374" pkCardinality="2" updateRule="3" >
+    <column-mapping id="CMP411" populated="true" UUID="58845594-8196-4adf-a192-20da91541c50" fk-column-ref="COL305" name="Column Mapping" physicalName="Column Mapping" pk-column-ref="COL375" />
+   </relationship>
+   <relationship id="REL412" populated="true" UUID="61dd1de7-0d5e-4c2f-9ba7-ad50b060ccec" deferrability="7" deleteRule="3" fk-table-ref="TAB303" fkCardinality="7" identifying="false" name="fk_pgsnap_dumpjob_pgsql_instance" physicalName="fk_pgsnap_dumpjob_pgsql_instance" pk-table-ref="TAB388" pkCardinality="2" updateRule="3" >
+    <column-mapping id="CMP413" populated="true" UUID="1d5d583e-2d77-435c-803b-6faa5ddfc64a" fk-column-ref="COL306" name="Column Mapping" physicalName="Column Mapping" pk-column-ref="COL389" />
+   </relationship>
+   <relationship id="REL414" populated="true" UUID="7262cdc8-dae7-4ee2-907f-ff7b13423b40" deferrability="7" deleteRule="3" fk-table-ref="TAB335" fkCardinality="7" identifying="false" name="fk_pgsnap_restorejob_pgsql_instance" physicalName="fk_pgsnap_restorejob_pgsql_instance" pk-table-ref="TAB388" pkCardinality="2" updateRule="3" >
+    <column-mapping id="CMP415" populated="true" UUID="cef7ce8f-63af-4523-9217-ed2b3f864f57" fk-column-ref="COL337" name="Column Mapping" physicalName="Column Mapping" pk-column-ref="COL389" />
+   </relationship>
+  </relationships>
+ </target-database>
+ <ddl-generator type="ca.sqlpower.architect.ddl.GenericDDLGenerator" allow-connection="true"> </ddl-generator>
+ <liquibase-settings useSeparateChangeSets="false" generateId="false" idStart="1"/>
+ <create-kettle-job-settings filePath="" jobName="" schemaName="" kettleJoinType="0" savingToFile="true" />
+ <play-pen zoom="0.7071067811865468" viewportX="68" viewportY="89" relationship-style="rectilinear" names-displayLogicalNames="true" showPrimaryTag="true" showForeignTag="true" showAlternateTag="true" columnVisibility="ALL" relationshipLabelVisibility="true">
+  <table-pane table-ref="TAB270" x="831" y="584" bgColor="0xf0f0f0" fgColor="0x000000" rounded="false" dashed="false"/>
+  <table-pane table-ref="TAB295" x="316" y="165" bgColor="0xeec994" fgColor="0x000000" rounded="false" dashed="false"/>
+  <table-pane table-ref="TAB303" x="571" y="557" bgColor="0xf0f0f0" fgColor="0x000000" rounded="false" dashed="false"/>
+  <table-pane table-ref="TAB325" x="354" y="972" bgColor="0xc8dccc" fgColor="0x000000" rounded="false" dashed="false"/>
+  <table-pane table-ref="TAB335" x="1067" y="659" bgColor="0xf0f0f0" fgColor="0x000000" rounded="false" dashed="false"/>
+  <table-pane table-ref="TAB355" x="1067" y="972" bgColor="0xc8dccc" fgColor="0x000000" rounded="false" dashed="false"/>
+  <table-pane table-ref="TAB365" x="313" y="309" bgColor="0xeec994" fgColor="0x000000" rounded="false" dashed="false"/>
+  <table-pane table-ref="TAB374" x="995" y="166" bgColor="0xf0f0f0" fgColor="0x000000" rounded="false" dashed="false"/>
+  <table-pane table-ref="TAB388" x="643" y="164" bgColor="0xf0f0f0" fgColor="0x000000" rounded="false" dashed="false"/>
+  <table-link relationship-ref="REL404" pkConnection="0.10032362459546926" fkConnection="0.19806763285024154" rLineColor="0x000000" pkLabelText="" fkLabelText="" orientation="129"/>
+  <table-link relationship-ref="REL406" pkConnection="0.5265700483091788" fkConnection="0.5532994923857868" rLineColor="0x000000" pkLabelText="" fkLabelText="" orientation="132"/>
+  <table-link relationship-ref="REL408" pkConnection="0.387434554973822" fkConnection="0.31176470588235294" rLineColor="0x000000" pkLabelText="" fkLabelText="" orientation="132"/>
+  <table-link relationship-ref="REL410" pkConnection="0.21787709497206703" fkConnection="0.8704663212435233" rLineColor="0x000000" pkLabelText="" fkLabelText="" orientation="132"/>
+  <table-link relationship-ref="REL412" pkConnection="0.22950819672131148" fkConnection="0.12953367875647667" rLineColor="0x000000" pkLabelText="" fkLabelText="" orientation="132"/>
+  <table-link relationship-ref="REL414" pkConnection="0.8688524590163934" fkConnection="0.7681159420289855" rLineColor="0x000000" pkLabelText="" fkLabelText="" orientation="132"/>
+ </play-pen>
+ <critic-manager>
+  <critic-grouping platformType="Generic" enabled="true">
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.PrimaryKeyCritic" severity="ERROR"/>
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.RelationshipMappingTypeCritic" severity="ERROR"/>
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.EmptyRelationshipCritic" severity="ERROR"/>
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.AlphaNumericNameCritic" severity="ERROR"/>
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.AlphaNumericSequenceNameCritic" severity="ERROR"/>
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.SetDefaultOnColumnWithNoDefaultCritic" severity="ERROR"/>
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.SetNullOnNonNullableColumnCritic" severity="ERROR"/>
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.DuplicateNameCritic" severity="ERROR"/>
+  </critic-grouping>
+  <critic-grouping platformType="DB2" enabled="true">
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.DB2UnsupportedFeaturesCritic" severity="ERROR"/>
+  </critic-grouping>
+  <critic-grouping platformType="H2" enabled="true">
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.H2UnsupportedFeaturesCritic" severity="ERROR"/>
+  </critic-grouping>
+  <critic-grouping platformType="HSQLDB" enabled="true">
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.HSQLDBUnsupportedFeaturesCritic" severity="ERROR"/>
+  </critic-grouping>
+  <critic-grouping platformType="MySQL" enabled="true">
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.MySQLCommentCritic" severity="ERROR"/>
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.MySQLReservedWordsCritic" severity="ERROR"/>
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.MySQLUnsupportedFeaturesCritic" severity="ERROR"/>
+  </critic-grouping>
+  <critic-grouping platformType="Oracle" enabled="true">
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.OraclePhysicalNameCritic" severity="ERROR"/>
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.OracleReservedWordsCritic" severity="ERROR"/>
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.OracleUnsupportedFeaturesCritic" severity="ERROR"/>
+  </critic-grouping>
+  <critic-grouping platformType="PostgreSQL" enabled="true">
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.PostgreSQLReservedWordsCritic" severity="ERROR"/>
+  </critic-grouping>
+  <critic-grouping platformType="SQL Server" enabled="true">
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.SQLServerUnsupportedFeaturesCritic" severity="ERROR"/>
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.SQLServerReservedWordsCritic" severity="ERROR"/>
+  </critic-grouping>
+  <critic-grouping platformType="SQL Server 2000" enabled="true">
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.SQLServer2000UnsupportedFeaturesCritic" severity="ERROR"/>
+  </critic-grouping>
+  <critic-grouping platformType="SQL Server 2005" enabled="true">
+   <critic-settings class="ca.sqlpower.architect.ddl.critic.impl.SQLServer2005UnsupportedFeaturesCritic" severity="ERROR"/>
+  </critic-grouping>
+ </critic-manager>
+ <profiles topNCount="10">
+  </profiles>
+  <olap>
+  </olap>
+  <olap-gui>
+  </olap-gui>
+</architect-project>

@@ -64,4 +64,8 @@ VERIFYPERC=25
 # Keep restore log for this many days
 KEEPRESTORELOG=7
 
+# Optional hostname override (e.g. when you want to use a cname or otherwise override the
+# output of hostname  -f). Jobs are looked up in the pgsnap_worker table using this
+# name.
+#WORKER_DNS_NAME=yourhostname
 
