@@ -309,15 +309,15 @@ function createcronjobs {
     PRE=""
     # For active jobs, try to verify the database connection and postgresql version
     if [ "${jobstatus}" == "HALTED" ]; then
-      log "WARNING" "job id ${jobid} - disabled by user (status HALTED): ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}"
+      log "WARNING" "job id ${jobid} - disabled by user (status HALTED): ${pgsqlsuperuser}@${pgsqldns}:${pgsqlport}/${dbname}${schema_part}"
     fi
     if [ "${jobstatus}" == "ACTIVE" ]; then
-      echo "# INFO pgsnapman job id ${jobid} - ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp 
-      log "INFO" "job id ${jobid} - ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part}"
+      echo "# INFO pgsnapman job id ${jobid} - ${pgsqlsuperuser}@${pgsqldns}:${pgsqlport}/${dbname}${schema_part}" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp 
+      log "INFO" "job id ${jobid} - ${pgsqlsuperuser}@${pgsqldns}:${pgsqlport}/${dbname}${schema_part}"
       # Check postgres instance version
       pgversion=$(getpgversion "${pgsqlhost}" ${pgsqlport} ${pgsqlsuperuser} ${dbname})
       if [ "${pgversion}" == "" ]; then
-        log "WARNING" "job id ${jobid} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlhost}:${pgsqlport}/${dbname}${schema_part} - pg_dump version can not be verified, leaving job in place"
+        log "WARNING" "job id ${jobid} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqldns}:${pgsqlport}/${dbname}${schema_part} - pg_dump version can not be verified, leaving job in place"
       else
         # Get pg bin path for this version
         eval pgbinvar=PGBIN${pgversion}

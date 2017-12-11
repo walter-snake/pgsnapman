@@ -378,10 +378,11 @@ def showHelp():
 Available commands
 ==================
 
-* The group may be abbreviated to one letter.
+* The commands may be abbreviated to the first letter.
 * Choice:       [choice1|choice2|...]
 * Optional:     {}
-* Full details: +<id>
+* Variable:     <id>
+* Full details: list+<id>
 
 It is also possible to enter the commands directly on the command line
 when calling pgs-manager.
@@ -393,7 +394,7 @@ worker management
   worker register
   worker status [ACTIVE|HALTED]
   worker edit <id>
-  worker delete <id>
+  worker x-delete <id>
   
 postgres management
 -------------------
@@ -402,17 +403,7 @@ postgres management
   postgres register
   postgres status [ACTIVE|HALTED]
   postgres edit <id>
-  postgres delete <id>
-
-catalog management
-------------------
-  catalog list
-  catalog list+<id>
-  catalog search "<filter>"  
-    <filter>: regular Postgres filter, you may filter on every
-              column available in the view; for security reasons
-              using a ; is not allowed
-  catalog keep [NO|YES|AUTO]
+  postgres x-delete <id>
 
 dump job management
 -------------------
@@ -421,7 +412,7 @@ dump job management
   dumpjob add
   dumpjob status [ACTIVE|HALTED]
   dumbjob edit <id>
-  dumbjob delete <id>
+  dumbjob x-delete <id>
 
 restore job management
 ----------------------
@@ -430,13 +421,31 @@ restore job management
   restorejob add
   restorejob status [ACTIVE|HALTED]
   restorejob edit <id>
-  restorejob delete <id>
+  restorejob x-delete <id>
+
+trigger jobs
+------------
+  trigger
+
+catalog management
+------------------
+  catalog list
+  catalog list+<id>
+  catalog job <job_id>
+  catalog database <database_name>
+  catalog search "<filter>"  
+    <filter>: regular Postgres filter, you may filter on every
+              column available in the view; for security reasons
+              using a ; is not allowed
+  catalog keep [NO|YES|AUTO]
 
 log of restore jobs
 -------------------
   log-restore list
   log-restore list+<id>
-  log-restore search <filter>
+  log-restore job <job_id>
+  log-restore database <database_name>
+  log-restore search "<filter>"
     <filter>: regular Postgres filter, you may filter on every
               column available in the view; for security reasons
               using a ; is not allowed
@@ -447,7 +456,7 @@ messages
 --------
   message list
   message list+<id>
-  log-restore search <filter>
+  log-restore search "<filter>"
     <filter>: regular Postgres filter, you may filter on every
               column available in the view; for security reasons
               using a ; is not allowed
