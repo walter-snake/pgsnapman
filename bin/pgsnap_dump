@@ -253,7 +253,7 @@ i         log "ERROR" "${MSG}"
       # Extract schema sql, as a quick test of the dump
       ${pgbin}/pg_restore --schema-only -f /dev/null -v ${jobdir}/${buname} 2>>  ${jobdir}/${buname}.log
       if [ "$?" != "0" ]; then
-        MSG="job id ${jobid} - errors occured during schema creation from dump: ${buname}"
+        MSG="job id ${jobid} - stage 1 verify failed: could not extract schema from dump"
         log "ERROR" "${MSG}"
         ERRORS=1
       fi

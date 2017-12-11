@@ -109,7 +109,7 @@ function logend {
   if [[ "${DUMP}" =~ ^[0-9]+$ ]]; then
     bupath="cat_id=${DUMP}"
   fi
-  local sql="select set_restorelog(${LOGID}, '${1}', '${2}', '${bupath}');"
+  local sql="select set_restorelog(${LOGID}, '${1}', '${2}', '${bupath}', '${BUWORKERID}', '${pgsqlfqdn}', '${pgsqlport}', '${dbname}', '${restoreschema}', '${restoretype}');"
   log "${1}" "${2}"
   snaplog "${1}" "${2}"
   talk "${1} ${2}"
@@ -448,7 +448,7 @@ function run_dir_restore {
   fi 
  
   # end DATA exclusion
-  MSG="finished restore of database $(getfieldvalue "${DBSETTINGS}" 1) -> ${pgsqlfqdn}:${pgsqlport}/${dbname}"
+  MSG="restored dump of $(getfieldvalue "${DBSETTINGS}" 1) -> ${pgsqlfqdn}:${pgsqlport}/${dbname}"
   RESULT="COMPLETED"
 }
 

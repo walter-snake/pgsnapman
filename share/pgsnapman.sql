@@ -35,6 +35,17 @@ CREATE FUNCTION del_catalog(cat_id integer) RETURNS void
 
 
 --
+-- Name: get_catalogidexists(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION get_catalogidexists(catid integer) RETURNS integer
+    LANGUAGE sql
+    AS $_$
+select count(*)::integer from pgsnap_catalog where id = $1;
+$_$;
+
+
+--
 -- Name: get_databaseexists(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -429,12 +440,14 @@ CREATE FUNCTION set_restorejobstatus(job_id integer, status text) RETURNS void
 
 
 --
--- Name: set_restorelog(integer, text, text, text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: set_restorelog(integer, text, text, text, integer, text, integer, text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION set_restorelog(logid integer, status text, message text, bupath text) RETURNS void
+CREATE FUNCTION set_restorelog(logid integer, status text, message text, bupath text, buworkerid integer, pgsqldnsname text, pgsqlport integer, destdbname text, restore_schema text, restore_type text) RETURNS void
     LANGUAGE sql
-    AS $_$update pgsnap_restorelog set endtime=now()::timestamp with time zone, status=$2, message=$3, bu_path=$4 where id = $1; $_$;
+    AS $_$update pgsnap_restorelog set endtime=now()::timestamp with time zone, status=$2, message=$3, bu_path=$4
+, bu_worker_id=$5, pgsql_dns_name=$6, pgsql_port=$7, dest_dbname=$8, restoreschema=$9, restoretype=$10
+ where id = $1; $_$;
 
 
 SET default_tablespace = '';
@@ -517,7 +530,7 @@ CREATE TABLE pgsql_instance (
     status text DEFAULT 'ACTIVE'::text,
     bu_window_start integer DEFAULT 2,
     bu_window_end integer DEFAULT 6,
-    pgsnap_worker_id_default integer,
+    pgsnap_worker_id_default integer NOT NULL,
     date_added timestamp with time zone DEFAULT now(),
     CONSTRAINT pgsql_instance_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
 );
@@ -639,14 +652,14 @@ CREATE VIEW instance_compact AS
 CREATE VIEW mgr_catalog AS
  SELECT c.id,
     ((c.pgsql_dns_name || ':'::text) || c.pgsql_port) AS pgsql_instance,
-    ((c.dbname || '.'::text) || c.dumpschema) AS dbname,
+    ((((c.pgsnap_dumpjob_id)::text || '/'::text) || (c.dbname || '.'::text)) || c.dumpschema) AS jobid_dbname,
     c.dumptype,
-    to_char(c.starttime, 'YYYY-MM-DD HH:MI:SS'::text) AS starttime,
+    to_char(c.starttime, 'YYYY-MM-DD HH24:MI:SS'::text) AS starttime,
     (c.endtime - c.starttime) AS duration,
     c.status,
     c.verified,
     c.keep,
-    c.message,
+    substr(c.message, 1, 32) AS message,
     w.dns_name AS pgsnap_worker
    FROM (pgsnap_catalog c
      JOIN pgsnap_worker w ON ((w.id = c.bu_worker_id)))
@@ -659,16 +672,17 @@ CREATE VIEW mgr_catalog AS
 
 CREATE VIEW mgr_dumpjob AS
  SELECT vw_dumpjob_worker_instance.id,
-    vw_dumpjob_worker_instance.pgsnap_worker_dns_name AS pgs_worker,
     ((vw_dumpjob_worker_instance.pgsql_instance_dns_name || ':'::text) || vw_dumpjob_worker_instance.pgsql_instance_port) AS pgsql_instance,
+    vw_dumpjob_worker_instance.dbname,
+    vw_dumpjob_worker_instance.dumpschema AS schema,
+    vw_dumpjob_worker_instance.dumptype AS type,
+    vw_dumpjob_worker_instance.dumpoptions AS options,
+    vw_dumpjob_worker_instance.pgsnap_restorejob_id AS restorejob,
     vw_dumpjob_worker_instance.jobtype,
-    ((vw_dumpjob_worker_instance.dbname || '.'::text) || vw_dumpjob_worker_instance.dumpschema) AS dbname_schema,
-    vw_dumpjob_worker_instance.dumptype,
-    vw_dumpjob_worker_instance.dumpoptions,
     vw_dumpjob_worker_instance.cron,
-    vw_dumpjob_worker_instance.comment,
     vw_dumpjob_worker_instance.status,
-    vw_dumpjob_worker_instance.pgsnap_restorejob_id AS restorejob
+    substr(vw_dumpjob_worker_instance.comment, 1, 32) AS comment,
+    vw_dumpjob_worker_instance.pgsnap_worker_dns_name AS pgs_worker
    FROM vw_dumpjob_worker_instance
   ORDER BY ((vw_dumpjob_worker_instance.pgsql_instance_dns_name || ':'::text) || vw_dumpjob_worker_instance.pgsql_instance_port), ((vw_dumpjob_worker_instance.dbname || '.'::text) || vw_dumpjob_worker_instance.dumpschema);
 
@@ -687,10 +701,132 @@ CREATE VIEW mgr_instance AS
     p.bu_window_end AS hour_end,
     (((w.dns_name || ' ['::text) || p.pgsnap_worker_id_default) || ']'::text) AS def_worker,
     p.comment,
-    to_char(p.date_added, 'YYYY-MM-DD HH:MI:SS'::text) AS date_added
+    to_char(p.date_added, 'YYYY-MM-DD HH24:MI:SS'::text) AS date_added
    FROM (pgsql_instance p
      LEFT JOIN pgsnap_worker w ON ((w.id = p.pgsnap_worker_id_default)))
   ORDER BY p.dns_name, p.pgport;
+
+
+--
+-- Name: pgsnap_message; Type: TABLE; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE TABLE pgsnap_message (
+    id integer NOT NULL,
+    level text,
+    pgsnap_tool text,
+    logtime timestamp with time zone,
+    message text,
+    jobclass text,
+    jobid integer
+);
+
+
+--
+-- Name: mgr_message; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW mgr_message AS
+ SELECT pgsnap_message.id,
+    pgsnap_message.level,
+    pgsnap_message.pgsnap_tool,
+    to_char(pgsnap_message.logtime, 'YYYY-MM-DD HH24:MI:SS'::text) AS logtime,
+    substr(pgsnap_message.message, 1, 64) AS message,
+    pgsnap_message.jobclass,
+    pgsnap_message.jobid
+   FROM pgsnap_message
+  ORDER BY pgsnap_message.id;
+
+
+--
+-- Name: pgsnap_restorejob; Type: TABLE; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE TABLE pgsnap_restorejob (
+    id integer NOT NULL,
+    dest_pgsql_instance_id integer NOT NULL,
+    dest_dbname text NOT NULL,
+    restoretype text DEFAULT 'FULL'::text,
+    restoreschema text DEFAULT '*'::text NOT NULL,
+    restoreoptions text DEFAULT ''::text,
+    existing_db text DEFAULT 'RENAME'::text,
+    status text DEFAULT 'ACTIVE'::text,
+    comment text,
+    jobtype text DEFAULT 'SINGLE'::text,
+    cron text DEFAULT '* * * * *'::text NOT NULL,
+    pgsnap_catalog_id integer,
+    role_handling text DEFAULT 'USE_ROLE'::text,
+    tblspc_handling text DEFAULT 'NO_TBLSPC'::text,
+    date_added timestamp with time zone DEFAULT now(),
+    CONSTRAINT pgsnap_restorejob_cron_check CHECK ((cron ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
+    CONSTRAINT pgsnap_restorejob_dest_dbname_check CHECK ((dest_dbname ~ '^[^".]*$'::text)),
+    CONSTRAINT pgsnap_restorejob_existing_db_check CHECK ((existing_db = ANY (ARRAY['DROP'::text, 'RENAME'::text, 'DROP_BEFORE'::text]))),
+    CONSTRAINT pgsnap_restorejob_jobtype_check CHECK ((jobtype = ANY (ARRAY['SINGLE'::text, 'REPEAT'::text, 'TRIGGER'::text]))),
+    CONSTRAINT pgsnap_restorejob_restoreschema_check CHECK ((restoreschema ~ '^[^".]*$'::text)),
+    CONSTRAINT pgsnap_restorejob_restoretype_check CHECK ((restoretype = ANY (ARRAY['FULL'::text, 'DATA'::text, 'SCHEMA'::text]))),
+    CONSTRAINT pgsnap_restorejob_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
+);
+
+
+--
+-- Name: mgr_restorejob; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW mgr_restorejob AS
+ SELECT j.id,
+    ((p.dns_name || ':'::text) || p.pgport) AS pgsql_instance,
+    j.dest_dbname,
+    j.restoreschema AS schema,
+    j.restoretype AS type,
+    j.restoreoptions AS options,
+    j.jobtype,
+    j.cron,
+    j.status,
+    j.comment,
+    w.dns_name AS pgs_worker
+   FROM (((pgsnap_restorejob j
+     JOIN pgsql_instance p ON ((p.id = j.dest_pgsql_instance_id)))
+     LEFT JOIN pgsnap_catalog c ON ((c.id = j.pgsnap_catalog_id)))
+     LEFT JOIN pgsnap_worker w ON ((w.id = c.bu_worker_id)));
+
+
+--
+-- Name: pgsnap_restorelog; Type: TABLE; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE TABLE pgsnap_restorelog (
+    id integer NOT NULL,
+    pgsnap_restorejob_id integer,
+    starttime timestamp with time zone DEFAULT now(),
+    endtime timestamp with time zone,
+    status text DEFAULT 'RUNNING'::text,
+    bu_path text,
+    message text,
+    bu_worker_id integer,
+    pgsql_dns_name text,
+    pgsql_port integer,
+    dest_dbname text,
+    restoreschema text,
+    restoretype text
+);
+
+
+--
+-- Name: mgr_restorelog; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW mgr_restorelog AS
+ SELECT pgsnap_restorelog.id,
+    ((pgsnap_restorelog.pgsql_dns_name || ':'::text) || pgsnap_restorelog.pgsql_port) AS pgsql_instance,
+    ((((pgsnap_restorelog.pgsnap_restorejob_id || '/'::text) || pgsnap_restorelog.dest_dbname) || '.'::text) || pgsnap_restorelog.restoreschema) AS jobid_dbname,
+    pgsnap_restorelog.restoretype,
+    to_char(pgsnap_restorelog.starttime, 'YYYY-MM-DD HH24:MI:SS'::text) AS starttime,
+    (pgsnap_restorelog.endtime - pgsnap_restorelog.starttime) AS duration,
+    pgsnap_restorelog.status,
+    substr(pgsnap_restorelog.message, 1, 32) AS message,
+    w.dns_name
+   FROM (pgsnap_restorelog
+     LEFT JOIN pgsnap_worker w ON ((w.id = pgsnap_restorelog.bu_worker_id)));
 
 
 --
@@ -706,7 +842,7 @@ CREATE VIEW mgr_worker AS
     pgsnap_worker.cron_clean,
     pgsnap_worker.cron_upload,
     pgsnap_worker.comment,
-    to_char(pgsnap_worker.date_added, 'YYYY-MM-DD HH:MI:SS'::text) AS date_added
+    to_char(pgsnap_worker.date_added, 'YYYY-MM-DD HH24:MI:SS'::text) AS date_added
    FROM pgsnap_worker
   ORDER BY pgsnap_worker.dns_name;
 
@@ -780,21 +916,6 @@ ALTER SEQUENCE pgsnap_dumpjob_id_seq OWNED BY pgsnap_dumpjob.id;
 
 
 --
--- Name: pgsnap_message; Type: TABLE; Schema: public; Owner: -; Tablespace: 
---
-
-CREATE TABLE pgsnap_message (
-    id integer NOT NULL,
-    level text,
-    pgsnap_tool text,
-    logtime timestamp with time zone,
-    message text,
-    jobclass text,
-    jobid integer
-);
-
-
---
 -- Name: pgsnap_message_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -814,36 +935,6 @@ ALTER SEQUENCE pgsnap_message_id_seq OWNED BY pgsnap_message.id;
 
 
 --
--- Name: pgsnap_restorejob; Type: TABLE; Schema: public; Owner: -; Tablespace: 
---
-
-CREATE TABLE pgsnap_restorejob (
-    id integer NOT NULL,
-    dest_pgsql_instance_id integer NOT NULL,
-    dest_dbname text NOT NULL,
-    restoretype text DEFAULT 'FULL'::text,
-    restoreschema text DEFAULT '*'::text NOT NULL,
-    restoreoptions text DEFAULT ''::text,
-    existing_db text DEFAULT 'RENAME'::text,
-    status text DEFAULT 'ACTIVE'::text,
-    comment text,
-    jobtype text DEFAULT 'SINGLE'::text,
-    cron text DEFAULT '* * * * *'::text NOT NULL,
-    pgsnap_catalog_id integer,
-    role_handling text DEFAULT 'USE_ROLE'::text,
-    tblspc_handling text DEFAULT 'NO_TBLSPC'::text,
-    date_added timestamp with time zone DEFAULT now(),
-    CONSTRAINT pgsnap_restorejob_cron_check CHECK ((cron ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
-    CONSTRAINT pgsnap_restorejob_dest_dbname_check CHECK ((dest_dbname ~ '^[^".]*$'::text)),
-    CONSTRAINT pgsnap_restorejob_existing_db_check CHECK ((existing_db = ANY (ARRAY['DROP'::text, 'RENAME'::text, 'DROP_BEFORE'::text]))),
-    CONSTRAINT pgsnap_restorejob_jobtype_check CHECK ((jobtype = ANY (ARRAY['SINGLE'::text, 'REPEAT'::text, 'TRIGGER'::text]))),
-    CONSTRAINT pgsnap_restorejob_restoreschema_check CHECK ((restoreschema ~ '^[^".]*$'::text)),
-    CONSTRAINT pgsnap_restorejob_restoretype_check CHECK ((restoretype = ANY (ARRAY['FULL'::text, 'DATA'::text, 'SCHEMA'::text]))),
-    CONSTRAINT pgsnap_restorejob_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
-);
-
-
---
 -- Name: pgsnap_restorejob_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -860,21 +951,6 @@ CREATE SEQUENCE pgsnap_restorejob_id_seq
 --
 
 ALTER SEQUENCE pgsnap_restorejob_id_seq OWNED BY pgsnap_restorejob.id;
-
-
---
--- Name: pgsnap_restorelog; Type: TABLE; Schema: public; Owner: -; Tablespace: 
---
-
-CREATE TABLE pgsnap_restorelog (
-    id integer NOT NULL,
-    pgsnap_restorejob_id integer,
-    starttime timestamp with time zone DEFAULT now(),
-    endtime timestamp with time zone,
-    status text DEFAULT 'RUNNING'::text,
-    bu_path text,
-    message text
-);
 
 
 --
@@ -1305,6 +1381,14 @@ ALTER TABLE ONLY pgsnap_restorejob
 
 ALTER TABLE ONLY pgsnap_restorelog
     ADD CONSTRAINT fk_pgsnap_restorelog_pgsnap_restorejob FOREIGN KEY (pgsnap_restorejob_id) REFERENCES pgsnap_restorejob(id);
+
+
+--
+-- Name: fk_pgsql_instance_pgsnap_worker; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY pgsql_instance
+    ADD CONSTRAINT fk_pgsql_instance_pgsnap_worker FOREIGN KEY (pgsnap_worker_id_default) REFERENCES pgsnap_worker(id);
 
 
 --
