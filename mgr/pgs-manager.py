@@ -164,30 +164,30 @@ def insertInstance(dns_name, pgport, pgsql_superuser, bu_window_start, bu_window
     conn.close()
     return row[0]
     
-def insertDumpJob(pgsnap_worker_id, pgsql_instance_id, dbname, dumptype, dumpschema, dumpoptions, comment, cron, jobtype, pgsnap_restorejob_id):
+def insertDumpJob(pgsnap_worker_id, pgsql_instance_id, dbname, dumptype, dumpschema, dumpoptions, comment, cron, jobtype, status, pgsnap_restorejob_id):
     conn = psycopg2.connect('host={} port={} dbname={} user={} password={}'.format(PGSCHOST, PGSCPORT, PGSCDB, PGSCUSER, PGSCPASSWORD))  
     cur = conn.cursor()
-    sql = 'insert into pgsnap_dumpjob (pgsnap_worker_id, pgsql_instance_id, dbname, dumptype, dumpschema, dumpoptions, comment, cron, jobtype, pgsnap_restorejob_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) returning id;'
-    cur.execute(sql, (pgsnap_worker_id, pgsql_instance_id, dbname, dumptype, dumpschema, dumpoptions, comment, cron, jobtype, pgsnap_restorejob_id))
+    sql = 'insert into pgsnap_dumpjob (pgsnap_worker_id, pgsql_instance_id, dbname, dumptype, dumpschema, dumpoptions, comment, cron, jobtype, status, pgsnap_restorejob_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) returning id;'
+    cur.execute(sql, (pgsnap_worker_id, pgsql_instance_id, dbname, dumptype, dumpschema, dumpoptions, comment, cron, jobtype, status, pgsnap_restorejob_id))
     row = cur.fetchone()
     print('-> Created dump job with id: {}'.format(row[0]))
     conn.commit()
     conn.close()
     return row[0]
     
-#    dest_pgsql_instance_id, dest_dbname, restoretype, restoreschema,restoreoptions, existing_db, status, comment, jobtype, cron, pgsnap_catalog_id, role_handling, tblspc_handling
 def insertRestoreJob(dest_pgsql_instance_id, dest_dbname, restoretype, restoreschema,restoreoptions, existing_db, comment, jobtype, cron, pgsnap_catalog_id, role_handling, tblspc_handling):
     conn = psycopg2.connect('host={} port={} dbname={} user={} password={}'.format(PGSCHOST, PGSCPORT, PGSCDB, PGSCUSER, PGSCPASSWORD))  
     cur = conn.cursor()
     sql = 'insert into pgsnap_restorejob (dest_pgsql_instance_id, dest_dbname, restoretype, restoreschema,restoreoptions, existing_db, comment, jobtype, cron, pgsnap_catalog_id, role_handling, tblspc_handling) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) returning id;'
+    if pgsnap_catalog_id == -1:
+      pgsnap_catalog_id = None
     cur.execute(sql, (dest_pgsql_instance_id, dest_dbname, restoretype, restoreschema,restoreoptions, existing_db, comment, jobtype, cron, pgsnap_catalog_id, role_handling, tblspc_handling))
     row = cur.fetchone()
     print('-> Created restore job with id: {}'.format(row[0]))
     conn.commit()
     conn.close()
     return row[0]
-    
-    
+        
 def deleteFromDb(tablename, id):
     if not tablename in ['pgsnap_dumpjob', 'pgsnap_worker', 'pgsql_instance', 'pgsnap_restorejob']:
       print 'table name not valid'
@@ -265,7 +265,7 @@ def registerInstance():
   print('')
 
 # add dump job
-def addDumpJob():
+def addDumpJob(_status = 'ACTIVE'):
   print('')
   print('Add a dump job, enter values (list of options/help tekst: ?):')
   jobtype = getInput('job type', ['choose one from', 'SINGLE', 'REPEAT'], 'SINGLE', 54, False)
@@ -292,27 +292,36 @@ def addDumpJob():
     cron = runwhen
   comment = getInput('comment', ['optional comments'], '', 54)
   yn = raw_input('Save new job? [Yn] ')
-  if not yn.lower() == 'n':
-    id = insertDumpJob(workerid, pgsqlid, dbname, dumptype, dumpschema, dumpoptions, comment, cron, jobtype, None)
+  if yn.lower() == 'n':
+    print('')
+    return None
+  else:
+    id = insertDumpJob(workerid, pgsqlid, dbname, dumptype, dumpschema, dumpoptions, comment, cron, jobtype, _status, None)
     listDetails('pgsnap_dumpjob', id, 'Verify job details')
     print('')
     yn = raw_input('Do you want to edit the job? [yN] ')
     if yn.lower() == 'y':
-      editRecord('pgsnap_dumpjob', id, ['cron', 'dumpoptions', 'status', 'dumptype', 'comment'])
-  print('')
+      editRecord('pgsnap_dumpjob', id, ['cron', 'dumpoptions', 'status', 'dumptype', 'comment'])    
+    print('')
+    print('Status of job: ' + _status)
+    return id
 
 # add restore job
-def addRestoreJob():
+def addRestoreJob(_trigger = False):
   print('')
   print('Add a restore job, enter values (list of options/help tekst: ?):')
-  jobtype = getInput('job type', ['choose one from', 'SINGLE', 'REPEAT', 'TRIGGER'], 'SINGLE', 54, False)
-  if jobtype == 'TRIGGER':
-    pgsnap_catalog_id = ''
+  if _trigger == True:
+    jobtype = 'TRIGGER'
+    pgsnap_catalog_id = -1
   else:
-    pgsnap_catalog_id = getInput('restore from catalog id', ['catalog id'], '', 54, False)
-    if not getCatalogIdExists(pgsnap_catalog_id):
-      print('catalog id not found')
-      return    
+    jobtype = getInput('job type', ['choose one from', 'SINGLE', 'REPEAT', 'TRIGGER'], 'SINGLE', 54, False)
+    if jobtype == 'TRIGGER':
+      pgsnap_catalog_id = -1
+    else:
+      pgsnap_catalog_id = getInput('restore from catalog id', ['catalog id'], '', 54, False)
+      if not getCatalogIdExists(pgsnap_catalog_id):
+        print('catalog id not found')
+        return    
   pgdns = getInput('postgres dns name', ['full dns name of the destination postgres server'], '', 54, False)
   pgport = getInput('postgres port', ['postgres instance port number'], '5432', 54, False)
   dest_pgsql_instance_id = getPgsqlInstanceId(pgdns, pgport)
@@ -339,14 +348,18 @@ def addRestoreJob():
   tblspc_handling = getInput('handling of existing database', ['tries to restore into the correct tablespaces (must be present) or restore to default', 'NO_TBLSPC', 'USE_TBLSPC'], 'NO_TBLSPC', 54, False)
   comment = getInput('comment', ['optional comments'], '', 54)
   yn = raw_input('Save new job? [Yn] ')
-  if not yn.lower() == 'n':
+  if yn.lower() == 'n':
+    print('')
+    return None
+  else:
     id = insertRestoreJob(dest_pgsql_instance_id, dest_dbname, restoretype, restoreschema,restoreoptions, existing_db, comment, jobtype, cron, pgsnap_catalog_id, role_handling, tblspc_handling)
     listDetails('pgsnap_restorejob', id, 'Verify job details')
     print('')
     yn = raw_input('Do you want to edit the job? [yN] ')
     if yn.lower() == 'y':
       editRecord('pgsnap_restorejob', id, ['dest_pgsql_instance_id', 'cron', 'restoreoptions', 'status', 'restoretype', 'role_handling', 'tblspc_handling', 'comment'])
-  print('')
+    print('')
+    return id
 
 def showHeader():
   print """
@@ -534,6 +547,30 @@ def restorejobTask(task):
     id = tokens[2]
     deleteFromDb('pgsnap_restorejob', id)
   
+def triggerTask(task):
+# create one or more restorejob tasks, and call dumpjob with new ids
+  print("Create a 'copy' job")
+  print("===================")
+  print("Step 1: create the dump job, when done one or more restore jobs can be created. They're automatically linked together, so that after running the dump job, the restore jobs will run based on that specific run of the dump. The dump job will put on halt, until the procedure is complete.")
+  print('')
+  djid = addDumpJob('HALTED')
+  rjids = []
+  if djid  == '' or djid == None:
+    return
+  else:
+    print('')
+    print('Step 2: create one or more restore jobs')
+    a = 'y'
+    while a == 'y':
+      id = addRestoreJob(True)
+      if not id == '' or id == None:
+        rjids.append(str(id))
+      a = raw_input('Add another restore job? [yN]')
+    s = ','
+    restore_jobs = s.join(rjids)
+    setTableColumn('pgsnap_dumpjob', 'pgsnap_restorejob_id', djid, restore_jobs, False)
+    setTableColumn('pgsnap_dumpjob', 'status', djid, 'ACTIVE', True)
+
 def catalogTask(task):
   t = task.split(' ')[1][:1]
   if t == 'l':
@@ -625,6 +662,9 @@ def processCommand(cmd):
     restorejobTask(task)
   elif task[:1].lower() == 'l':
     restorelogTask(task)
+  elif task[:1].lower() == 't':
+    triggerTask(task)
+
 #  except Exception:
 #    print Exception
 #    print('Invalid command, options (like a non-existing id)')

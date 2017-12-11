@@ -783,7 +783,7 @@ CREATE VIEW mgr_restorejob AS
     j.cron,
     j.status,
     j.comment,
-    w.dns_name AS pgs_worker
+    COALESCE(w.dns_name, '(trigger)'::text) AS pgs_worker
    FROM (((pgsnap_restorejob j
      JOIN pgsql_instance p ON ((p.id = j.dest_pgsql_instance_id)))
      LEFT JOIN pgsnap_catalog c ON ((c.id = j.pgsnap_catalog_id)))

@@ -524,7 +524,7 @@ else
   dumptype=DIR
 fi
 
-# Check status of the backup job
+# Check status of the backup job (we ignore this in case of a trigger job)
 if [ ! -e ${DUMP}.catalog.dat ] || [ "$(getbackupstatus ${DUMP}.catalog.dat)" != "SUCCESS" ]; then
   logend "ERROR" "backup ${DUMP} does not exist, or failed, restore not started" 
   cleanupexit 1
