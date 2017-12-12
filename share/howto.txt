@@ -68,7 +68,7 @@ The quick start for the understanding user.
 2. create the root data dir (everything will be stored in here, unless you specific otherwise)
 3. edit the config file accordingly (especially, set the rootdir and your pgs database connection)
 4. register the worker in the pgs database
-5. initialize your rootdir
+5. initialize your rootdir (the database must exist, and the worker registered)
   pgsnap_cacheconfig VERBOSE INIT
 
 6. enter instances and jobs in the pgs database
@@ -113,10 +113,71 @@ The only options that have effect (* needed):
 * status [ACTIVE]
 * cron [* * * * *]
 * comment
+* catalog id
 
 SINGLE, ACTIVE, '* * * * *': run as soon as possible (first scheduled pgsnap_singlejob)
 
-Example to create an entry in the pgsnap_restorejob table:
-  insert into pgsnap_restorejob (dest_pgsql_instance_id, dest_dbname, comment)
-    values (3, 'postgres', 'test alles restore');
+=== Examples ===
+Database restore
+----------------
+The following insert would as soon as possible restore the dump from catalog entry with id 164 into database "Restore1" on postgres instance id 3:
+
+  insert into pgsnap_restorejob (dest_pgsql_instance_id, dest_dbname, comment, pgsnap_catalog_id)
+    values (3, 'Restore1', 'test restore full database dump', 164)
+  ;
+
+In the same way, if you want to restore only the schema:
+
+  insert into pgsnap_restorejob (dest_pgsql_instance_id, dest_dbname, restoretype, comment, pgsnap_catalog_id)
+    values (3, 'Restore1', 'SCHEMA', 'test restore full database dump', 164)
+  ;
+
+or data:
+
+  insert into pgsnap_restorejob (dest_pgsql_instance_id, dest_dbname, restoretype, comment, pgsnap_catalog_id)
+    values (3, 'Restore1', 'DATA', 'test restore full database dump', 164)
+  ;
+
+To restore a specific schema, set the restoreschema:
+
+  insert into pgsnap_restorejob (dest_pgsql_instance_id, dest_dbname
+      , restoretype, restoreschema, comment, pgsnap_catalog_id)
+    values (3, 'Restore1', 'FULL', 'myschema', 'test restore full database dump', 164)
+  ;
+
+Full cluster restore
+--------------------
+Taking into account the defaults, the following insert would as soon as possible restore the dump from catalog entry with id 182 (on pg instance 3), in this case a full cluster dump:
+
+  insert into pgsnap_restorejob (dest_pgsql_instance_id, dest_dbname, comment, pgsnap_catalog_id)
+    values (3, 'postgres', 'test restore full cluster dump', 182)
+  ;
+
+Keep in mind that it doesn't make any difference if you tell it to restore only the schema, what will be restored was determined at the time of dumping (using pg_dumpall).
+
+= Job management in general =
+
+A SINGLE job will always run only once, also when scheduled (when scheduled, it will automatically disappear from crontab at the first pgsnap_cacheconfig run). SINGLE jobs can be re-used, by setting the status to 'ACTIVE':
+
+  update pgsnap_dumpjob set status = 'ACTIVE' where id = <some id>;
+  or
+  update pgsnap_restorejob set status = 'ACTIVE' where id = <some id>;
+
+= Handling of database and schema creation =
+
+Dump and restore are related: what's in the dump can be used to restore, what not can't. Obvious, but there are a few caveats in the Postgres tools, that affect the creation of schema's and databases. The most notable is the selection of a particular schema:
+- a schema can be constructed from a dump for that specific schema (pg_dump --schema=myschema; pg_restore), the restore code includes a CREATE SCHEMA statement
+- when selecting a specific schema from a database dump at restore, there's never a CREATE SCHEMA statement sent to the server (pg_dump, pg_restore --schema=myschema), also not when the dump was for a specific schema
+- this is also true when selecting a specific table: the schema won't be created
+- when restoring the full dump without selecting a schema, the schema's are obviously created
+
+A little less counter-intuitive, but this goes for the CREATE DATABASE option as well (a partial dump or restore does never contain CREATE DATABASE information).
+
+In summary: a dump for a specific schema can be used to directly construct that particular schema, selecting a schema from a complete database dump requires the schema to be present.
+
+PgSnapMan deals with this for you: it checks whether the information to create the schema is present in the chosen dump, and if so it will be used. If not, the required schema will be created, the owner will become the owner of the database.
+
+There's not an option to specify a specific table to restore, To trick PgSnapMan to cretae 
+
+Databases are created
 

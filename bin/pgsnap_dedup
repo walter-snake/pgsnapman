@@ -41,8 +41,8 @@ fi
 # Start message
 snaplog "INFO" "processing - dump: ${1}"
 
-# Build md5 index of the specified directory
-find ${1} -type f -name '*.dat.gz' -exec ${CHKSUMPROG} ${CHKSUMPROG_OPTIONS} {} \; > ${1}.chksum
+# Build md5 index of the specified directory and sanitize whitespace
+find ${1} -type f -name '*.dat.gz' -exec ${CHKSUMPROG} ${CHKSUMPROG_OPTIONS} {} \; | awk '{print $1" "$2}' > ${1}.chksum
 
 # Init dumpsize, dedupsize
 dumpsize=`stat -f %z ${1}/toc.dat`

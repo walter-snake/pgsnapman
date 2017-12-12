@@ -59,7 +59,7 @@ function uploaddata {
   fi
 #  else
 #    # Inspect log, read first line (makes a difference: without connection, we leave the upload in place, an invalid data file must be removed)
-#    if [ "`grep -E '^psql' ${TEMPDIR}/upload/pgsnap_upload.psql.log`" == "" ]; then 
+#    if [ "`grep ${GRPFLG} '^psql' ${TEMPDIR}/upload/pgsnap_upload.psql.log`" == "" ]; then 
 #      snaplog "ERROR" "processing - failed uploading data (SQL/data error): `basename ${1}` - data `cat ${1}`"
 #      # remove illegal file
 #      rm -f ${1}

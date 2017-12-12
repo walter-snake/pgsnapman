@@ -378,7 +378,12 @@ def showHelp():
 Available commands
 ==================
 
-* The commands may be abbreviated to the first letter.
+General
+-------
+q: quit
+h: this help
+
+* The commands may be abbreviated to the first two letters.
 * Choice:       [choice1|choice2|...]
 * Optional:     {}
 * Variable:     <id>
@@ -387,64 +392,64 @@ Available commands
 It is also possible to enter the commands directly on the command line
 when calling pgs-manager.
 
-worker management
+Worker management
 -----------------
   worker list
   worker list+<id>
   worker register
   worker status [ACTIVE|HALTED]
   worker edit <id>
-  worker x-delete <id>
+  worker delete <id>
   
-postgres management
+Postgres management
 -------------------
   postgres list
   postgres list+<id>
   postgres register
   postgres status [ACTIVE|HALTED]
   postgres edit <id>
-  postgres x-delete <id>
+  postgres delete <id>
 
-dump job management
+Dump job management
 -------------------
   dumpjob list
   dumpjob list+<id>
   dumpjob add
   dumpjob status [ACTIVE|HALTED]
   dumbjob edit <id>
-  dumbjob x-delete <id>
+  dumbjob delete <id>
 
-restore job management
+Restore job management
 ----------------------
   restorejob list
   restorejob list+<id>
   restorejob add
   restorejob status [ACTIVE|HALTED]
   restorejob edit <id>
-  restorejob x-delete <id>
+  restorejob delete <id>
 
-trigger jobs
+Trigger jobs
 ------------
   trigger
 
-catalog management
+Catalog management
 ------------------
   catalog list
   catalog list+<id>
-  catalog job <job_id>
-  catalog database <database_name>
-  catalog search "<filter>"  
+  catalog id <job_id>
+  catalog db <database_name>
+  catalog find "<filter>"  
     <filter>: regular Postgres filter, you may filter on every
               column available in the view; for security reasons
               using a ; is not allowed
   catalog keep [NO|YES|AUTO]
 
-log of restore jobs
+Log of restore jobs
 -------------------
   log-restore list
   log-restore list+<id>
   log-restore job <job_id>
-  log-restore database <database_name>
+  log-restore db <database_name>
   log-restore search "<filter>"
     <filter>: regular Postgres filter, you may filter on every
               column available in the view; for security reasons
@@ -452,7 +457,7 @@ log of restore jobs
   log-restore <status>
     <status>: Warning, Error, Completed
   
-messages
+Messages
 --------
   message list
   message list+<id>
@@ -465,93 +470,93 @@ messages
   """  
 
 def workerTask(task):
-  t = task.split(' ')[1][:1]
-  if t == 'l':
+  t = task.split(' ')[1][:2]
+  if t == 'li':
     if '+' in task:
       listDetails('pgsnap_worker', task.split('+')[1].strip(), 'PgSnapMan worker details')
     else:
       listDbView('mgr_worker', 'Registered PgSnapMan workers')
-  elif t == 's': # set status
+  elif t == 'st': # set status
     tokens = task.split(' ')
     id = tokens[2]
     status = tokens[3]
     setTableColumn('pgsnap_worker', 'status', id, status, True)
-  elif t == 'e': # edit record
+  elif t == 'ed': # edit record
     tokens = task.split(' ')
     id = tokens[2]
-    editRecord('pgsnap_worker', id, ['status', 'cron_cacheconfig', 'cron_singlejob', 'cron_clean', 'cron_upload', 'comment'])
-  elif t == 'r': # register worker   
+    editRecord('pgsnap_worker', id, ['cron_cacheconfig', 'cron_singlejob', 'cron_clean', 'cron_upload', 'comment', 'status'])
+  elif t == 're': # register worker   
     registerWorker()
-  elif t == 'x': # delete worker
+  elif t == 'de': # delete worker
     tokens = task.split(' ')
     id = tokens[2]
     deleteFromDb('pgsnap_worker', id)
 
 def instanceTask(task):
-  t = task.split(' ')[1][:1]
-  if t == 'l':
+  t = task.split(' ')[1][:2]
+  if t == 'li':
     if '+' in task:
       listDetails('pgsql_instance', task.split('+')[1].strip(), 'Postgres instance details')
     else:
       listDbView('mgr_instance', 'Registered Postgres instances')
-  elif t == 's': # set status
+  elif t == 'st': # set status
     tokens = task.split(' ')
     id = tokens[2]
     status = tokens[3]
     setTableColumn('pgsql_instance', 'status', id, status, True)
-  elif t == 'e': # edit record
+  elif t == 'ed': # edit record
     tokens = task.split(' ')
     id = tokens[2]
-    editRecord('pgsql_instance', id, ['status', 'pgsql_superuser', 'bu_window_start', 'bu_window_end', 'pgsnap_worker_id_default', 'comment'])
-  elif t == 'r': # register instance
+    editRecord('pgsql_instance', id, ['pgsql_superuser', 'bu_window_start', 'bu_window_end', 'pgsnap_worker_id_default', 'comment', 'status'])
+  elif t == 're': # register instance
     registerInstance()
-  elif t == 'x': # delete instance
+  elif t == 'de': # delete instance
     tokens = task.split(' ')
     id = tokens[2]
     deleteFromDb('pgsql_instance', id)
 
 def dumpjobTask(task):
-  t = task.split(' ')[1][:1]
-  if t == 'l':
+  t = task.split(' ')[1][:2]
+  if t == 'li':
     if '+' in task:
       listDetails('pgsnap_dumpjob', task.split('+')[1].strip(), 'Dump job details')
     else:
       listDbView('mgr_dumpjob', 'Dump jobs')
-  elif t == 's': # set status
+  elif t == 'st': # set status
     tokens = task.split(' ')
     id = tokens[2]
     status = tokens[3]
     setTableColumn('pgsnap_dumpjob', 'status', id, status, True)
-  elif t == 'e': # edit record
+  elif t == 'ed': # edit record
     tokens = task.split(' ')
     id = tokens[2]
-    editRecord('pgsnap_dumpjob', id, ['cron', 'dumpoptions', 'status', 'dumptype'])
-  elif t == 'a': # add dumpjob    
+    editRecord('pgsnap_dumpjob', id, ['jobtype', 'cron', 'dumptype', 'dumpoptions', 'comment', 'status'])
+  elif t == 'ad': # add dumpjob    
     addDumpJob()
-  elif t == 'x': # delete dumpjob
+  elif t == 'de': # delete dumpjob
     tokens = task.split(' ')
     id = tokens[2]
     deleteFromDb('pgsnap_dumpjob', id)
 
 def restorejobTask(task):
-  t = task.split(' ')[1][:1]
-  if t == 'l':
+  t = task.split(' ')[1][:2]
+  if t == 'li':
     if '+' in task:
       listDetails('pgsnap_restorejob', task.split('+')[1].strip(), 'Restore job details')
     else:
       listDbView('mgr_restorejob', 'Restore jobs')
-  elif t == 's': # set status
+  elif t == 'st': # set status
     tokens = task.split(' ')
     id = tokens[2]
     status = tokens[3]
     setTableColumn('pgsnap_restorejob', 'status', id, status, True)
-  elif t == 'e': # edit record
+  elif t == 'ed': # edit record
     tokens = task.split(' ')
     id = tokens[2]
-    editRecord('pgsnap_restorejob', id, ['dest_pgsql_instance_id', 'cron', 'restoreoptions', 'status', 'restoretype', 'role_handling',  'tblspc_handling', 'comment'])
-  elif t == 'a': # add restorejob    
+    editRecord('pgsnap_restorejob', id, ['jobtype', 'cron', 'dest_pgsql_instance_id', 'restoreoptions', 'restoretype', 'role_handling',  'tblspc_handling', 'comment', 'status'])
+  elif t == 'ad': # add restorejob    
     addRestoreJob()
-  elif t == 'x': # delete restorejob
+  elif t == 'de': # delete restorejob
     tokens = task.split(' ')
     id = tokens[2]
     deleteFromDb('pgsnap_restorejob', id)
@@ -581,25 +586,25 @@ def triggerTask(task):
     setTableColumn('pgsnap_dumpjob', 'status', djid, 'ACTIVE', True)
 
 def catalogTask(task):
-  t = task.split(' ')[1][:1]
-  if t == 'l':
+  t = task.split(' ')[1][:2]
+  if t == 'li':
     if '+' in task:
       listDetails('pgsnap_catalog', task.split('+')[1].strip(), 'Backup details')
     else:
       listDbView('mgr_catalog', 'Available backups')
-  elif t == 's': # search task
+  elif t == 'fi': # search task
     tokens = task.split(' ')
     search=''
     for tok in range(2, len(tokens)):
       search = search + ' ' + tokens[tok]
     listDbView('mgr_catalog', 'Available backups', search.strip())
-  elif t == 'j': # search task
+  elif t == 'id': # search task
     search = "split_part(jobid_dbname, '/', 1) ilike '{}'".format(task.split(' ')[2])
     listDbView('mgr_catalog', 'Available backups', search.strip())
-  elif t == 'd': # search task
+  elif t == 'db': # search task
     search = "split_part(jobid_dbname, '/', 2) ilike '{}.%'".format(task.split(' ')[2])
     listDbView('mgr_catalog', 'Available backups', search.strip())
-  elif t == 'k': # set keep status
+  elif t == 'ke': # set keep status
     tokens = task.split(' ')
     id = tokens[2]
     col = tokens[3]
@@ -607,19 +612,19 @@ def catalogTask(task):
     setTableColumn('pgsnap_catalog', col, id, val, True)
 
 def restorelogTask(task):
-  t = task.split(' ')[1][:1]
-  if t == 'l': # results: the restore log
+  t = task.split(' ')[1][:2]
+  if t == 'li': # results: the restore log
     if '+' in task:
       listDetails('pgsnap_restorelog', task.split('+')[1].strip(), 'Restore log details')
     else:
       listDbView('mgr_restorelog', 'Restore jobs log')
-  elif t == 'j': # search task
+  elif t == 'id': # search task
     search = "split_part(jobid_dbname, '/', 1) ilike '{}'".format(task.split(' ')[2])
     listDbView('mgr_restorelog', 'Restore log', search.strip())
-  elif t == 'd': # search task
+  elif t == 'db': # search task
     search = "split_part(jobid_dbname, '/', 2) ilike '{}.%'".format(task.split(' ')[2])
     listDbView('mgr_restorelog', 'Restore log', search.strip())
-  elif t == 's': # search task
+  elif t == 'fi': # search task
     tokens = task.split(' ')
     search=''
     for tok in range(2, len(tokens)):
@@ -632,13 +637,13 @@ def restorelogTask(task):
       print('Invalid message level specified')
     
 def messageTask(task):
-  t = task.split(' ')[1][:1]
-  if t == 'l':
+  t = task.split(' ')[1][:2]
+  if t == 'li':
     if '+' in task:
       listDetails('pgsnap_message', task.split('+')[1].strip(), 'Message details')
     else:
       listDbView('mgr_message', 'General message log')
-  elif t == 's': # search task
+  elif t == 'se': # search task
     tokens = task.split(' ')
     search=''
     for tok in range(2, len(tokens)):
@@ -652,26 +657,26 @@ def messageTask(task):
     
 def processCommand(cmd):
   task = cmd.strip()
-  if task[:1].lower() == 'q':
+  if task[:].lower() == 'q':
     sys.exit(0)
 #  try:
   if task[:1].lower() == 'h':
     showHelp()
-  elif task[:1].lower() == 'w':
+  elif task[:2].lower() == 'wo':
     workerTask(task)
-  elif task[:1].lower() == 'p':
+  elif task[:2].lower() == 'po':
     instanceTask(task)
-  elif task[:1].lower() == 'c':
+  elif task[:2].lower() == 'ca':
     catalogTask(task)
-  elif task[:1].lower() == 'm':
+  elif task[:2].lower() == 'me':
     messageTask(task)
-  elif task[:1].lower() == 'd':
+  elif task[:2].lower() == 'du':
     dumpjobTask(task)
-  elif task[:1].lower() == 'r':
+  elif task[:2].lower() == 're':
     restorejobTask(task)
-  elif task[:1].lower() == 'l':
+  elif task[:2].lower() == 'lo':
     restorelogTask(task)
-  elif task[:1].lower() == 't':
+  elif task[:2].lower() == 'tr':
     triggerTask(task)
 
 #  except Exception:

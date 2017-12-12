@@ -203,7 +203,7 @@ function createrole {
   else
     talk "create role:        ${1}"
     # load cluster globals dump into psql, filtered for this role
-    cat "${DUMP}.cluster_globals.sql" | grep -E "^((ALTER\ ROLE|CREATE\ ROLE))\ \"?${1}.*" | ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} --no-password --output=/dev/null 2> /dev/null
+    cat "${DUMP}.cluster_globals.sql" | grep ${GRPFLG} "^((ALTER\ ROLE|CREATE\ ROLE))\ \"?${1}.*" | ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} --no-password --output=/dev/null 2> /dev/null
   fi
 }
 
@@ -238,9 +238,9 @@ function createschema {
     ${PGBIN}/psql  ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${RESTOREDB} -c 'CREATE SCHEMA '${restoreschema}' AUTHORIZATION '"$(getfieldvalue "${DBSETTINGS}" 2)"';' >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1  
   else
     # collect toc entries for this schema
-    ${PGBIN}/pg_restore -l --create ${restoreoptions} ${DUMP} | grep -E "SCHEMA\ -\ ${schema}\ " > ${TEMPDIR}/$$.0.pgsnap_restore.schema
-    ${PGBIN}/pg_restore -l --create ${restoreoptions} ${DUMP} | grep -E "COMMENT\ -\ SCHEMA\ ${schema}\ " >> ${TEMPDIR}/$$.0.pgsnap_restore.schema
-    ${PGBIN}/pg_restore -l --create ${restoreoptions} ${DUMP} | grep -E "ACL\ -\ ${schema}\ " >> ${TEMPDIR}/$$.0.pgsnap_restore.schema
+    ${PGBIN}/pg_restore -l --create ${restoreoptions} ${DUMP} | grep ${GRPFLG} "SCHEMA\ -\ ${schema}\ " > ${TEMPDIR}/$$.0.pgsnap_restore.schema
+    ${PGBIN}/pg_restore -l --create ${restoreoptions} ${DUMP} | grep ${GRPFLG} "COMMENT\ -\ SCHEMA\ ${schema}\ " >> ${TEMPDIR}/$$.0.pgsnap_restore.schema
+    ${PGBIN}/pg_restore -l --create ${restoreoptions} ${DUMP} | grep ${GRPFLG} "ACL\ -\ ${schema}\ " >> ${TEMPDIR}/$$.0.pgsnap_restore.schema
     # do the restore, using these entries
     ${PGBIN}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${RESTOREDB} -L ${TEMPDIR}/$$.0.pgsnap_restore.schema ${DUMP} >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
   fi
@@ -263,7 +263,7 @@ function prepareroles {
   # check and create other roles
   # a bit more complex: read schema, and find all alter owner, grant and revoke rows
   # use pg_restore to read the schema, and grep relevant records
-  ${PGBIN}/pg_restore --schema-only ${restoreoptions} "${DUMP}" | grep -E '^((GRANT|REVOKE|ALTER.*OWNER\ TO))' | awk '{if ($1 == "ALTER") print $6; else print $7;}' | grep -iv 'PUBLIC' | sed 's/;//'| sort > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles_temp
+  ${PGBIN}/pg_restore --schema-only ${restoreoptions} "${DUMP}" | grep ${GRPFLG} '^((GRANT|REVOKE|ALTER.*OWNER\ TO))' | awk '{if ($1 == "ALTER") print $6; else print $7;}' | grep -iv 'PUBLIC' | sed 's/;//'| sort > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles_temp
   # add roles from database acl when we need them
   if [ "${DIRECTRESTORE}" == "NO" ]; then
     cat "${DUMP}.database_acl.sql" | awk '{print $7}' | sed 's/;//' | grep -iv 'public' >> ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles_temp
@@ -285,7 +285,7 @@ function prepareroles {
 # Checks every required tablespace
 function checktablespaces {
   log "INFO" "verifying tablespaces for restore job ${JOBID} (original database: ${dbname})"
-  ${PGBIN}/pg_restore --schema-only ${restoreoptions} "${DUMP}" | grep -E "^SET\ default_tablespace\ \=\ .*[^'];" | awk '{print $4}' | sed 's/;//'| sort > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.tablespaces
+  ${PGBIN}/pg_restore --schema-only ${restoreoptions} "${DUMP}" | grep ${GRPFLG} "^SET\ default_tablespace\ \=\ .*[^'];" | awk '{print $4}' | sed 's/;//'| sort > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.tablespaces
   # read user names, create
   local line
   local linetrim

@@ -45,6 +45,16 @@ function isjobrunning {
   echo ${ec}
 }
 
+# Grep version (BSD/GNU need differetn flags)
+function setgrep {
+  if [ "$(grep -V | grep BSD)" == "" ]; then
+    # assume GNU
+    GRPFLG="-P"
+  else
+    GRPFLG="-E"
+  fi
+}
+
 # Messages
 # ------------------------------------------------------------------
 
@@ -290,12 +300,12 @@ function preparecatalogdata {
   local format=`echo "${2}" | awk -F '.' '{print $(NF-1)}'`
   # Verify the upload format using regular expression
   if [ "${format}" == "catalog" ]; then
-    if [ "`echo -e "${1}" | grep -E '^\d+\t\d{8}T\d{6}[+-]\d+\t\d{8}T\d{6}[+-]\d+\t[A-Z]+\t[a-zA-Z0-9_\.\/]+\t[a-zA-Z0-9_\./]+\t-?\d+\t-?\d+\t.*\t.*\t.*\t.*\t.*\t\d+\t.*\t.*\t\d+$'`" == "" ]; then
+    if [ "`echo -e "${1}" | grep ${GRPFLG} '^\d+\t\d{8}T\d{6}[+-]\d+\t\d{8}T\d{6}[+-]\d+\t[A-Z]+\t[a-zA-Z0-9_\.\/]+\t[a-zA-Z0-9_\./]+\t-?\d+\t-?\d+\t.*\t.*\t.*\t.*\t.*\t\d+\t.*\t.*\t\d+$'`" == "" ]; then
       snaplog "ERROR" "catalog upload wrong format: $1"
       return
     fi
   elif [ "${format}" == "message" ]; then
-    if [ "`echo -e "${1}" | grep -E '^\d{8}T\d{6}[+-]\d+\t((INFO|WARNING|ERROR|CRITICAL|DEBUG))\t.+\t.*\t((CACHE_CONFIG|DUMP|RESTORE|VERIFY|DEDUP))\t-?\d+$'`" == "" ]; then
+    if [ "`echo -e "${1}" | grep ${GRPFLG} '^\d{8}T\d{6}[+-]\d+\t((INFO|WARNING|ERROR|CRITICAL|DEBUG))\t.+\t.*\t((CACHE_CONFIG|DUMP|RESTORE|VERIFY|DEDUP))\t-?\d+$'`" == "" ]; then
       snaplog "ERROR" "message upload wrong format: $1"
       return
     fi
@@ -323,7 +333,7 @@ function preparecatalogdata {
 # $1 file name with | separated fields
 # $2 search value (first field)
 function findrow {
-  local row=`grep -E "^${2}\|" "${1}"`
+  local row=`grep ${GRPFLG} "^${2}\|" "${1}"`
   echo "${row}"
 }
 
@@ -375,6 +385,9 @@ else
   cleanupexit 1
 fi
 
+#Determine grep version
+setgrep
+
 # Set hostname
 if [ "${WORKER_DNS_NAME}" != "" ]; then
   FQDN="${WORKER_DNS_NAME}"
@@ -410,16 +423,18 @@ SCRIPTDIR=${ROOTDIR}/script
 # Set upload dir
 UPLOADDIR=${ROOTDIR}/upload
 
-
 # Get a timestamp
 INITIMESTAMP=`date '+%Y%m%dT%H%M%S%z'`
 
 # Set the hostname for the pgsnapman database (put '-h ' in front of it for non local connections)
 PGSCHOST=$(resolvepghost ${PGSCHOST})
 
-# Sets the worker id for this worker instance (we do not need the catalog db, so we can continue if not found)
+# Sets the worker id for this worker instance (either from database or from file cache)
 setworkerid
-if [ ${ERRCODE} -gt 0 ]; then cleanupexit ${ERRCODE}; fi
+if [ ${ERRCODE} -gt 0 ]; then
+  echo "INIT: WORKER ID could not be set, is the database configured and this worker registered?"
+  cleanupexit ${ERRCODE}
+fi
 
 # Get worker status, quit if HALTED (any tool will quit when the worker is halted)
 if [ "$(getworkerstatus)" == "HALTED" ]; then cleanupexit 0; fi
