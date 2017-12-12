@@ -45,7 +45,23 @@ function isjobrunning {
   echo ${ec}
 }
 
-# Grep version (BSD/GNU need differetn flags)
+# Function set platform
+function setplatform {
+  if [[ "$OSTYPE" == "linux-gnu" ]]; then
+    PLATFORM="GNU"
+  elif [[ "$OSTYPE" == "darwin"* ]]; then
+    PLATFORM="BSD"
+  elif [[ "$OSTYPE" == "freebsd"* ]]; then
+    PLATFORM="BSD"
+  elif [[ "$OSTYPE" == "cygwin" ]]; then
+    PLATFORM="${OSTYPE}"
+  else
+    # Unknown, assume linux-gnu
+    PLATFORM="GNU"
+fi
+}
+
+# Grep version (BSD/GNU need different flags)
 function setgrep {
   if [ "$(grep -V | grep BSD)" == "" ]; then
     # assume GNU
@@ -385,7 +401,10 @@ else
   cleanupexit 1
 fi
 
-#Determine grep version
+# Determine and set platform
+setplatform
+
+# Set grep version
 setgrep
 
 # Set hostname
@@ -440,5 +459,5 @@ fi
 if [ "$(getworkerstatus)" == "HALTED" ]; then cleanupexit 0; fi
 
 # Write tool init log entry
-if [ "${LOGINIT}" != "NO" ]; then snaplog "INFO" "init - using config: ${CONFIGFILE}"; fi
+if [ "${LOGINIT}" != "NO" ]; then snaplog "INFO" "init - using config: ${CONFIGFILE} - platform mode: ${PLATFORM} - grep flags: ${GRPFLG}"; fi
 
