@@ -18,7 +18,7 @@ if not os.path.exists(configfile):
   configfile = get_script_path() + '/mgr-defaults.cfg'
 
 config = ConfigParser.RawConfigParser(allow_no_value=True)
-config.read('mgr-defaults.cfg')
+config.read(configfile)
 PGSCHOST=config.get('snapman_database', 'pgschost')
 PGSCPORT=config.get('snapman_database', 'pgscport')
 PGSCUSER=config.get('snapman_database', 'pgscuser')
