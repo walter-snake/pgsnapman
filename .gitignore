@@ -6,6 +6,6 @@
 *.pyc
 *~
 
-defaults.cfg
+*.cfg
 
 temp/

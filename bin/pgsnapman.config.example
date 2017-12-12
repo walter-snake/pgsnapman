@@ -18,7 +18,7 @@ TEMPDIR="${ROOTDIR}/temp"
 LOGDIR="${ROOTDIR}/log"
 
 # Global log file
-PGSNAPMANLOG=${LOGDIR}/pgsnapman.log
+PGSNAPMANLOG="${LOGDIR}/pgsnapman.log"
 
 # Dump directory
 DUMPSNAP="${ROOTDIR}/snapshots"

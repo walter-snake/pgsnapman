@@ -109,7 +109,8 @@ function logend {
   if [[ "${DUMP}" =~ ^[0-9]+$ ]]; then
     bupath="cat_id=${DUMP}"
   fi
-  local sql="select set_restorelog(${LOGID}, '${1}', '${2}', '${bupath}', '${BUWORKERID}', '${pgsqlfqdn}', '${pgsqlport}', '${dbname}', '${restoreschema}', '${restoretype}');"
+  local srcdbname=$(getfieldvalue "${DBSETTINGS}" 1)
+  local sql="select set_restorelog(${LOGID}, '${1}', '${2}', '${bupath}', '${BUWORKERID}', '${pgsqlfqdn}', '${pgsqlport}', '${dbname}', '${restoreschema}', '${restoretype}', '${srcdbname}');"
   log "${1}" "${2}"
   snaplog "${1}" "${2}"
   talk "${1} ${2}"

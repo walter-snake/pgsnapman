@@ -440,13 +440,13 @@ CREATE FUNCTION set_restorejobstatus(job_id integer, status text) RETURNS void
 
 
 --
--- Name: set_restorelog(integer, text, text, text, integer, text, integer, text, text, text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: set_restorelog(integer, text, text, text, integer, text, integer, text, text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION set_restorelog(logid integer, status text, message text, bupath text, buworkerid integer, pgsqldnsname text, pgsqlport integer, destdbname text, restore_schema text, restore_type text) RETURNS void
+CREATE FUNCTION set_restorelog(logid integer, status text, message text, bupath text, buworkerid integer, pgsqldnsname text, pgsqlport integer, destdbname text, restore_schema text, restore_type text, srcdbname text) RETURNS void
     LANGUAGE sql
     AS $_$update pgsnap_restorelog set endtime=now()::timestamp with time zone, status=$2, message=$3, bu_path=$4
-, bu_worker_id=$5, pgsql_dns_name=$6, pgsql_port=$7, dest_dbname=$8, restoreschema=$9, restoretype=$10
+, bu_worker_id=$5, pgsql_dns_name=$6, pgsql_port=$7, dest_dbname=$8, restoreschema=$9, restoretype=$10, src_dbname=$11
  where id = $1; $_$;
 
 
@@ -699,7 +699,7 @@ CREATE VIEW mgr_instance AS
     p.status,
     p.bu_window_start AS hour_start,
     p.bu_window_end AS hour_end,
-    (((w.dns_name || ' ['::text) || p.pgsnap_worker_id_default) || ']'::text) AS def_worker,
+    w.dns_name AS def_worker,
     p.comment,
     to_char(p.date_added, 'YYYY-MM-DD HH24:MI:SS'::text) AS date_added
    FROM (pgsql_instance p
@@ -807,7 +807,8 @@ CREATE TABLE pgsnap_restorelog (
     pgsql_port integer,
     dest_dbname text,
     restoreschema text,
-    restoretype text
+    restoretype text,
+    src_dbname text
 );
 
 
@@ -817,7 +818,8 @@ CREATE TABLE pgsnap_restorelog (
 
 CREATE VIEW mgr_restorelog AS
  SELECT pgsnap_restorelog.id,
-    ((pgsnap_restorelog.pgsql_dns_name || ':'::text) || pgsnap_restorelog.pgsql_port) AS pgsql_instance,
+    pgsnap_restorelog.src_dbname,
+    ((pgsnap_restorelog.pgsql_dns_name || ':'::text) || pgsnap_restorelog.pgsql_port) AS dest_pgsql,
     ((((pgsnap_restorelog.pgsnap_restorejob_id || '/'::text) || pgsnap_restorelog.dest_dbname) || '.'::text) || pgsnap_restorelog.restoreschema) AS jobid_dbname,
     pgsnap_restorelog.restoretype,
     to_char(pgsnap_restorelog.starttime, 'YYYY-MM-DD HH24:MI:SS'::text) AS starttime,

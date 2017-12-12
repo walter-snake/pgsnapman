@@ -1,4 +1,4 @@
-#! /bin/env/python
+#! /usr/bin/env python
 
 # PgSnapMan script manager: list, upload, delete a script file into the database
 
@@ -9,6 +9,13 @@ import ConfigParser
 import getpass
 from prettytable import PrettyTable
 from prettytable import from_db_cursor
+
+def get_script_path():
+    return os.path.dirname(os.path.realpath(sys.argv[0]))
+
+configfile = '/etc/pgsnapman/mgr-defaults.cfg'
+if not os.path.exists(configfile):
+  configfile = get_script_path() + '/mgr-defaults.cfg'
 
 config = ConfigParser.RawConfigParser(allow_no_value=True)
 config.read('defaults.cfg')
@@ -31,7 +38,7 @@ try:
   cur = conn.cursor()
   conn.close()
 except:
-  print('Could not connect to database, check settings in default.cfg')
+  print('Could not connect to database, check settings in mgr-defaults.cfg')
   sys.exit(1)
 print ''
   

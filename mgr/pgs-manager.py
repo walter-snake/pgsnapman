@@ -1,4 +1,4 @@
-#! /bin/env/python
+#! /usr/bin/env python
 
 # PgSnapMan manager: list, upload, delete postgres instances, workers, jobs catalog entries
 
@@ -10,7 +10,10 @@ import ConfigParser
 import getpass
 from prettytable import PrettyTable
 from prettytable import from_db_cursor
-  
+
+def get_script_path():
+    return os.path.dirname(os.path.realpath(sys.argv[0]))
+ 
 def listDbView(viewname, title, search = 'true'):
   if search.find(';') >= 0:
     print('WARNING: invalid filter, has been reset')
@@ -21,17 +24,18 @@ def listDbView(viewname, title, search = 'true'):
   print('')
   print(title)
   if not search == 'true':
-    print('')
     print('Filter: ' + search)
     print('')
   t = from_db_cursor(cur)
   t.align = 'l'
   print t
-  #table = t.get_string(print_empty=False)
-  #print table.replace('None', '    ')
   conn.commit()
   conn.close()
   print('')
+  print(title)
+  if not search == 'true':
+    print('Filter: ' + search)
+    print('')
 
 def listDetails(tablename, id, title):
   conn = psycopg2.connect('host={} port={} dbname={} user={} password={}'.format(PGSCHOST, PGSCPORT, PGSCDB, PGSCUSER, PGSCPASSWORD))  
@@ -414,6 +418,8 @@ Dump job management
 -------------------
   dumpjob list
   dumpjob list+<id>
+  dumpjob db <database_name>
+  dumpjob find "<filter>"
   dumpjob add
   dumpjob status [ACTIVE|HALTED]
   dumbjob edit <id>
@@ -423,6 +429,8 @@ Restore job management
 ----------------------
   restorejob list
   restorejob list+<id>
+  restorejob db <database_name>
+  restorejob find "<filter>"
   restorejob add
   restorejob status [ACTIVE|HALTED]
   restorejob edit <id>
@@ -436,24 +444,18 @@ Catalog management
 ------------------
   catalog list
   catalog list+<id>
-  catalog id <job_id>
+  catalog jobid <job_id>
   catalog db <database_name>
   catalog find "<filter>"  
-    <filter>: regular Postgres filter, you may filter on every
-              column available in the view; for security reasons
-              using a ; is not allowed
   catalog keep [NO|YES|AUTO]
 
 Log of restore jobs
 -------------------
   log-restore list
   log-restore list+<id>
-  log-restore job <job_id>
+  log-restore jobid <job_id>
   log-restore db <database_name>
   log-restore search "<filter>"
-    <filter>: regular Postgres filter, you may filter on every
-              column available in the view; for security reasons
-              using a ; is not allowed
   log-restore <status>
     <status>: Warning, Error, Completed
   
@@ -462,107 +464,117 @@ Messages
   message list
   message list+<id>
   log-restore search "<filter>"
-    <filter>: regular Postgres filter, you may filter on every
-              column available in the view; for security reasons
-              using a ; is not allowed
   message <status>
     <status>: Debug, Info, Warning, Error, Critical
-  """  
+
+<filter>: regular Postgres filter, you may filter on every
+          column available in the view; for security reasons
+          using a ; is not allowed
+
+"""  
 
 def workerTask(task):
   t = task.split(' ')[1][:2]
+  tokens = task.split(' ')
   if t == 'li':
     if '+' in task:
       listDetails('pgsnap_worker', task.split('+')[1].strip(), 'PgSnapMan worker details')
     else:
       listDbView('mgr_worker', 'Registered PgSnapMan workers')
   elif t == 'st': # set status
-    tokens = task.split(' ')
     id = tokens[2]
     status = tokens[3]
     setTableColumn('pgsnap_worker', 'status', id, status, True)
   elif t == 'ed': # edit record
-    tokens = task.split(' ')
     id = tokens[2]
     editRecord('pgsnap_worker', id, ['cron_cacheconfig', 'cron_singlejob', 'cron_clean', 'cron_upload', 'comment', 'status'])
   elif t == 're': # register worker   
     registerWorker()
   elif t == 'de': # delete worker
-    tokens = task.split(' ')
     id = tokens[2]
     deleteFromDb('pgsnap_worker', id)
 
 def instanceTask(task):
   t = task.split(' ')[1][:2]
+  tokens = task.split(' ')
   if t == 'li':
     if '+' in task:
       listDetails('pgsql_instance', task.split('+')[1].strip(), 'Postgres instance details')
     else:
       listDbView('mgr_instance', 'Registered Postgres instances')
   elif t == 'st': # set status
-    tokens = task.split(' ')
     id = tokens[2]
     status = tokens[3]
     setTableColumn('pgsql_instance', 'status', id, status, True)
   elif t == 'ed': # edit record
-    tokens = task.split(' ')
     id = tokens[2]
     editRecord('pgsql_instance', id, ['pgsql_superuser', 'bu_window_start', 'bu_window_end', 'pgsnap_worker_id_default', 'comment', 'status'])
   elif t == 're': # register instance
     registerInstance()
   elif t == 'de': # delete instance
-    tokens = task.split(' ')
     id = tokens[2]
     deleteFromDb('pgsql_instance', id)
 
 def dumpjobTask(task):
   t = task.split(' ')[1][:2]
+  tokens = task.split(' ')
   if t == 'li':
     if '+' in task:
       listDetails('pgsnap_dumpjob', task.split('+')[1].strip(), 'Dump job details')
     else:
       listDbView('mgr_dumpjob', 'Dump jobs')
   elif t == 'st': # set status
-    tokens = task.split(' ')
     id = tokens[2]
     status = tokens[3]
     setTableColumn('pgsnap_dumpjob', 'status', id, status, True)
+  elif t == 'db': # zoek op database
+    search = "dbname ilike '{}%'".format(tokens[2])
+    listDbView('mgr_dumpjob', 'Dump jobs', search.strip())    
+  elif t == 'fi': # search task
+    search=''
+    for tok in range(2, len(tokens)):
+      search = search + ' ' + tokens[tok]
+    listDbView('mgr_dumpjob', 'Dump jobs', search.strip())
   elif t == 'ed': # edit record
-    tokens = task.split(' ')
     id = tokens[2]
     editRecord('pgsnap_dumpjob', id, ['jobtype', 'cron', 'dumptype', 'dumpoptions', 'comment', 'status'])
   elif t == 'ad': # add dumpjob    
     addDumpJob()
   elif t == 'de': # delete dumpjob
-    tokens = task.split(' ')
     id = tokens[2]
     deleteFromDb('pgsnap_dumpjob', id)
 
 def restorejobTask(task):
   t = task.split(' ')[1][:2]
+  tokens = task.split(' ')
   if t == 'li':
     if '+' in task:
       listDetails('pgsnap_restorejob', task.split('+')[1].strip(), 'Restore job details')
     else:
       listDbView('mgr_restorejob', 'Restore jobs')
+  elif t == 'db': # zoek op database
+    search = "dest_dbname ilike '{}%'".format(tokens[2])
+    listDbView('mgr_restorejob', 'Dump jobs', search.strip())  
+  elif t == 'fi': # search task
+    search=''
+    for tok in range(2, len(tokens)):
+      search = search + ' ' + tokens[tok]
+    listDbView('mgr_restorejob', 'Restore jobs', search.strip())
   elif t == 'st': # set status
-    tokens = task.split(' ')
     id = tokens[2]
     status = tokens[3]
     setTableColumn('pgsnap_restorejob', 'status', id, status, True)
   elif t == 'ed': # edit record
-    tokens = task.split(' ')
     id = tokens[2]
     editRecord('pgsnap_restorejob', id, ['jobtype', 'cron', 'dest_pgsql_instance_id', 'restoreoptions', 'restoretype', 'role_handling',  'tblspc_handling', 'comment', 'status'])
   elif t == 'ad': # add restorejob    
     addRestoreJob()
   elif t == 'de': # delete restorejob
-    tokens = task.split(' ')
     id = tokens[2]
     deleteFromDb('pgsnap_restorejob', id)
   
 def triggerTask(task):
-# create one or more restorejob tasks, and call dumpjob with new ids
+  # create one or more restorejob tasks, and call dumpjob with new ids
   print("Create a 'copy' job")
   print("===================")
   print("Step 1: create the dump job, when done one or more restore jobs can be created. They're automatically linked together, so that after running the dump job, the restore jobs will run based on that specific run of the dump. The dump job will put on halt, until the procedure is complete.")
@@ -586,6 +598,7 @@ def triggerTask(task):
     setTableColumn('pgsnap_dumpjob', 'status', djid, 'ACTIVE', True)
 
 def catalogTask(task):
+  tokens = task.split(' ')
   t = task.split(' ')[1][:2]
   if t == 'li':
     if '+' in task:
@@ -593,39 +606,37 @@ def catalogTask(task):
     else:
       listDbView('mgr_catalog', 'Available backups')
   elif t == 'fi': # search task
-    tokens = task.split(' ')
     search=''
     for tok in range(2, len(tokens)):
       search = search + ' ' + tokens[tok]
     listDbView('mgr_catalog', 'Available backups', search.strip())
-  elif t == 'id': # search task
+  elif t == 'jo': # search task
     search = "split_part(jobid_dbname, '/', 1) ilike '{}'".format(task.split(' ')[2])
     listDbView('mgr_catalog', 'Available backups', search.strip())
   elif t == 'db': # search task
     search = "split_part(jobid_dbname, '/', 2) ilike '{}.%'".format(task.split(' ')[2])
     listDbView('mgr_catalog', 'Available backups', search.strip())
   elif t == 'ke': # set keep status
-    tokens = task.split(' ')
     id = tokens[2]
     col = tokens[3]
     val = tokens[4]
     setTableColumn('pgsnap_catalog', col, id, val, True)
 
 def restorelogTask(task):
+  tokens = task.split(' ')
   t = task.split(' ')[1][:2]
   if t == 'li': # results: the restore log
     if '+' in task:
       listDetails('pgsnap_restorelog', task.split('+')[1].strip(), 'Restore log details')
     else:
       listDbView('mgr_restorelog', 'Restore jobs log')
-  elif t == 'id': # search task
+  elif t == 'jo': # search task
     search = "split_part(jobid_dbname, '/', 1) ilike '{}'".format(task.split(' ')[2])
     listDbView('mgr_restorelog', 'Restore log', search.strip())
   elif t == 'db': # search task
     search = "split_part(jobid_dbname, '/', 2) ilike '{}.%'".format(task.split(' ')[2])
     listDbView('mgr_restorelog', 'Restore log', search.strip())
   elif t == 'fi': # search task
-    tokens = task.split(' ')
     search=''
     for tok in range(2, len(tokens)):
       search = search + ' ' + tokens[tok]
@@ -637,6 +648,7 @@ def restorelogTask(task):
       print('Invalid message level specified')
     
 def messageTask(task):
+  tokens = task.split(' ')
   t = task.split(' ')[1][:2]
   if t == 'li':
     if '+' in task:
@@ -644,7 +656,6 @@ def messageTask(task):
     else:
       listDbView('mgr_message', 'General message log')
   elif t == 'se': # search task
-    tokens = task.split(' ')
     search=''
     for tok in range(2, len(tokens)):
       search = search + ' ' + tokens[tok]
@@ -692,8 +703,12 @@ if len(sys.argv) > 1:
     showHelp()
     sys.exit(0)
 
+configfile = '/etc/pgsnapman/mgr-defaults.cfg'
+if not os.path.exists(configfile):
+  configfile = get_script_path() + '/mgr-defaults.cfg'
+
 config = ConfigParser.RawConfigParser(allow_no_value=True)
-config.read('defaults.cfg')
+config.read(configfile)
 PGSCHOST=config.get('snapman_database', 'pgschost')
 PGSCPORT=config.get('snapman_database', 'pgscport')
 PGSCUSER=config.get('snapman_database', 'pgscuser')
@@ -713,7 +728,7 @@ try:
   conn.close()
   print('ok')
 except:
-  print('\nCould not connect to database, check settings in default.cfg')
+  print('\nCould not connect to database, check settings in mgr-defaults.cfg')
   sys.exit(1)
 print ''
 
