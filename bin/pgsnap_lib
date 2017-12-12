@@ -300,12 +300,12 @@ function preparecatalogdata {
   local format=`echo "${2}" | awk -F '.' '{print $(NF-1)}'`
   # Verify the upload format using regular expression
   if [ "${format}" == "catalog" ]; then
-    if [ "`echo -e "${1}" | grep ${GRPFLG} '^\d+\t\d{8}T\d{6}[+-]\d+\t\d{8}T\d{6}[+-]\d+\t[A-Z]+\t[a-zA-Z0-9_\.\/]+\t[a-zA-Z0-9_\./]+\t-?\d+\t-?\d+\t.*\t.*\t.*\t.*\t.*\t\d+\t.*\t.*\t\d+$'`" == "" ]; then
+    if [ "`echo -e "${1}" | grep ${GRPFLG} '^\d+\t\d{8}T\d{6}[+-]\d+\t\d{8}T\d{6}[+-]\d+\t[A-Z]+\t[a-zA-Z0-9_\.\/]+\t[a-zA-Z0-9_\.\/]+\t-?\d+\t-?\d+\t.*\t.*\t.*\t.*\t.*\t\d+\t.*\t.*\t\d+$'`" == "" ]; then
       snaplog "ERROR" "catalog upload wrong format: $1"
       return
     fi
   elif [ "${format}" == "message" ]; then
-    if [ "`echo -e "${1}" | grep ${GRPFLG} '^\d{8}T\d{6}[+-]\d+\t((INFO|WARNING|ERROR|CRITICAL|DEBUG))\t.+\t.*\t((CACHE_CONFIG|DUMP|RESTORE|VERIFY|DEDUP))\t-?\d+$'`" == "" ]; then
+    if [ "`echo -e "${1}" | grep ${GRPFLG} '^\d{8}T\d{6}[+-]\d+\t((INFO|WARNING|ERROR|CRITICAL|DEBUG))\t.+\t.*\t((CACHE_CONFIG|DUMP|RESTORE|VERIFY|DEDUP))\t-?\d+\t\d+$'`" == "" ]; then
       snaplog "ERROR" "message upload wrong format: $1"
       return
     fi

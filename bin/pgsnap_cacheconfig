@@ -443,13 +443,19 @@ elif [ "${ACTION}" == "INIT" ]; then
   initrootdir
 
   # Get initial worker config (which will start up the regular cron jobs)
-  echo "Reading worker settings from database for id [${BUWORKERID}]"
+  echo "Searching worker settings for hostname        [${FQDN}]"
+  echo "Reading worker settings from database for id  [${BUWORKERID}]"
   echo "Update the worker configuration..."
   updateworkerconfig
   echo "Installed scheduled jobs."
 
   # Install the new crontab, so that worker cron jobs will fire up
   installcrontab
+
+  # Write log entry to database
+  MSG="Initialized work directory: ${ROOTDIR}. Hint: manually run pgsnap_cacheconfig VERBOSE CRON at the worker to verify job creation, but PgSnapMan should start working now."
+  preparecatalogdata "`date '+%Y%m%dT%H%M%S%z'`\tINFO\t${TOOLNAME}\t${MSG}\tCACHE_CONFIG\t-1\t${BUWORKERID}" "${UPLOADDIR}/$$.pgsnap_cache_config.message.dat" "NEW" ""
+  ${SCRIPTPATH}/pgsnap_upload
 
   # And done
   cleanupexit 0
@@ -505,7 +511,7 @@ if [ -e ${TOOL_LOG} ]; then
     JOBWARNINGS=" (with warnings)"
     # Transform message log for upload, based on logging (with an awk one liner)
     # Create the upload data file in upload, we keep the log so we don't have to keep the upload dat file (write it straight to upload dir, then it will be removed)
-    preparecatalogdata "`cat ${TOOL_LOG} | grep ${GRPFLG} 'WARNING|ERROR' | awk '{for(i=1;i<=NF;i++) { printf($i); if (i>=1 && i <= 3) {printf("\t")} else { printf(" ")}}; print "\tCACHE_CONFIG\t-1"}'`" ${ROOTDIR}/upload/$$.pgsnap_cacheconfig.message.dat NEW
+    preparecatalogdata "`cat ${TOOL_LOG} | grep ${GRPFLG} 'WARNING|ERROR' | awk '{for(i=1;i<=NF;i++) { printf($i); if (i>=1 && i <= 3) {printf("\t")} else { printf(" ")}}; print "\tCACHE_CONFIG\t-1\t${BUWORKERID}"}'`" ${ROOTDIR}/upload/$$.pgsnap_cacheconfig.message.dat NEW
   fi 
 
   # We also append the session log to the master log, and delete session log

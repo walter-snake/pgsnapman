@@ -651,8 +651,8 @@ CREATE VIEW instance_compact AS
 
 CREATE VIEW mgr_catalog AS
  SELECT c.id,
-    ((c.pgsql_dns_name || ':'::text) || c.pgsql_port) AS pgsql_instance,
-    ((((c.pgsnap_dumpjob_id)::text || '/'::text) || (c.dbname || '.'::text)) || c.dumpschema) AS jobid_dbname,
+    ((c.pgsql_dns_name || ':'::text) || c.pgsql_port) AS pgsql,
+    ((((c.pgsnap_dumpjob_id)::text || '/'::text) || (c.dbname || '.'::text)) || c.dumpschema) AS id_db_schema,
     c.dumptype,
     to_char(c.starttime, 'YYYY-MM-DD HH24:MI:SS'::text) AS starttime,
     (c.endtime - c.starttime) AS duration,
@@ -672,19 +672,17 @@ CREATE VIEW mgr_catalog AS
 
 CREATE VIEW mgr_dumpjob AS
  SELECT vw_dumpjob_worker_instance.id,
-    ((vw_dumpjob_worker_instance.pgsql_instance_dns_name || ':'::text) || vw_dumpjob_worker_instance.pgsql_instance_port) AS pgsql_instance,
+    ((vw_dumpjob_worker_instance.pgsql_instance_dns_name || ':'::text) || vw_dumpjob_worker_instance.pgsql_instance_port) AS pgsql,
     vw_dumpjob_worker_instance.dbname,
     vw_dumpjob_worker_instance.dumpschema AS schema,
     vw_dumpjob_worker_instance.dumptype AS type,
-    vw_dumpjob_worker_instance.dumpoptions AS options,
     vw_dumpjob_worker_instance.pgsnap_restorejob_id AS restorejob,
     vw_dumpjob_worker_instance.jobtype,
-    vw_dumpjob_worker_instance.cron,
     vw_dumpjob_worker_instance.status,
     substr(vw_dumpjob_worker_instance.comment, 1, 32) AS comment,
-    vw_dumpjob_worker_instance.pgsnap_worker_dns_name AS pgs_worker
+    vw_dumpjob_worker_instance.pgsnap_worker_dns_name AS pgsnap_worker
    FROM vw_dumpjob_worker_instance
-  ORDER BY ((vw_dumpjob_worker_instance.pgsql_instance_dns_name || ':'::text) || vw_dumpjob_worker_instance.pgsql_instance_port), ((vw_dumpjob_worker_instance.dbname || '.'::text) || vw_dumpjob_worker_instance.dumpschema);
+  ORDER BY ((lower(vw_dumpjob_worker_instance.dbname) || '.'::text) || lower(vw_dumpjob_worker_instance.dumpschema));
 
 
 --
@@ -699,7 +697,7 @@ CREATE VIEW mgr_instance AS
     p.status,
     p.bu_window_start AS hour_start,
     p.bu_window_end AS hour_end,
-    w.dns_name AS def_worker,
+    w.dns_name AS def_pgsnap_worker,
     p.comment,
     to_char(p.date_added, 'YYYY-MM-DD HH24:MI:SS'::text) AS date_added
    FROM (pgsql_instance p
@@ -718,7 +716,8 @@ CREATE TABLE pgsnap_message (
     logtime timestamp with time zone,
     message text,
     jobclass text,
-    jobid integer
+    jobid integer,
+    bu_worker_id text
 );
 
 
@@ -774,7 +773,8 @@ CREATE TABLE pgsnap_restorejob (
 
 CREATE VIEW mgr_restorejob AS
  SELECT j.id,
-    ((p.dns_name || ':'::text) || p.pgport) AS pgsql_instance,
+    c.dbname AS src_dbname,
+    ((p.dns_name || ':'::text) || p.pgport) AS dest_pgsql,
     j.dest_dbname,
     j.restoreschema AS schema,
     j.restoretype AS type,
@@ -783,11 +783,12 @@ CREATE VIEW mgr_restorejob AS
     j.cron,
     j.status,
     j.comment,
-    COALESCE(w.dns_name, '(trigger)'::text) AS pgs_worker
+    COALESCE(w.dns_name, '(trigger)'::text) AS pgsnap_worker
    FROM (((pgsnap_restorejob j
      JOIN pgsql_instance p ON ((p.id = j.dest_pgsql_instance_id)))
      LEFT JOIN pgsnap_catalog c ON ((c.id = j.pgsnap_catalog_id)))
-     LEFT JOIN pgsnap_worker w ON ((w.id = c.bu_worker_id)));
+     LEFT JOIN pgsnap_worker w ON ((w.id = c.bu_worker_id)))
+  ORDER BY c.dbname;
 
 
 --
@@ -820,15 +821,16 @@ CREATE VIEW mgr_restorelog AS
  SELECT pgsnap_restorelog.id,
     pgsnap_restorelog.src_dbname,
     ((pgsnap_restorelog.pgsql_dns_name || ':'::text) || pgsnap_restorelog.pgsql_port) AS dest_pgsql,
-    ((((pgsnap_restorelog.pgsnap_restorejob_id || '/'::text) || pgsnap_restorelog.dest_dbname) || '.'::text) || pgsnap_restorelog.restoreschema) AS jobid_dbname,
+    ((((pgsnap_restorelog.pgsnap_restorejob_id || '/'::text) || pgsnap_restorelog.dest_dbname) || '.'::text) || pgsnap_restorelog.restoreschema) AS id_db_schema,
     pgsnap_restorelog.restoretype,
     to_char(pgsnap_restorelog.starttime, 'YYYY-MM-DD HH24:MI:SS'::text) AS starttime,
     (pgsnap_restorelog.endtime - pgsnap_restorelog.starttime) AS duration,
     pgsnap_restorelog.status,
     substr(pgsnap_restorelog.message, 1, 32) AS message,
-    w.dns_name
+    w.dns_name AS pgsnap_worker
    FROM (pgsnap_restorelog
-     LEFT JOIN pgsnap_worker w ON ((w.id = pgsnap_restorelog.bu_worker_id)));
+     LEFT JOIN pgsnap_worker w ON ((w.id = pgsnap_restorelog.bu_worker_id)))
+  ORDER BY to_char(pgsnap_restorelog.starttime, 'YYYY-MM-DD HH24:MI:SS'::text);
 
 
 --

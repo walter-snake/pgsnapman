@@ -75,6 +75,6 @@ sizeperc=`echo "${dumpsize} ${dedupsize}" | awk '{ printf "%.0f", ($2/$1) * 100;
 snaplog "INFO" "finished - `basename ${1}` - exist files ${ec} - remain size ${sizeperc}%"
 
 # Also put a message in the catalog database (not important enough to keep locally)
-preparecatalogdata "`date '+%Y%m%dT%H%M%S%z'`\tINFO\tpgsnap_dedup\t`basename ${1}` - reduction: ${ec} existing, ${sizeperc}% remaining\tDEDUP\t${3}" "${ROOTDIR}/upload/$$.pgsnap_dedup.message.dat" "NEW" ""
+preparecatalogdata "`date '+%Y%m%dT%H%M%S%z'`\tINFO\tpgsnap_dedup\t`basename ${1}` - reduction: ${ec} existing, ${sizeperc}% remaining\tDEDUP\t${3}\t${BUWORKERID}" "${ROOTDIR}/upload/$$.pgsnap_dedup.message.dat" "NEW" ""
 cleanupexit 0;
 

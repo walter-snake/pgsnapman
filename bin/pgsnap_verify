@@ -65,7 +65,7 @@ function verifybackupselection {
       log "CRITICAL" "# verified with errors: [$id] [`basename ${bupath}`]"
       snaplog "CRITICAL" "${MSG}"
       # also put a message in the database
-      preparecatalogdata "`date '+%Y%m%dT%H%M%S%z'`\tCRITICAL\t${TOOLNAME}\t${MSG}\tVERIFY\t${id}" "${UPLOADDIR}/$$.pgsnap_verify.message.dat" "ADD" ""
+      preparecatalogdata "`date '+%Y%m%dT%H%M%S%z'`\tCRITICAL\t${TOOLNAME}\t${MSG}\tVERIFY\t${id}\t${BUWORKERID}" "${UPLOADDIR}/$$.pgsnap_verify.message.dat" "ADD" ""
       # set catalog status
       setcatalogstatus "${id}" "FAILED"
     fi

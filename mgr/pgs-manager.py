@@ -209,10 +209,13 @@ def deleteFromDb(tablename, id):
   
 def getInput(message, values, defval, width = 32, allowempty = True):
   ri = ''
+  # need strings for comparison
+  chkvals = []
+  for e in values: chkvals.append(str(e))
   while ri not in values or len(values) == 1 or ri in ['?', '']:
     ri = raw_input('{} [{}]'.format(message, defval).ljust(width, ' ') + ': ')
     if ri == '?':
-      print '  ' + values[0]
+      print '  ' + str(values[0])
       for i in range(1, len(values)):
         print('    ' + str(values[i]))
     elif ri == '':
@@ -224,7 +227,7 @@ def getInput(message, values, defval, width = 32, allowempty = True):
     elif ri == ' ':
       return ''
     else:
-      if ri in values or len(values) == 1:
+      if ri in chkvals or len(values) == 1:
         return ri
 
 # register worker
@@ -254,8 +257,8 @@ def registerInstance():
   dns_name = getInput('postgres instance dns name:', ['fqdn dns name'], '', 54, False)
   pgport = getInput('postgres port:', ['port number'], '5432', 54, False)
   pgsql_superuser = getInput('postgres superuser', ['postgres super user'], 'postgres', 54, False)
-  bu_window_start = getInput('backup window start hour:', range(0,24), '20', 54, False)
-  bu_window_end = getInput('backup window end hour:', range(0,24), '6', 54, False)
+  bu_window_start = getInput('backup window start hour:', ["hour: the start of the time range that will be used to automatically generate a \n  backup time, you may always set the backup to any desired schedule\n    (0-23)"], '20', 54, False)
+  bu_window_end = getInput('backup window end hour:', ["hour: the end of the time range that will be used to automatically generate a \n  backup time, you may always set the backup to any desired schedule\n    (0-23)"], '6', 54, False)
   pgsnap_worker_id_default = getInput('default pgsnapman worker', ['id of an existing worker'], '', 54, False)
   comment = getInput('comment', ['optional comments'], '', 54)
   yn = raw_input('Save new instance? [Yn] ')
@@ -443,6 +446,7 @@ Trigger jobs
 Catalog management
 ------------------
   catalog list
+  catalog list-<hour>
   catalog list+<id>
   catalog jobid <job_id>
   catalog db <database_name>
@@ -452,6 +456,7 @@ Catalog management
 Log of restore jobs
 -------------------
   log-restore list
+  log-restore list-<hour>
   log-restore list+<id>
   log-restore jobid <job_id>
   log-restore db <database_name>
@@ -462,11 +467,13 @@ Log of restore jobs
 Messages
 --------
   message list
+  message list-<hour>
   message list+<id>
   log-restore search "<filter>"
   message <status>
     <status>: Debug, Info, Warning, Error, Critical
 
+<hour>:   hours back from now
 <filter>: regular Postgres filter, you may filter on every
           column available in the view; for security reasons
           using a ; is not allowed
@@ -603,19 +610,21 @@ def catalogTask(task):
   if t == 'li':
     if '+' in task:
       listDetails('pgsnap_catalog', task.split('+')[1].strip(), 'Backup details')
+    elif '-' in task:
+      listDbView('mgr_catalog', 'Backup catalog', "(now() - starttime::timestamp without time zone) < '{} hours'::interval".format(task.split('-')[1].strip()))
     else:
-      listDbView('mgr_catalog', 'Available backups')
+      listDbView('mgr_catalog', 'Backup catalog')
   elif t == 'fi': # search task
     search=''
     for tok in range(2, len(tokens)):
       search = search + ' ' + tokens[tok]
-    listDbView('mgr_catalog', 'Available backups', search.strip())
+    listDbView('mgr_catalog', 'Backup catalog', search.strip())
   elif t == 'jo': # search task
-    search = "split_part(jobid_dbname, '/', 1) ilike '{}'".format(task.split(' ')[2])
-    listDbView('mgr_catalog', 'Available backups', search.strip())
+    search = "split_part(id_db_schema, '/', 1) ilike '{}'".format(task.split(' ')[2])
+    listDbView('mgr_catalog', 'Backup catalog', search.strip())
   elif t == 'db': # search task
-    search = "split_part(jobid_dbname, '/', 2) ilike '{}.%'".format(task.split(' ')[2])
-    listDbView('mgr_catalog', 'Available backups', search.strip())
+    search = "split_part(id_db_schema, '/', 2) ilike '{}.%'".format(task.split(' ')[2])
+    listDbView('mgr_catalog', 'Backup catalog', search.strip())
   elif t == 'ke': # set keep status
     id = tokens[2]
     col = tokens[3]
@@ -628,13 +637,15 @@ def restorelogTask(task):
   if t == 'li': # results: the restore log
     if '+' in task:
       listDetails('pgsnap_restorelog', task.split('+')[1].strip(), 'Restore log details')
+    elif '-' in task:
+      listDbView('mgr_restorelog', 'Restore jobs log', "(now() - starttime::timestamp without time zone) < '{} hours'::interval".format(task.split('-')[1].strip()))
     else:
       listDbView('mgr_restorelog', 'Restore jobs log')
   elif t == 'jo': # search task
-    search = "split_part(jobid_dbname, '/', 1) ilike '{}'".format(task.split(' ')[2])
+    search = "split_part(id_db_schema, '/', 1) ilike '{}'".format(task.split(' ')[2])
     listDbView('mgr_restorelog', 'Restore log', search.strip())
   elif t == 'db': # search task
-    search = "split_part(jobid_dbname, '/', 2) ilike '{}.%'".format(task.split(' ')[2])
+    search = "split_part(id_db_schema, '/', 2) ilike '{}.%'".format(task.split(' ')[2])
     listDbView('mgr_restorelog', 'Restore log', search.strip())
   elif t == 'fi': # search task
     search=''
@@ -653,6 +664,8 @@ def messageTask(task):
   if t == 'li':
     if '+' in task:
       listDetails('pgsnap_message', task.split('+')[1].strip(), 'Message details')
+    elif '-' in task:
+      listDbView('mgr_message', 'General message log', "(now() - logtime::timestamp without time zone) < '{} hours'::interval".format(task.split('-')[1].strip()))
     else:
       listDbView('mgr_message', 'General message log')
   elif t == 'se': # search task
@@ -670,29 +683,28 @@ def processCommand(cmd):
   task = cmd.strip()
   if task[:].lower() == 'q':
     sys.exit(0)
-#  try:
-  if task[:1].lower() == 'h':
-    showHelp()
-  elif task[:2].lower() == 'wo':
-    workerTask(task)
-  elif task[:2].lower() == 'po':
-    instanceTask(task)
-  elif task[:2].lower() == 'ca':
-    catalogTask(task)
-  elif task[:2].lower() == 'me':
-    messageTask(task)
-  elif task[:2].lower() == 'du':
-    dumpjobTask(task)
-  elif task[:2].lower() == 're':
-    restorejobTask(task)
-  elif task[:2].lower() == 'lo':
-    restorelogTask(task)
-  elif task[:2].lower() == 'tr':
-    triggerTask(task)
-
-#  except Exception:
-#    print Exception
-#    print('Invalid command, options (like a non-existing id)')
+  try:
+    if task[:1].lower() == 'h':
+      showHelp()
+    elif task[:2].lower() == 'wo':
+      workerTask(task)
+    elif task[:2].lower() == 'po':
+      instanceTask(task)
+    elif task[:2].lower() == 'ca':
+      catalogTask(task)
+    elif task[:2].lower() == 'me':
+      messageTask(task)
+    elif task[:2].lower() == 'du':
+      dumpjobTask(task)
+    elif task[:2].lower() == 're':
+      restorejobTask(task)
+    elif task[:2].lower() == 'lo':
+      restorelogTask(task)
+    elif task[:2].lower() == 'tr':
+      triggerTask(task)
+  except Exception:
+    print Exception
+    print('Invalid command, options (like a non-existing id)')
       
 # ================================================================
 # 'MAIN'
