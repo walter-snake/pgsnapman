@@ -107,7 +107,7 @@ if [ "$VERBOSITY" == "VERBOSE" ]; then
 fi
 
 # Upload the data for the available categories
-files=`find ${ROOTDIR}/upload -name "*.dat"`
+files=`find ${UPLOADDIR} -name "*.dat"`
 for f in ${files}; do
   uploaddata "${f}"
 done

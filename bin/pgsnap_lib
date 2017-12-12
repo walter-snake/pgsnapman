@@ -322,7 +322,7 @@ function preparecatalogdata {
   fi
   # Create link in upload dir
   if [ "${4}" == "UPLOAD" ]; then
-    ln -s ${2} ${ROOTDIR}/upload/
+    ln -s ${2} ${UPLOADDIR}/
   fi
 }
 
