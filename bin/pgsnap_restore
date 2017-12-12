@@ -204,7 +204,7 @@ function createrole {
   else
     talk "create role:        ${1}"
     # load cluster globals dump into psql, filtered for this role
-    cat "${DUMP}.cluster_globals.sql" | grep ${GRPFLG} "^((ALTER\ ROLE|CREATE\ ROLE))\ \"?${1}.*" | ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} --no-password --output=/dev/null 2> /dev/null
+    cat "${DUMP}.cluster_globals.sql" | grep ${GRPFLG} "^((ALTER\ ROLE|CREATE\ ROLE))\ \"?${1}\"?(\;|\ ).*" | ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} --no-password --output=/dev/null 2> /dev/null
   fi
 }
 

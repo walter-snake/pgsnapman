@@ -330,7 +330,7 @@ function preparecatalogdata {
 # -----------------------------------------------------
 
 # Extract a row from a 'table' by first column
-# $1 file name with | separated fields
+# $1 file with data rows, | separated fields
 # $2 search value (first field)
 function findrow {
   local row=`grep ${GRPFLG} "^${2}\|" "${1}"`
