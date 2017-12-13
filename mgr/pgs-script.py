@@ -2,6 +2,7 @@
 
 # PgSnapMan script manager: list, upload, delete a script file into the database
 
+import readline
 import sys
 import os
 from os.path import expanduser

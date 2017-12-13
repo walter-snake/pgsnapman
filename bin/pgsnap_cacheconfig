@@ -518,7 +518,7 @@ if [ -e ${TOOL_LOG} ]; then
     JOBWARNINGS=" (with warnings)"
     # Transform message log for upload, based on logging (with an awk one liner)
     # Create the upload data file in upload, we keep the log so we don't have to keep the upload dat file (write it straight to upload dir, then it will be removed)
-    preparecatalogdata "`cat ${TOOL_LOG} | ${GRPPROG} ${GRPFLG} 'WARNING|ERROR' | awk '{for(i=1;i<=NF;i++) { printf($i); if (i>=1 && i <= 3) {printf("\t")} else { printf(" ")}}; print "\tCACHE_CONFIG\t-1\t${BUWORKERID}"}'`" ${UPLOADDIR}/$$.pgsnap_cacheconfig.message.dat NEW
+    preparecatalogdata "`cat ${TOOL_LOG} | ${GRPPROG} ${GRPFLG} 'WARNING|ERROR' | awk WID=${BUWORKERID} '{for(i=1;i<=NF;i++) { printf($i); if (i>=1 && i <= 3) {printf("\t")} else { printf(" ")}}; print "\tCACHE_CONFIG\t-1\t"WID; }'`" ${UPLOADDIR}/$$.pgsnap_cacheconfig.message.dat NEW
   fi 
 
   # We also append the session log to the master log, and delete session log

@@ -109,6 +109,6 @@ let " C = ${C} + ${N}"
 CHK=${CHK}$C
 
 if [ "${CHK}" != "136912" ]; then
-  echo "Extended regular expression not supported, review grep settings (pgsnapman.config)."
+  echo "Extended regular expression not supported, review grep settings (pgsnapman.config), current setting: ${GRPPROG} ${GRPFLG}}"
   TESTGREP="FAILED" 
 fi

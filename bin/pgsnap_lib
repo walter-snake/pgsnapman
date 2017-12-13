@@ -49,8 +49,8 @@ function isjobrunning {
 function setplatform {
   if [[ "$OSTYPE" == "linux-gnu" ]]; then
     PLATFORM="GNU"
-    GRPPROG="egrep"
-    GRPFLG=""
+    GRPPROG="grep"
+    GRPFLG="-P"
   elif [[ "$OSTYPE" == "darwin"* ]]; then
     PLATFORM="DARWIN"
     GRPPROG="grep"
@@ -320,7 +320,7 @@ function preparecatalogdata {
   local format=`echo "${2}" | awk -F '.' '{print $(NF-1)}'`
   # Verify the upload format using regular expression
   if [ "${format}" == "catalog" ]; then
-    if [ "`echo -e "${1}" | ${GRPPROG} ${GRPFLG} '^\d+\t\d{8}T\d{6}[+-]\d+\t\d{8}T\d{6}[+-]\d+\t[A-Z]+\t[a-zA-Z0-9_\.\/]+\t[a-zA-Z0-9_\.\/]+\t-?\d+\t-?\d+\t.*\t.*\t.*\t.*\t.*\t\d+\t.*\t.*\t\d+$'`" == "" ]; then
+    if [ "`echo -e "${1}" | ${GRPPROG} ${GRPFLG} '^\d+\t\d{8}T\d{6}[+-]\d+\t\d{8}T\d{6}[+-]\d+\t[A-Z]+\t[a-zA-Z0-9_\.\/-]+\t[a-zA-Z0-9_\.\/-]+\t-?\d+\t-?\d+\t.*\t.*\t.*\t.*\t.*\t\d+\t.*\t.*\t\d+$'`" == "" ]; then
       snaplog "ERROR" "catalog upload wrong format: $1"
       return
     fi

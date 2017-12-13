@@ -2,6 +2,7 @@
 
 # PgSnapMan manager: list, upload, delete postgres instances, workers, jobs catalog entries
 
+import readline
 import sys
 import os
 from os.path import expanduser
@@ -236,7 +237,7 @@ def registerWorker():
   print('')
   print('Register a pgsnapman worker, enter values (list of options/help tekst: ?):')
   dns_name = getInput('worker dns name:', ['dns name as reported by hostname -f or name set in worker config'], '', 54, False)
-  cron_cacheconfig = getInput('cache refresh cron:', ['numeric cron entry'], '0 */2 * * *', 54, False)
+  cron_cacheconfig = getInput('cache refresh cron:', ['numeric cron entry'], '0 * * * *', 54, False)
   cron_singlejob = getInput('single run check cron:', ['numeric cron entry'], '* * * * *', 54, False)
   cron_clean = getInput('cleaning up cron:', ['numeric cron entry'], '0 8 * * *', 54, False)
   cron_upload = getInput('cache refresh cron:', ['numeric cron entry'], '*/5 * * * *', 54, False)
@@ -380,6 +381,8 @@ def showHeader():
 |                                                  |
 +--------------------------------------------------+
 """
+  print(' PgSnapMan catalog: {}@{}:{}/{}'.format(PGSCUSER, PGSCHOST, str(PGSCPORT), PGSCDB))
+  print('')
 
 def showHelp():
   print """
@@ -729,22 +732,15 @@ PGSCUSER=config.getval('PGSCUSER')
 PGSCDB=config.getval('PGSCDB')
 PGSCPASSWORD=config.getval('PGSCPASSWORD')
 
-print(' +---------------------------------------+')
-print(' | PgSnapMan manager (c) W. Boasson 2017 |')
-print(' +---------------------------------------+')
-print(' PgSnapMan catalog: {}@{}:{}/{}'.format(PGSCUSER, PGSCHOST, str(PGSCPORT), PGSCDB))
-sys.stdout.write(' Verifying database connection... ')
 if PGSCPASSWORD == '':
   PGSCPASSWORD=getpass.getpass('password: ')
 try:
   conn = psycopg2.connect('host={} port={} dbname={} user={} password={}'.format(PGSCHOST, PGSCPORT, PGSCDB, PGSCUSER, PGSCPASSWORD))
   cur = conn.cursor()
   conn.close()
-  print('ok')
 except:
   print('\nCould not connect to database, check settings in pgsnapman.config')
   sys.exit(1)
-print ''
 
 cmd = ''
 if len(sys.argv) > 1:
