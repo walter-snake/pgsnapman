@@ -381,7 +381,7 @@ def showHeader():
 |                                                  |
 +--------------------------------------------------+
 """
-  print(' PgSnapMan catalog: {}@{}:{}/{}'.format(PGSCUSER, PGSCHOST, str(PGSCPORT), PGSCDB))
+  print('PgSnapMan catalog: {}@{}:{}/{}'.format(PGSCUSER, PGSCHOST, str(PGSCPORT), PGSCDB))
   print('')
 
 def showHelp():
