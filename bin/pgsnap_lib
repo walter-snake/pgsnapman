@@ -49,10 +49,16 @@ function isjobrunning {
 function setplatform {
   if [[ "$OSTYPE" == "linux-gnu" ]]; then
     PLATFORM="GNU"
+    GRPPROG="egrep"
+    GRPFLG=""
   elif [[ "$OSTYPE" == "darwin"* ]]; then
-    PLATFORM="BSD"
+    PLATFORM="DARWIN"
+    GRPPROG="grep"
+    GRPFLG="-E"
   elif [[ "$OSTYPE" == "freebsd"* ]]; then
     PLATFORM="BSD"
+    GRPPROG="grep"
+    GRPFLG="-E"
   elif [[ "$OSTYPE" == "cygwin" ]]; then
     PLATFORM="${OSTYPE}"
   else
@@ -63,11 +69,9 @@ fi
 
 # Grep version (BSD/GNU need different flags)
 function setgrep {
-  if [ "$(grep -V | grep BSD)" == "" ]; then
-    # assume GNU
-    GRPFLG="-P"
-  else
-    GRPFLG="-E"
+  if [ "${GREPPROG}" != "" ]; then
+    GRPPROG="${GREPPROG}"
+    GRPFLG="${GREPPROG_OPTIONS}"
   fi
 }
 
@@ -316,12 +320,12 @@ function preparecatalogdata {
   local format=`echo "${2}" | awk -F '.' '{print $(NF-1)}'`
   # Verify the upload format using regular expression
   if [ "${format}" == "catalog" ]; then
-    if [ "`echo -e "${1}" | grep ${GRPFLG} '^\d+\t\d{8}T\d{6}[+-]\d+\t\d{8}T\d{6}[+-]\d+\t[A-Z]+\t[a-zA-Z0-9_\.\/]+\t[a-zA-Z0-9_\.\/]+\t-?\d+\t-?\d+\t.*\t.*\t.*\t.*\t.*\t\d+\t.*\t.*\t\d+$'`" == "" ]; then
+    if [ "`echo -e "${1}" | ${GRPPROG} ${GRPFLG} '^\d+\t\d{8}T\d{6}[+-]\d+\t\d{8}T\d{6}[+-]\d+\t[A-Z]+\t[a-zA-Z0-9_\.\/]+\t[a-zA-Z0-9_\.\/]+\t-?\d+\t-?\d+\t.*\t.*\t.*\t.*\t.*\t\d+\t.*\t.*\t\d+$'`" == "" ]; then
       snaplog "ERROR" "catalog upload wrong format: $1"
       return
     fi
   elif [ "${format}" == "message" ]; then
-    if [ "`echo -e "${1}" | grep ${GRPFLG} '^\d{8}T\d{6}[+-]\d+\t((INFO|WARNING|ERROR|CRITICAL|DEBUG))\t.+\t.*\t((CACHE_CONFIG|DUMP|RESTORE|VERIFY|DEDUP))\t-?\d+\t\d+$'`" == "" ]; then
+    if [ "`echo -e "${1}" | ${GRPPROG} ${GRPFLG} '^\d{8}T\d{6}[+-]\d+\t((INFO|WARNING|ERROR|CRITICAL|DEBUG))\t.+\t.*\t((CACHE_CONFIG|DUMP|RESTORE|VERIFY|DEDUP))\t-?\d+\t\d+$'`" == "" ]; then
       snaplog "ERROR" "message upload wrong format: $1"
       return
     fi
@@ -349,7 +353,7 @@ function preparecatalogdata {
 # $1 file with data rows, | separated fields
 # $2 search value (first field)
 function findrow {
-  local row=`grep ${GRPFLG} "^${2}\|" "${1}"`
+  local row=`${GRPPROG} ${GRPFLG} "^${2}\|" "${1}"`
   echo "${row}"
 }
 
@@ -459,5 +463,5 @@ fi
 if [ "$(getworkerstatus)" == "HALTED" ]; then cleanupexit 0; fi
 
 # Write tool init log entry
-if [ "${LOGINIT}" != "NO" ]; then snaplog "INFO" "init - using config: ${CONFIGFILE} - platform mode: ${PLATFORM} - grep flags: ${GRPFLG}"; fi
+if [ "${LOGINIT}" != "NO" ]; then snaplog "INFO" "init - using config: ${CONFIGFILE} - platform mode: ${PLATFORM} - grep: ${GRPPROG} ${GRPFLG}"; fi
 

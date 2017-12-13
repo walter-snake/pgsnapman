@@ -2,12 +2,13 @@
 
 # PgSnapMan manager: list, upload, delete postgres instances, workers, jobs catalog entries
 
-import psycopg2
-from psycopg2 import extras
 import sys
 import os
-import ConfigParser
+from os.path import expanduser
+from configreader import ConfigReader
 import getpass
+import psycopg2
+from psycopg2 import extras
 from prettytable import PrettyTable
 from prettytable import from_db_cursor
 
@@ -715,17 +716,18 @@ if len(sys.argv) > 1:
     showHelp()
     sys.exit(0)
 
-configfile = '/etc/pgsnapman/mgr-defaults.cfg'
+configfile = '/etc/pgsnapman/pgsnapman.config'  
 if not os.path.exists(configfile):
-  configfile = get_script_path() + '/mgr-defaults.cfg'
-
-config = ConfigParser.RawConfigParser(allow_no_value=True)
-config.read(configfile)
-PGSCHOST=config.get('snapman_database', 'pgschost')
-PGSCPORT=config.get('snapman_database', 'pgscport')
-PGSCUSER=config.get('snapman_database', 'pgscuser')
-PGSCDB=config.get('snapman_database', 'pgscdb')
-PGSCPASSWORD=config.get('snapman_database', 'pgscpassword')
+  configfile = home = expanduser("~") + '/.pgsnapman.config'
+  print configfile
+if not os.path.exists(configfile):
+  configfile =  get_script_path() + '/../bin/pgsnapman.config'
+config = ConfigReader(configfile)
+PGSCHOST=config.getval('PGSCHOST')
+PGSCPORT=config.getval('PGSCPORT')
+PGSCUSER=config.getval('PGSCUSER')
+PGSCDB=config.getval('PGSCDB')
+PGSCPASSWORD=config.getval('PGSCPASSWORD')
 
 print(' +---------------------------------------+')
 print(' | PgSnapMan manager (c) W. Boasson 2017 |')
@@ -740,7 +742,7 @@ try:
   conn.close()
   print('ok')
 except:
-  print('\nCould not connect to database, check settings in mgr-defaults.cfg')
+  print('\nCould not connect to database, check settings in pgsnapman.config')
   sys.exit(1)
 print ''
 

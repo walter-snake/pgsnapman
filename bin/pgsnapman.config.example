@@ -48,6 +48,14 @@ PGSCUSER=postgres
 CHKSUMPROG="/sbin/md5"
 CHKSUMPROG_OPTIONS="-r"
 
+# Optional grep settings
+# pgsnapman sets the grep program and flags based on system type, but this may be overridden.
+# Running the INIT procedure tells you if this is neccessary.
+# Name (or full path) to grep supporting extended regex, with optional flags.
+# Note: GREPPROG_OPTIONS only has effect when GREPPROG is set.
+GREPPROG=""
+GREPPROG_OPTIONS=""
+
 # Auto add unlisted database [YES|NO]
 # Keep in mind that pgsnap_worker_id_default must be set in the pgsql_instance table,
 # this worker is the one that adds and performs the jobs. You may change the worker

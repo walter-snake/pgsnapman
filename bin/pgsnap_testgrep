@@ -1,0 +1,114 @@
+# checks to see if grep does what it should do
+TD="# catalog upload
+4	20171209T153137+0100	20171209T153138+0100	SUCCESS	4_pgsdump2.Mies_FULL_20171209T153137	/Users/wouterb/tmp/pgsnapman2/snapshots/2_localhost_5433/4_pgsdump2.Mies	16384	8192	pgsdump2	Mies	FULL		93	1	auto added dump job	localhost	5433
+
+# dump toc schema filtering
+2212; 1262 17213 DATABASE - pgsdump2 nootje
+8; 2615 17234 SCHEMA - Mies postgres
+8; 2615 17234 SCHEMA - mies postgres
+2213; 0 0 ACL - noot nootje
+2214; 0 0 COMMENT - SCHEMA public postgres
+
+# cluster globals users and roles
+CREATE ROLE "Visje";
+ALTER ROLE "Visje" WITH NOSUPERUSER INHERIT NOCREATEROLE NOCREATEDB LOGIN NOREPLICATION;
+CREATE ROLE "aapje";
+ALTER ROLE "Aapje" WITH NOSUPERUSER INHERIT NOCREATEROLE NOCREATEDB LOGIN NOREPLICATION;
+CREATE ROLE aapje;
+ALTER ROLE aapje WITH NOSUPERUSER INHERIT NOCREATEROLE NOCREATEDB LOGIN NOREPLICATION;
+
+# tablespaces in use
+SET default_tablespace = '';
+SET default_tablespace = test_tablespace;
+
+# schema roles
+ALTER SCHEMA "Mies" OWNER TO postgres;
+REVOKE ALL ON SCHEMA noot FROM PUBLIC;
+REVOKE ALL ON SCHEMA noot FROM nootje;
+GRANT ALL ON SCHEMA noot TO nootje;
+GRANT USAGE ON SCHEMA noot TO aapje;
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+REVOKE ALL ON SCHEMA public FROM postgres;
+GRANT ALL ON SCHEMA public TO postgres;
+GRANT ALL ON SCHEMA public TO PUBLIC;
+
+# filtering of data rows
+1|10|aap
+2|11|aap
+11|12|aap
+12|11|aap
+111|111|aap
+112|111|aap
+1212|1212|aap
+"
+# echo -e "${TD}"
+
+function testgrep {
+  echo "${TD}" | ${GRPPROG} ${GRPFLG} "${1}" | wc -l | sed 's/\ //'
+}
+
+CHK=""
+# catalog upload test
+C=0
+# N=1
+N=$( testgrep '^\d+\t\d{8}T\d{6}[+-]\d+\t\d{8}T\d{6}[+-]\d+\t[A-Z]+\t[a-zA-Z0-9_\.\/]+\t[a-zA-Z0-9_\.\/]+\t-?\d+\t-?\d+\t.*\t.*\t.*\t.*\t.*\t\d+\t.*\t.*\t\d+$' )
+let " C = ${C} + ${N}"
+#echo $C
+CHK=${CHK}$C
+
+# dump toc
+# N=3
+C=0
+N=$( testgrep "SCHEMA\ -\ Mies\ " )
+let " C = ${C} + ${N}"
+N=$( testgrep "COMMENT\ -\ SCHEMA\ public\ " )
+let " C = ${C} + ${N}"
+N=$( testgrep "ACL\ -\ noot\ " )
+let " C = ${C} + ${N}"
+#echo $C
+CHK=${CHK}$C
+
+# cluster globals
+# N=6
+C=0
+N=$( testgrep "^((ALTER\ ROLE|CREATE\ ROLE))\ \"?Aapje\"?(\;|\ ).*" )
+let " C = ${C} + ${N}"
+N=$( testgrep "^((ALTER\ ROLE|CREATE\ ROLE))\ \"?aapje\"?(\;|\ ).*" )
+let " C = ${C} + ${N}"
+N=$( testgrep "^((ALTER\ ROLE|CREATE\ ROLE))\ \"?Visje\"?(\;|\ ).*" )
+let " C = ${C} + ${N}"
+#echo $C
+CHK=${CHK}$C
+
+# acls
+C=0
+# N=9
+N=$( testgrep '^((GRANT|REVOKE|ALTER.*OWNER\ TO))' )
+let " C = ${C} + ${N}"
+#echo $C
+CHK=${CHK}$C
+
+# tss
+C=0
+# N=1
+N=$( testgrep "^SET\ default_tablespace\ \=\ .*[^'];" )
+let " C = ${C} + ${N}"
+#echo $C
+CHK=${CHK}$C
+
+# row filter
+C=0
+# N=2
+N=$( testgrep "^10\|" )
+let " C = ${C} + ${N}"
+N=$( testgrep "^11\|" )
+let " C = ${C} + ${N}"
+N=$( testgrep "^12\|" )
+let " C = ${C} + ${N}"
+#echo $C
+CHK=${CHK}$C
+
+if [ "${CHK}" != "136912" ]; then
+  echo "Extended regular expression not supported, review grep settings (pgsnapman.config)."
+  TESTGREP="FAILED" 
+fi
