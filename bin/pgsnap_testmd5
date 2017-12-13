@@ -1,0 +1,11 @@
+# check md5 for existence and proper output
+
+result=$( ${CHKSUMPROG} ${CHKSUMPROG_OPTIONS} ${SCRIPTPATH}/pgsnap_testmd5 | awk '{ print NF" "$1" "$2 }' )
+
+if [[ "${result}" =~ ^2\ [^\s]{1,}\ [^\s]{1,} ]]; then
+  TESTMD5="SUCCESS"
+else
+  echo "Checksum setup not supported, review checksum settings (pgsnapman.config), current setting: ${CHKSUMPROG} ${CHKSUMPROG_OPTIONS}"
+  TESTMD5="FAILED"
+fi
+

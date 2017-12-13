@@ -446,6 +446,12 @@ elif [ "${ACTION}" == "INIT" ]; then
     cleanupexit 1
   fi
 
+  # Check md5
+  .  ${SCRIPTPATH}/pgsnap_testmd5
+  if [ "${TESTMD5}" == "FAILED" ]; then
+    cleanupexit 1
+  fi
+
   # Set up data/root dir
   initrootdir
 
