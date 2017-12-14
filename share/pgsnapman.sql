@@ -297,6 +297,17 @@ CREATE FUNCTION get_pgsql_instance_id(dns_name text, pgport integer) RETURNS int
 
 
 --
+-- Name: get_pgsql_instance_name(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION get_pgsql_instance_name(id integer) RETURNS text
+    LANGUAGE sql
+    AS $_$
+    select dns_name || ':' || pgport from pgsql_instance where id = $1;
+$_$;
+
+
+--
 -- Name: get_restorejobstatus(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -360,6 +371,27 @@ begin
   END IF;
   IF NEW.pgsnap_worker_id IS NULL THEN
     NEW.pgsnap_worker_id = get_defaultworker(NEW.pgsql_instance_id);
+  END IF;
+  
+  RETURN NEW;
+end;
+$$;
+
+
+--
+-- Name: log_status_dumpjob(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION log_status_dumpjob() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+begin
+  IF NOT NEW.status = OLD.status THEN
+    INSERT INTO pgsnap_message (level, pgsnap_tool, logtime, message, jobclass, jobid, bu_worker_id)
+    VALUES ('WARNING', 'catalog_db', now()
+      , 'dump job: ' || get_pgsql_instance_name(NEW.pgsql_instance_id) || '/' 
+        || NEW.dbname || '.' || NEW.dumpschema || ' - job id: ' || NEW.id || ' - status: ' || NEW.status
+      , 'CACHE_CONFIG', NEW.id, -1);
   END IF;
   
   RETURN NEW;
@@ -1337,6 +1369,13 @@ CREATE UNIQUE INDEX pgsql_instance_dns_name_pgport_idx ON pgsql_instance USING b
 --
 
 CREATE TRIGGER insert_pgsnap_dumpjob BEFORE INSERT ON pgsnap_dumpjob FOR EACH ROW EXECUTE PROCEDURE insert_dumpjob();
+
+
+--
+-- Name: update_pgsnap_dumpjob; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_pgsnap_dumpjob BEFORE UPDATE ON pgsnap_dumpjob FOR EACH ROW EXECUTE PROCEDURE log_status_dumpjob();
 
 
 --

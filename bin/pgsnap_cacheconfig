@@ -89,13 +89,23 @@ function initrootdir {
 # Install the new crontab
 function installcrontab {
   # Install new crontab, remove old pgsnap_dump entries, keep other entries
-  crontab -l > ${TEMPDIR}/crontab.previous
+  crontab -l | grep -v '# pgsnapman jobs created at' > ${TEMPDIR}/crontab.previous
   cat ${TEMPDIR}/crontab.previous | grep -v pgsnap | cat - ${TEMPDIR}/$$.0.cron_snapjobs.temp > ${TEMPDIR}/crontab.latest
-  crontab ${TEMPDIR}/crontab.latest
-  if [ "$?" == "0" ]; then
-    snaplog "INFO" "processing - crontab properly installed${JOBWARNINGS}"
+  chk=$(diff -u ${TEMPDIR}/crontab.previous  ${TEMPDIR}/crontab.latest | wc -l | sed 's/ //g')
+  if [ $chk -eq 0 ]; then
+    snaplog "INFO" "crontab unchanged, not updated"
   else
-    snaplog "ERROR" "processing - crontab failed to install (format errors)"
+    echo "# pgsnapman jobs created at ${INITIMESTAMP}" >> ${TEMPDIR}/crontabs.latest
+    crontab ${TEMPDIR}/crontab.latest
+    if [ "$?" == "0" ]; then
+      MSG="crontab changed and properly installed"
+      cronstat="INFO"
+    else
+      cronstat="ERROR"
+      MSG="crontab changed but failed to install (format errors)"
+    fi
+    preparecatalogdata "`date '+%Y%m%dT%H%M%S%z'`\t${cronstat}\t${TOOLNAME}\t${MSG}\tCACHE_CONFIG\t-1\t${BUWORKERID}" "${UPLOADDIR}/$$.pgsnap_cacheconfig.message.dat" "ADD" ""
+    snaplog "${cronstat}" "${MSG}"
   fi
   rm ${TEMPDIR}/$$.0.cron_snapjobs.temp
 }
@@ -115,8 +125,6 @@ function updateworkerconfig {
 
   # Create temp cron job file
   echo "# pgsnapman ###################################################################" > ${TEMPDIR}/$$.0.cron_snapjobs.temp
-  echo "# pgsnapman jobs created at ${INITIMESTAMP}" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
-  echo "# pgsnapman ###################################################################" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp
 
   # Add crontab entries for own cron job from worker config
   row=$(getworkerconfig ${BUWORKERID})
@@ -209,9 +217,10 @@ function createdumpjobs {
   for line in ${DBS}; do
     local HASJOB=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT get_hasjob(${1}, '${line}');"`
     if [ "${HASJOB}" != "YES" ]; then
-      echo "add database: ${fqdnhost}:${3}/${line}"
       local jobid=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT put_dumpjob(${1}, '${line}', 'auto added dump job', '${AUTO_DUMPJOB_STATUS}');"`
-      echo "new dump job created with id: ${jobid}"
+      MSG="add database: ${fqdnhost}:${3}/${line} - job id: ${jobid} - status: ${AUTO_DUMPJOB_STATUS}"
+      snaplog "WARNING" "${MSG}"
+      preparecatalogdata "`date '+%Y%m%dT%H%M%S%z'`\tWARNING\t${TOOLNAME}\t${MSG}\tCACHE_CONFIG\t-1\t${BUWORKERID}" "${UPLOADDIR}/$$.pgsnap_cacheconfig.message.dat" "ADD" ""
       let "c = c + 1"
     fi
   done
@@ -303,14 +312,13 @@ function createcronjobs {
       echo ""
     fi
 
+    # A little magic: all WARNING/ERROR log messages (log xxxxx) will automatically be filtered and uploaded as a message to the database
+
     # Create a cron job entry, only if active.
     # If postgres version could not be determined there was an error, but it will emitted as a warning at this stage.
     # The database may be available at the scheduled time, so the dump tool will repeat this test.
     PRE=""
     # For active jobs, try to verify the database connection and postgresql version
-    if [ "${jobstatus}" == "HALTED" ]; then
-      log "WARNING" "job id ${jobid} - disabled by user (status HALTED): ${pgsqlsuperuser}@${pgsqldns}:${pgsqlport}/${dbname}${schema_part}"
-    fi
     if [ "${jobstatus}" == "ACTIVE" ]; then
       echo "# INFO pgsnapman job id ${jobid} - ${pgsqlsuperuser}@${pgsqldns}:${pgsqlport}/${dbname}${schema_part}" >> ${TEMPDIR}/$$.0.cron_snapjobs.temp 
       log "INFO" "job id ${jobid} - ${pgsqlsuperuser}@${pgsqldns}:${pgsqlport}/${dbname}${schema_part}"
@@ -467,7 +475,7 @@ elif [ "${ACTION}" == "INIT" ]; then
 
   # Write log entry to database
   MSG="Initialized work directory: ${ROOTDIR}. Hint: manually run pgsnap_cacheconfig VERBOSE CRON at the worker to verify job creation, but PgSnapMan should start working now."
-  preparecatalogdata "`date '+%Y%m%dT%H%M%S%z'`\tINFO\t${TOOLNAME}\t${MSG}\tCACHE_CONFIG\t-1\t${BUWORKERID}" "${UPLOADDIR}/$$.pgsnap_cache_config.message.dat" "NEW" ""
+  preparecatalogdata "`date '+%Y%m%dT%H%M%S%z'`\tINFO\t${TOOLNAME}\t${MSG}\tCACHE_CONFIG\t-1\t${BUWORKERID}" "${UPLOADDIR}/$$.pgsnap_cacheconfig.message.dat" "NEW" ""
   ${SCRIPTPATH}/pgsnap_upload
 
   # And done
@@ -524,7 +532,7 @@ if [ -e ${TOOL_LOG} ]; then
     JOBWARNINGS=" (with warnings)"
     # Transform message log for upload, based on logging (with an awk one liner)
     # Create the upload data file in upload, we keep the log so we don't have to keep the upload dat file (write it straight to upload dir, then it will be removed)
-    preparecatalogdata "`cat ${TOOL_LOG} | ${GRPPROG} ${GRPFLG} 'WARNING|ERROR' | awk -v WID=${BUWORKERID} '{for(i=1;i<=NF;i++) { printf($i); if (i>=1 && i <= 3) {printf("\t")} else { printf(" ")}}; print "\tCACHE_CONFIG\t-1\t"WID; }'`" ${UPLOADDIR}/$$.pgsnap_cacheconfig.message.dat NEW
+    preparecatalogdata "`cat ${TOOL_LOG} | ${GRPPROG} ${GRPFLG} 'WARNING|ERROR' | awk -v WID=${BUWORKERID} '{for(i=1;i<=NF;i++) { printf($i); if (i>=1 && i <= 3) {printf("\t")} else { printf(" ")}}; print "\tCACHE_CONFIG\t-1\t"WID; }'`" ${UPLOADDIR}/$$.pgsnap_cacheconfig.message.dat ADD
   fi 
 
   # We also append the session log to the master log, and delete session log

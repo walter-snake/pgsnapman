@@ -24,6 +24,9 @@ SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 # Catalog database needed?
 PGSCDB_REQUIRED=YES
 
+# Turn off tool init log
+LOGINIT=NO
+
 # Load functions, will also perform initialization operations
 . ${SCRIPTPATH}/pgsnap_lib
 
