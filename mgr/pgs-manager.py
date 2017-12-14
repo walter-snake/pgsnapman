@@ -88,6 +88,9 @@ def listDetails(tablename, id, title):
   cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
   cur.execute('SELECT * FROM ' + tablename + ' WHERE id = %s;', (id, ))
   rec = cur.fetchone()
+  if rec == None:
+    print("ERROR id {} not found\n".format(str(id)))
+    return False
   colnames = [desc[0] for desc in cur.description]
   print ''
   print title
@@ -95,6 +98,7 @@ def listDetails(tablename, id, title):
   for c in colnames:
     print(c.ljust(26) + str(rec[c]))
   print ''
+  return True
 
 def setTableColumn(tablename, column, id, value, showresults = False):
   if column.find(';') >= 0:
@@ -130,7 +134,8 @@ def editRecord(tablename, id, editcols):
   cur.execute(sql, (id ,))
   row=cur.fetchone()
   conn.close()
-  listDetails(tablename, id, 'Current record: {} [{}]'.format(tablename, id))
+  if not listDetails(tablename, id, 'Current record: {} [{}]'.format(tablename, id)):
+    return
   print('Enter new values:')
   print('  (use exactly one space to clear a field):')
   print ''.ljust(48, '-')
@@ -635,6 +640,8 @@ def workerTask(task):
   elif t == 'de': # delete worker
     id = tokens[2]
     deleteFromDb('pgsnap_worker', id)
+  else:
+    print("ERROR unknown sub command\n")
 
 def instanceTask(task):
   t = task.split(' ')[1][:2]
@@ -651,6 +658,8 @@ def instanceTask(task):
   elif t == 'de': # delete instance
     id = tokens[2]
     deleteFromDb('pgsql_instance', id)
+  else:
+    print("ERROR unknown sub command\n")
 
 def dumpjobTask(task):
   t = task.split(' ')[1][:2]
@@ -670,6 +679,8 @@ def dumpjobTask(task):
   elif t == 'cl': # clear dumps
     id = tokens[2]
     removeAllBackupsForDumpJob(id)
+  else:
+    print("ERROR unknown sub command\n")
 
 def restorejobTask(task):
   t = task.split(' ')[1][:2]
@@ -686,6 +697,8 @@ def restorejobTask(task):
   elif t == 'de': # delete restorejob
     id = tokens[2]
     deleteFromDb('pgsnap_restorejob', id)
+  else:
+    print("ERROR unknown sub command\n")
   
 def catalogTask(task):
   tokens = task.split(' ')
@@ -694,6 +707,8 @@ def catalogTask(task):
     id = tokens[2]
     val = tokens[3]
     setTableColumn('pgsnap_catalog', 'keep', id, val, True)
+  else:
+    print("ERROR unknown sub command\n")
 
 def triggerTask(task):
   # create one or more restorejob tasks, and call dumpjob with new ids
@@ -720,9 +735,9 @@ def triggerTask(task):
     setTableColumn('pgsnap_dumpjob', 'status', djid, 'ACTIVE', True)
 
 def processCommand(cmd):
-  task = cmd.strip()
     
   try:
+    task = cmd.strip()
     # multiple token commands first
     if len(task.split()) >= 2:
       if task.split()[1][:2].lower() == 'li':
@@ -739,6 +754,8 @@ def processCommand(cmd):
         catalogTask(task)
       elif task[:2].lower() == 're':
         restorejobTask(task)  
+      else:
+        print("ERROR unknown command\n")
     else: 
       if task[:].lower() == 'q':
         sys.exit(0)
@@ -746,6 +763,8 @@ def processCommand(cmd):
         showHelp()
       elif task[:2].lower() == 'tr':
         triggerTask(task)
+      else:
+        print("ERROR unknown command\n")
   except Exception:
    print Exception
    print('Invalid command, options (like a non-existing or missing id)')
