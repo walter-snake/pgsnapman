@@ -8,4 +8,6 @@
 
 *.cfg
 
+create-dump.sh
+
 temp/

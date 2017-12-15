@@ -21,14 +21,22 @@ DISPMODE = 'li'
 # dicts with abbreviations
 views = { 'wo' : 'mgr_worker', 'po' : 'mgr_instance', 'du' : 'mgr_dumpjob'
   , 'ca' : 'mgr_catalog', 're' : 'mgr_restorejob', 'lo' : 'mgr_restorelog'
-  , 'me' : 'mgr_message'}
+  , 'me' : 'mgr_message' }
 tables = { 'wo' : 'pgsnap_worker', 'po' : 'pgsql_instance', 'du' : 'pgsnap_dumpjob'
   , 'ca' : 'pgsnap_catalog', 're' : 'pgsnap_restorejob', 'lo' : 'pgsnap_restorelog'
-  , 'me' : 'pgsnap_message'}
+  , 'me' : 'pgsnap_message' }
 titles = { 'wo' : 'PgSnapMan worker', 'po' : 'Postgres instance', 'du' : 'Dump job'
   , 'ca' : 'Backup catalog', 're' : 'Restore job', 'lo' : 'Restore log'
-  , 'me' : 'System message'}
-hourfilters = { 'ca' : 'starttime', 'lo' : 'starttime' , 'me' : 'logtime'  }
+  , 'me' : 'System message' }
+hourfilters = { 'ca' : 'starttime', 'lo' : 'starttime' , 'me' : 'logtime' }
+dbfilters = { 'ca': "split_part(id_db_schema, '/', 2) like '{}.%'"
+  , 'lo': "split_part(id_db_schema, '/', 2) like '{}.%'"
+  , 're': "src_dbname like '{}'"
+  , 'du': "dbname like '{}'" }
+jobidfilters = { 'du' : 'id={}'
+  , 're' : 'id={}'
+  , 'ca' : "split_part(id_db_schema, '/', 1) like '{}'"
+  , 'lo' : "split_part(id_db_schema, '/', 1) like '{}'" }
 
   
 def get_script_path():
@@ -51,13 +59,15 @@ def exportDbView(viewname):
     print("\t".join(pr))
     pr = []
   
-def listDbView(viewname, title, search, idsort = ''):
+def listDbView(viewname, title, search, idsort, limit = ''):
   if search.find(';') >= 0:
     print('WARNING: invalid filter, has been reset')
     search='true'
   conn = psycopg2.connect('host={} port={} dbname={} user={} password={}'.format(PGSCHOST, PGSCPORT, PGSCDB, PGSCUSER, PGSCPASSWORD))
   cur = conn.cursor()
-  cur.execute('SELECT * FROM ' + viewname + ' WHERE ' + search + ';')
+  if not limit == '':
+    limit = 'limit {}'.format(limit)
+  cur.execute('SELECT * FROM {} WHERE {} {};'.format(viewname, search, limit))
 
   print('')
   print(title)
@@ -487,17 +497,16 @@ when calling pgs-manager.
 
 Worker management
 -----------------
-  worker list[.asc|.desc]
-  worker list[.asc|.desc] <filter>
+  worker list(.options) (filter)
   worker register
   worker status [ACTIVE|HALTED]
   worker edit <id>
   worker delete <id>
+  worker export
   
 Postgres management
 -------------------
-  postgres list(.asc|.desc)
-  postgres list(.asc|.desc) <filter>
+  postgres list(.options) (filter)
   postgres register
   postgres status [ACTIVE|HALTED]
   postgres edit <id>
@@ -506,23 +515,17 @@ Postgres management
 
 Dump job management
 -------------------
-  dumpjob list(.asc|.desc)
-  dumpjob list(.asc|.desc) <filter>
-  dumpjob db <database_name>
-  dumpjob find "<filter>"
+  dumpjob list(.options) (filter)
   dumpjob add
   dumpjob status [ACTIVE|HALTED]
   dumbjob edit <id>
-  dumbjob delete <id>
   dumbjob clear-dumps <id>
+  dumbjob delete <id>
   dumpjob export
 
 Restore job management
 ----------------------
-  restorejob list(.asc|.desc)
-  restorejob list(.asc|.desc) <filter>
-  restorejob db <database_name>
-  restorejob find "<filter>"
+  restorejob list(.options) (filter)
   restorejob add
   restorejob status [ACTIVE|HALTED]
   restorejob edit <id>
@@ -535,42 +538,31 @@ Trigger jobs
 
 Catalog management
 ------------------
-  catalog list(.asc|.desc)
-  catalog list(.asc|.desc) <filter>
-  catalog last <hour>
-  catalog jobid <job_id>
-  catalog db <database_name>
-  catalog find "<filter>"  
+  catalog list(.options) (filter)
   catalog keep [NO|YES|AUTO]
   catalog export
 
 Log of restore jobs
 -------------------
-  log-restore(.asc|.desc) list
-  log-restore list(.asc|.desc) <filter>
-  log-restore last <hour>
-  log-restore jobid <job_id>
-  log-restore db <database_name>
-  log-restore search "<filter>"
-  log-restore <status>
-    <status>: Warning, Error, Completed
+  log-restore(.options) (filter)
   log-restore export
   
 Messages
 --------
-  message list(.asc|.desc)
-  message list(.asc|.desc) <filter>
-  message list-<hour>
-  message list+<id>
-  log-restore search "<filter>"
-  message <status>
-    <status>: Debug, Info, Warning, Error, Critical
+  message list(.options) (filter)
   message export
   
-<hour>:   hours back from now
-<filter>: regular Postgres filter, you may filter on every
-          column available in the view; for security reasons
-          using a ; is not allowed
+.options: list sorting, limiting
+           .asc
+           .desc
+           .<limit>
+filter:  filter options, either one of the predefined filters
+           .hour=<hours_back_from_now> (on every list with a time stamp, decimal allowed)
+           .jobid=<job_id> (on dump job and catalog, and on restore job and restore log lists)
+           .db=<database_name> (on catalog and restore log lists, wildchard % allowed)
+           "<postgres_filter" regular Postgres filter, you may filter on every
+                              column available in the view; for security
+                              reasons using a ; is not allowed
 
 """  
 
@@ -580,11 +572,15 @@ def listView(task):
   list = task.split(' ')[0][:2]
 
   # filter out the sort options (list.asc or list.desc)
-  if tokens[1].find('.') > 0:
-    sort = tokens[1].split('.')[1]
-  else:
-    sort = ''
-    
+  subtokens = tokens[1].split('.')
+  sort = ''
+  limit = ''
+  for tok in range(1, len(subtokens)):
+    if subtokens[tok] in ['asc','desc']:
+      sort = subtokens[tok]
+    else:
+      limit = subtokens[tok]
+  
   # figure out if we have to print details, or that the 3rd and following tokens are a more complex filter
   # an id only: automatically print details
   if len(tokens) >= 3:
@@ -598,10 +594,10 @@ def listView(task):
       for tok in range(2, len(tokens)):
         search = search + ' ' + tokens[tok]
         search = processFilter(list, search.strip())
-      listDbView(views[list], titles[list], search, sort)
+      listDbView(views[list], titles[list], search, sort, limit)
   else:
     try: 
-      listDbView(views[list], titles[list], 'true', sort)      
+      listDbView(views[list], titles[list], 'true', sort, limit)      
     except KeyError, e:
       print('ERROR Unknown list specified: {}'.format(list))
 
@@ -615,9 +611,9 @@ def processFilter(list, filter):
   if filter.startswith('.hour='):
     return "(now() - {}::timestamp without time zone) < '{} hours'::interval".format(hourfilters[list], val)
   elif filter.startswith('.jobid='):
-    return "split_part(id_db_schema, '/', 1) ilike '{}'".format(val)
+    return jobidfilters[list].format(val)
   elif filter.startswith('.db='):
-    return "split_part(id_db_schema, '/', 2) like '{}.%'".format(val)
+    return dbfilters[list].format(val)
 
 # Generic list viewer
 def exportView(task):
@@ -736,7 +732,7 @@ def triggerTask(task):
 
 def processCommand(cmd):
     
-  try:
+#  try:
     task = cmd.strip()
     # multiple token commands first
     if len(task.split()) >= 2:
@@ -765,9 +761,9 @@ def processCommand(cmd):
         triggerTask(task)
       else:
         print("ERROR unknown command\n")
-  except Exception:
-   print Exception
-   print('Invalid command, options (like a non-existing or missing id)')
+  # except Exception:
+   # print Exception
+   # print('Invalid command, options (like a non-existing or missing id)')
       
 # ================================================================
 # 'MAIN'

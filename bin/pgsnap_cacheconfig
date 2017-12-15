@@ -54,6 +54,9 @@ PGSCDB_REQUIRED=YES
 # Load functions, will also perform initialization operations
 . ${SCRIPTPATH}/pgsnap_lib
 
+# Starttime
+STARTTIME=$( date '+%s' )
+
 # ======================================
 # Function definitions (script specific)
 # ======================================
@@ -519,6 +522,14 @@ elif [ "${ACTION}" == "SINGLE" ]; then
   if [ "${jobspending}" == "YES" ]; then
     updatepgsqlinstanceconfig
   fi
+fi
+
+# Timer end and message
+ENDTIME=$( date '+%s' )
+let " RUNNINGTIME = $ENDTIME - $STARTTIME "
+if [ ${RUNNINGTIME} -gt 30 ]; then
+  MSG="config check took ${RUNNINGTIME} [s]"
+  preparecatalogdata "`date '+%Y%m%dT%H%M%S%z'`\tWARNING\t${TOOLNAME}\t${MSG}\tCACHE_CONFIG\t-1\t${BUWORKERID}" "${UPLOADDIR}/$$.pgsnap_cacheconfig.message.dat" "ADD" ""
 fi
 
 # If there's log info written, do something sensible
