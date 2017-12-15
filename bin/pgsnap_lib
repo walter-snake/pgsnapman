@@ -18,6 +18,10 @@ function lock {
 # Exit, remove our own temp files
 # $1 error code
 function cleanupexit {
+  # Remove entry from database activity table (we don't care if this fails)
+  local sql="select del_activity(${ACTIVITYID});"
+  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} --no-password --quiet --output=/dev/null -c "${sql}" 2> /dev/null
+
   # Remove temp files, including lock
   rm -f ${TEMPDIR}/$$.*.${TOOLNAME}*
   exit $1
@@ -479,4 +483,8 @@ if [ "$(getworkerstatus)" == "HALTED" ]; then cleanupexit 0; fi
 
 # Write tool init log entry
 if [ "${LOGINIT}" != "NO" ]; then snaplog "INFO" "init - using config: ${CONFIGFILE} - platform mode: ${PLATFORM} - grep: ${GRPPROG} ${GRPFLG}"; fi
+
+# Write marker to database activity table (we don't care if this fails)
+sql="select put_activity(${BUWORKERID}, $$, '${TOOLNAME} ${1} ${2} ${3} ${4} ${5} ${6}'::text);"
+ACTIVITYID=$( ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --no-password --dbname=${PGSCDB} --quiet -A -t  -c "${sql}" 2> /dev/null )
 

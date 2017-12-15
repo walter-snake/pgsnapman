@@ -461,13 +461,7 @@ else
   fi
   # Start a restore job if requested, put it in the background, the dump is ready now
   if [ "${restorejobid}" != "" ]; then
-    # Could be multiple restore jobs!
-    OIFS="${IFS}"; IFS=","
-    for rid in ${restorejobid}; do
-      log "INFO" "job id ${jobid} - triggered start of restore job ${rid}"
-      ${SCRIPTPATH}/pgsnap_restore ${rid} ${jobdir}/${buname} SILENT TRIGGER &
-    done
-    IFS="${OIFS}"
+    ${SCRIPTPATH}/pgsnap_trigger SILENT ${JOBID} ${restorejobid} ${jobdir}/${buname} &
   fi
   snaplog "INFO" "finished dump process"
   cleanupexit 0

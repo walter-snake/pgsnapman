@@ -1,0 +1,65 @@
+#!/bin/bash
+
+# pgsnap_trigger starts trigger restore jobs sequentially, just to make pgsnap_dump can fully complete
+#
+# $1 VERBOSITY [SILENT|VERBOSE]
+#
+
+# ======================================
+# Initialization
+# ======================================
+VERBOSITY=$1
+DUMPJOBID=$2
+RESTOREJOBS="${3}"
+DUMPPATH="${4}"
+
+# Get the script directory (must do this first)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
+  DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+done
+SCRIPTPATH="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+
+# Catalog database needed?
+PGSCDB_REQUIRED="NO"
+
+# Log init
+LOGINIT="NO"
+
+# Load functions, will also perform initialization operations
+. ${SCRIPTPATH}/pgsnap_lib
+
+# Check verbosity
+if [[ ! "$1" =~ SILENT|VERBOSE ]]; then
+  echo "ERROR verbosity must be set"
+  cleanupexit 1
+fi
+
+# =======================================
+# Functions
+# =======================================
+
+
+# =======================================
+# MAIN
+# =======================================
+
+# Set the tool log
+TOOL_LOG=${LOGDIR}/pgsnap_trigger.log
+
+# Start the restore jobs
+# Could be multiple restore jobs!
+OIFS="${IFS}"; IFS=","
+for rid in ${RESTOREJOBS}; do
+  MSG="dump job id ${DUMPJOBID} triggered start of restore job ${rid}"
+  talk "${MSG}"
+  log "INFO" "${MSG}"
+  ${SCRIPTPATH}/pgsnap_restore ${rid} ${DUMPPATH} ${VERBOSITY} TRIGGER
+done
+IFS="${OIFS}"
+
+# clean exit
+cleanupexit 0
+

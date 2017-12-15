@@ -26,6 +26,15 @@ COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
 SET search_path = public, pg_catalog;
 
 --
+-- Name: del_activity(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION del_activity(id integer) RETURNS void
+    LANGUAGE sql
+    AS $_$ delete from pgsnap_activity where id = $1; $_$;
+
+
+--
 -- Name: del_catalog(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -397,6 +406,15 @@ begin
   RETURN NEW;
 end;
 $$;
+
+
+--
+-- Name: put_activity(integer, integer, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION put_activity(worker_id integer, process_id integer, command_line text) RETURNS bigint
+    LANGUAGE sql
+    AS $_$ insert into pgsnap_activity (worker_id, process_id, command_line) values ($1, $2, $3) returning id; $_$;
 
 
 --
@@ -884,6 +902,38 @@ CREATE VIEW mgr_worker AS
 
 
 --
+-- Name: pgsnap_activity; Type: TABLE; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE UNLOGGED TABLE pgsnap_activity (
+    id bigint NOT NULL,
+    starttime timestamp with time zone DEFAULT now(),
+    worker_id integer,
+    process_id integer,
+    command_line text
+);
+
+
+--
+-- Name: pgsnap_activity_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE pgsnap_activity_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: pgsnap_activity_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE pgsnap_activity_id_seq OWNED BY pgsnap_activity.id;
+
+
+--
 -- Name: pgsnap_catalog_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -1178,6 +1228,13 @@ CREATE VIEW vw_worker AS
     pgsnap_worker.cron_clean,
     pgsnap_worker.cron_upload
    FROM pgsnap_worker;
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY pgsnap_activity ALTER COLUMN id SET DEFAULT nextval('pgsnap_activity_id_seq'::regclass);
 
 
 --

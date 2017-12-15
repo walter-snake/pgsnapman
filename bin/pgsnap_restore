@@ -99,6 +99,12 @@ function setpgbinpath {
 function logstart {
   local sql="select put_restorelog(${JOBID}, '${DUMP}');"
   LOGID=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --no-password --dbname=${PGSCDB} -c "$sql" -A -t`
+  if [ "${LOGID}" == "" ]; then
+    MSG="job id ${JOBID} - could not write restore log entry, exit"
+    ERRCODE=1
+  else
+    ERRCODE=0
+  fi
 }
 
 # Update with result, also write snaplog and log essage
@@ -462,9 +468,15 @@ function run_dir_restore {
 # - we don't want to start a new restore operation while this one is running (same for backups, but there it gives system load/lockup, restore
 #   could potentially break integrity), this is handle lock function.
 
-errcode=0
+ERRCODE=0
 MSG=""
+
+# Write start log entry, if it fails: we can't use the database properly, break out
 logstart 
+if [ ${ERRCODE} -gt 0 ]; then
+  snaplog "ERROR" "$MSG"
+  cleanupexit 1
+fi
 
 # Verify starttype
 if [[ ! "${STARTTYPE}" =~ ^((CRON|SINGLE|TRIGGER))$ ]]; then
@@ -598,11 +610,11 @@ snaplog "INFO" "init - starting ${STARTTYPE} restore, job id [${JOBID}] from dum
 
 # Start psql or pg_restore operation, set job status to started in case of a SINGLE run job
 RESULT="ERROR"
-errcode=0
+ERRCODE=0
 if [ "${jobtype}" == "SINGLE" ]; then
   setjobstatus "RESTORE" ${JOBID} "HALTED"
 fi
-if [ $errcode -gt 0 ]; then
+if [ $ERRCODE -gt 0 ]; then
   MSG="aborted as job status could not be set, indicates a catalog database error"
 else
   snaplog "INFO" "logging details to: $$.${JOBID}.pgsnap_restore.log"
@@ -631,7 +643,7 @@ else
 fi
 
 logend "$RESULT" "$MSG"
-cleanupexit ${errcode}
+cleanupexit ${ERRCODE}
 
 # EOF
 

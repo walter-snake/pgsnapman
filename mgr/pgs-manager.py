@@ -21,14 +21,14 @@ DISPMODE = 'li'
 # dicts with abbreviations
 views = { 'wo' : 'mgr_worker', 'po' : 'mgr_instance', 'du' : 'mgr_dumpjob'
   , 'ca' : 'mgr_catalog', 're' : 'mgr_restorejob', 'lo' : 'mgr_restorelog'
-  , 'me' : 'mgr_message' }
+  , 'me' : 'mgr_message', 'ac' : 'pgsnap_activity' }
 tables = { 'wo' : 'pgsnap_worker', 'po' : 'pgsql_instance', 'du' : 'pgsnap_dumpjob'
   , 'ca' : 'pgsnap_catalog', 're' : 'pgsnap_restorejob', 'lo' : 'pgsnap_restorelog'
-  , 'me' : 'pgsnap_message' }
+  , 'me' : 'pgsnap_message', 'ac' : 'pgsnap_activity' }
 titles = { 'wo' : 'PgSnapMan worker', 'po' : 'Postgres instance', 'du' : 'Dump job'
   , 'ca' : 'Backup catalog', 're' : 'Restore job', 'lo' : 'Restore log'
-  , 'me' : 'System message' }
-hourfilters = { 'ca' : 'starttime', 'lo' : 'starttime' , 'me' : 'logtime' }
+  , 'me' : 'System message', 'ac' : 'Activity/running processes' }
+hourfilters = { 'ca' : 'starttime', 'lo' : 'starttime' , 'me' : 'logtime', 'ac' : 'starttime' }
 dbfilters = { 'ca': "split_part(id_db_schema, '/', 2) like '{}.%'"
   , 'lo': "split_part(id_db_schema, '/', 2) like '{}.%'"
   , 're': "src_dbname like '{}'"
@@ -67,7 +67,13 @@ def listDbView(viewname, title, search, idsort, limit = ''):
   cur = conn.cursor()
   if not limit == '':
     limit = 'limit {}'.format(limit)
-  cur.execute('SELECT * FROM {} WHERE {} {};'.format(viewname, search, limit))
+  if idsort == 'asc':
+    sort = 'order by id asc'
+  elif idsort == 'desc':
+    sort = 'order by id desc'
+  else:
+    sort = ''
+  cur.execute('SELECT * FROM {} WHERE {} {} {};'.format(viewname, search, sort, limit))
 
   print('')
   print(title)
@@ -80,12 +86,7 @@ def listDbView(viewname, title, search, idsort, limit = ''):
   conn.close()
   t.align = 'l'
   
-  if idsort == 'asc':
-    print(t.get_string(sortby='id'))
-  elif idsort == 'desc': 
-    print(t.get_string(sortby='id', reversesort=True))
-  else:
-    print(t)
+  print(t)
     
   print(title)
   print('')
@@ -462,6 +463,16 @@ def addRestoreJob(_trigger = False):
     print('')
     return id
 
+def clearActivity():
+  yn = raw_input('Do you want to clear the activity table (it does not affect running processes)? [yN] ')
+  if yn.lower() == 'y':
+    sql = 'delete from pgsnap_activity'
+    conn = psycopg2.connect('host={} port={} dbname={} user={} password={}'.format(PGSCHOST, PGSCPORT, PGSCDB, PGSCUSER, PGSCPASSWORD))
+    cur = conn.cursor()
+    cur.execute(sql)
+    conn.commit()
+    conn.close()
+  
 def showHeader():
   print """
 +--------------------------------------------------+
@@ -551,6 +562,8 @@ Messages
 --------
   message list(.options) (filter)
   message export
+  
+  activity list(.options) (filter)
   
 .options: list sorting, limiting
            .asc
@@ -730,6 +743,15 @@ def triggerTask(task):
     setTableColumn('pgsnap_dumpjob', 'pgsnap_restorejob_id', djid, restore_jobs, False)
     setTableColumn('pgsnap_dumpjob', 'status', djid, 'ACTIVE', True)
 
+def activityTask(task):
+  tokens = task.split(' ')
+  t = task.split(' ')[1][:2]
+  if t == 'cl': # clear
+    clearActivity()
+  else:
+    print("ERROR unknown sub command\n")
+
+
 def processCommand(cmd):
     
 #  try:
@@ -750,6 +772,8 @@ def processCommand(cmd):
         catalogTask(task)
       elif task[:2].lower() == 're':
         restorejobTask(task)  
+      elif task[:2].lower() == 'ac':
+        activityTask(task)  
       else:
         print("ERROR unknown command\n")
     else: 
