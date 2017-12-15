@@ -1,3 +1,14 @@
+# ########### environment checks
+
+# We're optimistic.
+TESTS_FAILED="NO"
+
+echo "Performing environment checks"
+
+# GREP -----------------------------------------------------------
+
+echo -n "  grep regular expressions... "
+
 # checks to see if grep does what it should do
 TD="# catalog upload
 4	20171209T153137+0100	20171209T153138+0100	SUCCESS	4_pgsdump2.Mies_FULL_20171209T153137	/Users/wouterb/tmp/pgsnapman2/snapshots/2_localhost_5433/4_pgsdump2.Mies	16384	8192	pgsdump2	Mies	FULL		93	1	auto added dump job	localhost	5433
@@ -108,7 +119,47 @@ let " C = ${C} + ${N}"
 #echo $C
 CHK=${CHK}$C
 
-if [ "${CHK}" != "136912" ]; then
-  echo "Extended regular expression not supported, review grep settings (pgsnapman.config), current setting: ${GRPPROG} ${GRPFLG}}"
-  TESTGREP="FAILED" 
+if [ "${CHK}" == "136912" ]; then
+  echo "ok"
+  TESTGREP="SUCCESS"
+else
+  echo "error: extended regular expression not supported, review/set grep settings [pgsnapman.config], current command: ${GRPPROG} ${GRPFLG}"
+  TESTGREP="FAILED"
+  TESTS_FAILED="YES"
 fi
+
+# GREP -----------------------------------------------------------
+
+# check md5 for existence and proper output
+echo -n "  md5 configuration... "
+if [ ! -e "${CHKSMPROG}" ]; then
+  echo "error: checksum program not found: ${CHKSMPROG}"
+  TESTMD5="FAILED"
+  TESTS_FAILED="YES"
+else
+  result=$( ${CHKSMPROG} ${CHKSMFLG} ${SCRIPTPATH}/pgsnap_testenv | awk '{ print NF" "$1" "$2 }' )
+
+  if [[ "${result}" =~ ^2\ [^\s]{1,}\ [^\s]{1,} ]]; then
+    echo "ok"
+    TESTMD5="SUCCESS"
+  else
+    echo "error: checksum setup not supported, review/set checksum settings [pgsnapman.config], current command: ${CHKSMPROG} ${CHKSMFLG}"
+    TESTMD5="FAILED"
+    TESTS_FAILED="YES"
+  fi
+fi
+
+# STAT -----------------------------------------------------------
+
+# check stat for correct flags (should output file size only on one line)
+echo -n "  stat configuration... "
+FILESIZE=$( stat ${STATFLG} ${SCRIPTPATH}/pgsnap_testenv )
+if [[ "${FILESIZE}" =~ ^[0-9]{1,}$ ]]; then
+  echo "ok"
+  TESTSTAT="SUCCESS"
+else
+  echo "error: stat not properly configured for use by pgsnap_dedup, review/set stat options [pgsnapman.config], current command: stat ${STATFLG}"
+  TESTSTAT="FAILED"
+  TESTS_FAILED="YES"
+fi
+

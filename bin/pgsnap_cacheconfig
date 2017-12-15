@@ -451,15 +451,9 @@ if [  "${ACTION}" == "" ]; then
   echo "ERROR no action provided"
   cleanupexit 1
 elif [ "${ACTION}" == "INIT" ]; then
-  # Check grep
-  . ${SCRIPTPATH}/pgsnap_testgrep
-  if [ "${TESTGREP}" == "FAILED" ]; then
-    cleanupexit 1
-  fi
-
-  # Check md5
-  .  ${SCRIPTPATH}/pgsnap_testmd5
-  if [ "${TESTMD5}" == "FAILED" ]; then
+  # Check environment
+  . ${SCRIPTPATH}/pgsnap_testenv
+  if [ "${TESTS_FAILED}" == "YES" ]; then
     cleanupexit 1
   fi
 

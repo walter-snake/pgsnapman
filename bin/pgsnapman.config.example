@@ -44,10 +44,11 @@ PGSCUSER=postgres
 PGSCPASSWORD=
 
 # Miscellaneous
-# Full path to your checksum program to use (empty turns off deduplication)
+# Full path to your checksum program to use (empty turns off deduplication, but also breaks initialization
+# so if you don't want this feature: set it correctly, initialize, and empty the setting)
 # Could be a script, output must be formatted as <checksum><space><full_file_path>
-CHKSUMPROG="/sbin/md5"
-CHKSUMPROG_OPTIONS="-r"
+CHKSUMPROG=""
+CHKSUMPROG_OPTIONS=""
 
 # Optional grep settings
 # pgsnapman sets the grep program and flags based on system type, but this may be overridden.

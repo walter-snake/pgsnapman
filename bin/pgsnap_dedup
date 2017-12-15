@@ -33,8 +33,8 @@ PGSCDB_REQUIRED=NO
 
 # This one may run in parallel, no check if it's already running (it's a slave process of a dump job)
 
-# Check if CHKSUMPROG, exist, otherwise clean exit.
-if [ ! -e "${CHKSUMPROG}" ]; then
+# Check if CHKSMPROG, exist, otherwise clean exit.
+if [ ! -e "${CHKSMPROG}" ]; then
   cleanupexit 0
 fi
 
@@ -48,7 +48,7 @@ fi
 snaplog "INFO" "processing - dump: ${1}"
 
 # Build md5 index of the specified directory and sanitize whitespace
-find ${1} -type f -name '*.dat.gz' -exec ${CHKSUMPROG} ${CHKSUMPROG_OPTIONS} {} \; | awk '{print $1" "$2}' > ${1}.chksum
+find ${1} -type f -name '*.dat.gz' -exec ${CHKSMPROG} ${CHKSMFLG} {} \; | awk '{print $1" "$2}' > ${1}.chksum
 
 # Init dumpsize, dedupsize
 dumpsize=`stat ${STATFLG} ${1}/toc.dat`

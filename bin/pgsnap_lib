@@ -52,16 +52,22 @@ function setplatform {
     GRPPROG="grep"
     GRPFLG="-P"
     STATFLG="-c %s"
+    CHKSMPROG="/bin/md5sum"
+    CHKSMFLG=""
   elif [[ "$OSTYPE" == "darwin"* ]]; then
     PLATFORM="DARWIN"
     GRPPROG="grep"
     GRPFLG="-E"
     STATFLG="-f %z"
+    CHKSMPROG="/sbin/md5"
+    CHKSMFLG="-r"
   elif [[ "$OSTYPE" == "freebsd"* ]]; then
     PLATFORM="BSD"
     GRPPROG="grep"
     GRPFLG="-E"
     STATFLG="-f %z"
+    CHKSMPROG="/sbin/md5"
+    CHKSMFLG="-r"
   elif [[ "$OSTYPE" == "cygwin" ]]; then
     PLATFORM="${OSTYPE}"
   else
@@ -69,13 +75,19 @@ function setplatform {
     PLATFORM="GNU"
   fi
 
-  # Grep version
+  # Grep setup
   if [ "${GREPPROG}" != "" ]; then
     GRPPROG="${GREPPROG}"
     GRPFLG="${GREPPROG_OPTIONS}"
   fi
 
-  # Stat flags
+  # MD5 setup
+  if [ "${CHKSUMPROG}" != "" ]; then
+    CHKSMPROG="${CHKSUMPROG}"
+    CHKSMFLG="${CHKSUMPROG_OPTIONS}"
+  fi
+
+  # Stat setup
   if [ "${STAT_OPTIONS}" != "" ]; then
     STATFLG="${STAT_OPTIONS}"
   fi
