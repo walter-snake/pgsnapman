@@ -57,6 +57,12 @@ CHKSUMPROG_OPTIONS="-r"
 GREPPROG=""
 GREPPROG_OPTIONS=""
 
+# Optional stat settings
+# pgsnapman sets the stat flags based on system type, but this may be overridden.
+# Required output: a single number, digit only, without white space, size of file
+# NOTE: there's curently no test in the INIT procedure.
+STAT_OPTIONS=""
+
 # Auto add unlisted database [YES|NO]
 # Keep in mind that pgsnap_worker_id_default must be set in the pgsql_instance table,
 # this worker is the one that adds and performs the jobs. You may change the worker

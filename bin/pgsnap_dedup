@@ -38,6 +38,12 @@ if [ ! -e "${CHKSUMPROG}" ]; then
   cleanupexit 0
 fi
 
+# Check if not already processed (continuiing empties checksum file!)
+if [ -e "${1}.chksum" ]; then
+  talk "Never run dedup twice, quit"
+  cleanupexit 0
+fi
+
 # Start message
 snaplog "INFO" "processing - dump: ${1}"
 
@@ -45,7 +51,7 @@ snaplog "INFO" "processing - dump: ${1}"
 find ${1} -type f -name '*.dat.gz' -exec ${CHKSUMPROG} ${CHKSUMPROG_OPTIONS} {} \; | awk '{print $1" "$2}' > ${1}.chksum
 
 # Init dumpsize, dedupsize
-dumpsize=`stat -f %z ${1}/toc.dat`
+dumpsize=`stat ${STATFLG} ${1}/toc.dat`
 dedupsize=${dumpsize}
 ec=0
 while read line;
@@ -54,7 +60,7 @@ do
   file=$(echo "${line}" | cut -d ' ' -f 2)
   index1=${line:0:1}
   index2=${line:1:1}
-  filesize=`stat -f %z ${file}`
+  filesize=`stat ${STATFLG} ${file}`
   fileindex=${DEDUPDATA}/${index1}/${index2}
   let "dumpsize = dumpsize + filesize"
   if [ -e "${fileindex}/${md5}" ];

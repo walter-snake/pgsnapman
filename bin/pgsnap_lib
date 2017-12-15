@@ -51,27 +51,33 @@ function setplatform {
     PLATFORM="GNU"
     GRPPROG="grep"
     GRPFLG="-P"
+    STATFLG="-c %s"
   elif [[ "$OSTYPE" == "darwin"* ]]; then
     PLATFORM="DARWIN"
     GRPPROG="grep"
     GRPFLG="-E"
+    STATFLG="-f %z"
   elif [[ "$OSTYPE" == "freebsd"* ]]; then
     PLATFORM="BSD"
     GRPPROG="grep"
     GRPFLG="-E"
+    STATFLG="-f %z"
   elif [[ "$OSTYPE" == "cygwin" ]]; then
     PLATFORM="${OSTYPE}"
   else
     # Unknown, assume linux-gnu
     PLATFORM="GNU"
-fi
-}
+  fi
 
-# Grep version (BSD/GNU need different flags)
-function setgrep {
+  # Grep version
   if [ "${GREPPROG}" != "" ]; then
     GRPPROG="${GREPPROG}"
     GRPFLG="${GREPPROG_OPTIONS}"
+  fi
+
+  # Stat flags
+  if [ "${STAT_OPTIONS}" != "" ]; then
+    STATFLG="${STAT_OPTIONS}"
   fi
 }
 
@@ -407,9 +413,6 @@ fi
 
 # Determine and set platform
 setplatform
-
-# Set grep version
-setgrep
 
 # Set hostname
 if [ "${WORKER_DNS_NAME}" != "" ]; then
