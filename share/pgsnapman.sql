@@ -397,7 +397,7 @@ CREATE FUNCTION log_status_dumpjob() RETURNS trigger
 begin
   IF NOT NEW.status = OLD.status THEN
     INSERT INTO pgsnap_message (level, pgsnap_tool, logtime, message, jobclass, jobid, bu_worker_id)
-    VALUES ('WARNING', 'catalog_db', now()
+    VALUES ('INFO', 'catalog_db', now()
       , 'dump job: ' || get_pgsql_instance_name(NEW.pgsql_instance_id) || '/' 
         || NEW.dbname || '.' || NEW.dumpschema || ' - job id: ' || NEW.id || ' - status: ' || NEW.status
       , 'CACHE_CONFIG', NEW.id, -1);
@@ -727,7 +727,7 @@ CREATE VIEW mgr_dumpjob AS
     vw_dumpjob_worker_instance.dumpschema AS schema,
     vw_dumpjob_worker_instance.dumptype AS type,
     vw_dumpjob_worker_instance.pgsnap_restorejob_id AS restorejob,
-    vw_dumpjob_worker_instance.jobtype,
+    (("substring"(vw_dumpjob_worker_instance.jobtype, 1, 1) || '/'::text) || vw_dumpjob_worker_instance.cron) AS schedule,
     vw_dumpjob_worker_instance.status,
     substr(vw_dumpjob_worker_instance.comment, 1, 32) AS comment,
     vw_dumpjob_worker_instance.pgsnap_worker_dns_name AS pgsnap_worker
@@ -784,7 +784,7 @@ CREATE VIEW mgr_message AS
     pgsnap_message.jobclass,
     pgsnap_message.jobid
    FROM pgsnap_message
-  ORDER BY pgsnap_message.id;
+  ORDER BY pgsnap_message.logtime;
 
 
 --
@@ -829,8 +829,10 @@ CREATE VIEW mgr_restorejob AS
     j.restoreschema AS schema,
     j.restoretype AS type,
     j.restoreoptions AS options,
-    j.jobtype,
-    j.cron,
+        CASE
+            WHEN (j.jobtype = 'TRIGGER'::text) THEN j.jobtype
+            ELSE (("substring"(j.jobtype, 1, 1) || '/'::text) || j.cron)
+        END AS schedule,
     j.status,
     j.comment,
     COALESCE(w.dns_name, '(trigger)'::text) AS pgsnap_worker
