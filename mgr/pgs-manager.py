@@ -378,18 +378,19 @@ def addDumpJob(_status = 'ACTIVE'):
   else:
     runwhen = getInput('repeat schedule', ['cron schedule (numeric)'], getRndCron(pgsqlid), 54, False)
     cron = runwhen
+  trigger = getInput('trigger', ['restore jobs to start, comma separated id list without spaces'], '', 54)
   comment = getInput('comment', ['optional comments'], '', 54)
   yn = raw_input('Save new job? [Yn] ')
   if yn.lower() == 'n':
     print('')
     return None
   else:
-    id = insertDumpJob(workerid, pgsqlid, dbname, dumptype, dumpschema, dumpoptions, comment, cron, jobtype, _status, None)
+    id = insertDumpJob(workerid, pgsqlid, dbname, dumptype, dumpschema, dumpoptions, comment, cron, jobtype, _status, trigger)
     listDetails('pgsnap_dumpjob', id, 'Verify job details')
     print('')
     yn = raw_input('Do you want to edit the job? [yN] ')
     if yn.lower() == 'y':
-      editRecord('pgsnap_dumpjob', id, ['jobtype', 'cron', 'dumpoptions', 'keep_daily', 'keep_weekly', 'keep_monthly', 'keep_yearly', 'comment', 'status'])    
+      editRecord('pgsnap_dumpjob', id, ['jobtype', 'cron', 'dumpoptions', 'keep_daily', 'keep_weekly', 'keep_monthly', 'keep_yearly',  'pgsnap_restorejob_id', 'comment', 'status'])    
     print('')
     print('Status of job: ' + _status)
     return id
@@ -679,7 +680,7 @@ def dumpjobTask(task):
     setTableColumn('pgsnap_dumpjob', 'status', id, status, True)
   elif t == 'ed': # edit record
     id = tokens[2]
-    editRecord('pgsnap_dumpjob', id, ['jobtype', 'cron', 'dumpoptions', 'keep_daily', 'keep_weekly', 'keep_monthly', 'keep_yearly', 'comment', 'status'])
+    editRecord('pgsnap_dumpjob', id, ['jobtype', 'cron', 'dumpoptions', 'keep_daily', 'keep_weekly', 'keep_monthly', 'keep_yearly', 'pgsnap_restorejob_id', 'comment', 'status'])
   elif t == 'ad': # add dumpjob    
     addDumpJob()
   elif t == 'de': # delete dumpjob
@@ -785,7 +786,7 @@ def processCommand(cmd):
         triggerTask(task)
       elif len(task.split()) == 1 :
         listView(task + ' li')
-     else:
+      else:
         print("ERROR unknown command\n")
   except Exception:
     print Exception
