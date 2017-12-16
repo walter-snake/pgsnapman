@@ -112,7 +112,7 @@ fi
 
 if [[ ! ${id} =~ ^[%0-9]*$ ]]; then
   talk "id format not correct (empty, % or number)":
-  exit 1
+  cleanupexit 1
 fi 
 
 # Display information

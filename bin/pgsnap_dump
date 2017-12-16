@@ -39,7 +39,7 @@ if [ "${STARTTYPE}" == "" ]; then
 fi
 if [ "${STARTTYPE}" == "SINGLE" ] && [ "${SINGLERUNPID}" == "" ]; then
   echo "ERROR pgsnap_dump needs a process id in SINGLE mode"
-  exit 1
+  cleanupexit 1
 fi
 
 # Catalog database needed? YES when running in SINGLE MODE, we must check if a job may start (job status ACTIVE)
@@ -144,16 +144,13 @@ function dumpdbsettings {
     return
   fi
  
-  local acls=`${pgbin}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname="${1}" -F '|' -A -t -c "${sql}"`
-  # The good query
-  sql="SELECT d.datname, pg_catalog.pg_get_userbyid(d.datdba) as owner, pg_catalog.pg_encoding_to_char(d.encoding) as encoding, \
+  local sql="SELECT d.datname, pg_catalog.pg_get_userbyid(d.datdba) as owner, pg_catalog.pg_encoding_to_char(d.encoding) as encoding, \
     d.datcollate as collate, d.datctype as ctype, pg_catalog.array_to_string(d.datacl, ',') AS acl_rights \
     , spcname as dattablespace \
     FROM pg_catalog.pg_database d \
     LEFT JOIN (SELECT oid, spcname FROM pg_catalog.pg_tablespace WHERE spcname NOT LIKE 'pg_default') t \
       ON d.dattablespace = t.oid \
     WHERE d.datname = '$1';"
-
   ${pgbin}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname="${1}" -F '|' -A -t -c "${sql}" > ${2}
 }
 

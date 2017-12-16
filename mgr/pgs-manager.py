@@ -754,7 +754,7 @@ def activityTask(task):
 
 def processCommand(cmd):
     
-#  try:
+  try:
     task = cmd.strip()
     # multiple token commands first
     if len(task.split()) >= 2:
@@ -783,11 +783,13 @@ def processCommand(cmd):
         showHelp()
       elif task[:2].lower() == 'tr':
         triggerTask(task)
-      else:
+      elif len(task.split()) == 1 :
+        listView(task + ' li')
+     else:
         print("ERROR unknown command\n")
-  # except Exception:
-   # print Exception
-   # print('Invalid command, options (like a non-existing or missing id)')
+  except Exception:
+    print Exception
+    print('Invalid command, options (like a non-existing or missing id)')
       
 # ================================================================
 # 'MAIN'
