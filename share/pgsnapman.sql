@@ -248,7 +248,8 @@ begin
   loop
       if NOT keep_ids @> ARRAY[r.id] then
         keep_ids := array_append(keep_ids, r.id);
-      end if;
+        raise notice 'U - %', r.id;
+	      end if;
   end loop;
      
   -- output
@@ -793,7 +794,8 @@ CREATE TABLE pgsnap_restorejob (
 
 CREATE VIEW mgr_restorejob AS
  SELECT j.id,
-    c.dbname AS src_dbname,
+    COALESCE((c.id)::text, 'N/A'::text) AS cat_id,
+    COALESCE(c.dbname, 'N/A'::text) AS src_dbname,
     ((p.dns_name || ':'::text) || p.pgport) AS dest_pgsql,
     j.dest_dbname,
     j.restoreschema AS schema,
@@ -1432,7 +1434,7 @@ ALTER TABLE ONLY pgsnap_restorejob
 --
 
 ALTER TABLE ONLY pgsnap_restorelog
-    ADD CONSTRAINT fk_pgsnap_restorelog_pgsnap_restorejob FOREIGN KEY (pgsnap_restorejob_id) REFERENCES pgsnap_restorejob(id);
+    ADD CONSTRAINT fk_pgsnap_restorelog_pgsnap_restorejob FOREIGN KEY (pgsnap_restorejob_id) REFERENCES pgsnap_restorejob(id) ON DELETE CASCADE;
 
 
 --
