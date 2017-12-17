@@ -86,6 +86,17 @@ $_$;
 
 
 --
+-- Name: get_defjobstatus(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION get_defjobstatus(pgsqlid integer) RETURNS text
+    LANGUAGE sql
+    AS $_$
+  select def_jobstatus from pgsql_instance where id = $1;
+$_$;
+
+
+--
 -- Name: get_dumpjobstatus(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -536,6 +547,49 @@ CREATE TABLE pgsnap_catalog (
 
 
 --
+-- Name: pgsnap_worker; Type: TABLE; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE TABLE pgsnap_worker (
+    id integer NOT NULL,
+    dns_name text NOT NULL,
+    comment text,
+    cron_cacheconfig text DEFAULT '15 20 * * *'::text,
+    cron_singlejob text DEFAULT '* * * * *'::text,
+    cron_clean text DEFAULT '15 18 * * *'::text,
+    cron_upload text DEFAULT '*/5 * * * *'::text,
+    status text DEFAULT 'ACTIVE'::text,
+    date_added timestamp with time zone DEFAULT now(),
+    CONSTRAINT pgsnap_worker_cron_cacheconfig_check CHECK ((cron_cacheconfig ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
+    CONSTRAINT pgsnap_worker_cron_clean_check CHECK ((cron_clean ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
+    CONSTRAINT pgsnap_worker_cron_singlejob_check CHECK ((cron_singlejob ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
+    CONSTRAINT pgsnap_worker_cron_upload_check CHECK ((cron_upload ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
+    CONSTRAINT pgsnap_worker_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
+);
+
+
+--
+-- Name: mgr_catalog; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW mgr_catalog AS
+ SELECT c.id,
+    ((c.pgsql_dns_name || ':'::text) || c.pgsql_port) AS pgsql,
+    ((((c.pgsnap_dumpjob_id)::text || '/'::text) || (c.dbname || '.'::text)) || c.dumpschema) AS id_db_schema,
+    c.dumptype,
+    to_char(c.starttime, 'YYYY-MM-DD HH24:MI:SS'::text) AS starttime,
+    (c.endtime - c.starttime) AS duration,
+    c.status,
+    c.verified,
+    c.keep,
+    substr(c.message, 1, 32) AS message,
+    w.dns_name AS pgsnap_worker
+   FROM (pgsnap_catalog c
+     JOIN pgsnap_worker w ON ((w.id = c.bu_worker_id)))
+  ORDER BY c.starttime;
+
+
+--
 -- Name: pgsnap_dumpjob; Type: TABLE; Schema: public; Owner: -; Tablespace: 
 --
 
@@ -582,54 +636,24 @@ CREATE TABLE pgsql_instance (
     bu_window_end integer DEFAULT 6,
     pgsnap_worker_id_default integer NOT NULL,
     date_added timestamp with time zone DEFAULT now(),
+    def_jobstatus text DEFAULT 'INHERIT'::text,
+    CONSTRAINT pgsql_instance_def_jobstatus_check CHECK ((def_jobstatus = ANY (ARRAY['INHERIT'::text, 'HALTED'::text, 'ACTIVE'::text]))),
     CONSTRAINT pgsql_instance_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
 );
 
 
 --
--- Name: catalog_compact; Type: VIEW; Schema: public; Owner: -
+-- Name: mgr_database; Type: VIEW; Schema: public; Owner: -
 --
 
-CREATE VIEW catalog_compact AS
- SELECT c.id,
+CREATE VIEW mgr_database AS
+ SELECT d.dbname,
     p.dns_name,
-    p.pgport,
-    ((c.dbname || '.'::text) || c.dumpschema) AS dbname,
-    c.dumptype,
-    c.bu_name,
-    c.starttime,
-    (c.endtime - c.starttime) AS duration,
-    c.status,
-    c.verified,
-    c.keep,
-    c.dbsize,
-    c.dumpsize
-   FROM ((pgsnap_catalog c
-     JOIN pgsnap_dumpjob j ON ((j.id = c.pgsnap_dumpjob_id)))
-     JOIN pgsql_instance p ON ((p.id = j.pgsql_instance_id)))
-  ORDER BY c.starttime;
-
-
---
--- Name: pgsnap_worker; Type: TABLE; Schema: public; Owner: -; Tablespace: 
---
-
-CREATE TABLE pgsnap_worker (
-    id integer NOT NULL,
-    dns_name text NOT NULL,
-    comment text,
-    cron_cacheconfig text DEFAULT '15 20 * * *'::text,
-    cron_singlejob text DEFAULT '* * * * *'::text,
-    cron_clean text DEFAULT '15 18 * * *'::text,
-    cron_upload text DEFAULT '*/5 * * * *'::text,
-    status text DEFAULT 'ACTIVE'::text,
-    date_added timestamp with time zone DEFAULT now(),
-    CONSTRAINT pgsnap_worker_cron_cacheconfig_check CHECK ((cron_cacheconfig ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
-    CONSTRAINT pgsnap_worker_cron_clean_check CHECK ((cron_clean ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
-    CONSTRAINT pgsnap_worker_cron_singlejob_check CHECK ((cron_singlejob ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
-    CONSTRAINT pgsnap_worker_cron_upload_check CHECK ((cron_upload ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
-    CONSTRAINT pgsnap_worker_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
-);
+    p.pgport
+   FROM (pgsnap_dumpjob d
+     JOIN pgsql_instance p ON ((p.id = d.pgsql_instance_id)))
+  GROUP BY p.dns_name, p.pgport, d.dbname
+  ORDER BY lower(d.dbname);
 
 
 --
@@ -663,60 +687,6 @@ CREATE VIEW vw_dumpjob_worker_instance AS
 
 
 --
--- Name: dumpjob_compact; Type: VIEW; Schema: public; Owner: -
---
-
-CREATE VIEW dumpjob_compact AS
- SELECT vw_dumpjob_worker_instance.id,
-    vw_dumpjob_worker_instance.pgsnap_worker_dns_name AS pgs_worker,
-    ((vw_dumpjob_worker_instance.pgsql_instance_dns_name || ':'::text) || vw_dumpjob_worker_instance.pgsql_instance_port) AS pgsql_instance,
-    vw_dumpjob_worker_instance.jobtype,
-    ((vw_dumpjob_worker_instance.dbname || '.'::text) || vw_dumpjob_worker_instance.dumpschema) AS dbname_schema,
-    vw_dumpjob_worker_instance.dumptype,
-    vw_dumpjob_worker_instance.dumpoptions,
-    vw_dumpjob_worker_instance.cron,
-    vw_dumpjob_worker_instance.comment,
-    vw_dumpjob_worker_instance.status,
-    vw_dumpjob_worker_instance.pgsnap_restorejob_id AS restorejob
-   FROM vw_dumpjob_worker_instance;
-
-
---
--- Name: instance_compact; Type: VIEW; Schema: public; Owner: -
---
-
-CREATE VIEW instance_compact AS
- SELECT pgsql_instance.id,
-    ((((pgsql_instance.pgsql_superuser || '@'::text) || pgsql_instance.dns_name) || ':'::text) || pgsql_instance.pgport) AS instance,
-    pgsql_instance.status,
-    pgsql_instance.bu_window_start AS def_start_hour,
-    pgsql_instance.bu_window_end AS def_end_hour,
-    pgsql_instance.pgsnap_worker_id_default AS default_worker
-   FROM pgsql_instance;
-
-
---
--- Name: mgr_catalog; Type: VIEW; Schema: public; Owner: -
---
-
-CREATE VIEW mgr_catalog AS
- SELECT c.id,
-    ((c.pgsql_dns_name || ':'::text) || c.pgsql_port) AS pgsql,
-    ((((c.pgsnap_dumpjob_id)::text || '/'::text) || (c.dbname || '.'::text)) || c.dumpschema) AS id_db_schema,
-    c.dumptype,
-    to_char(c.starttime, 'YYYY-MM-DD HH24:MI:SS'::text) AS starttime,
-    (c.endtime - c.starttime) AS duration,
-    c.status,
-    c.verified,
-    c.keep,
-    substr(c.message, 1, 32) AS message,
-    w.dns_name AS pgsnap_worker
-   FROM (pgsnap_catalog c
-     JOIN pgsnap_worker w ON ((w.id = c.bu_worker_id)))
-  ORDER BY c.starttime;
-
-
---
 -- Name: mgr_dumpjob; Type: VIEW; Schema: public; Owner: -
 --
 
@@ -742,12 +712,12 @@ CREATE VIEW mgr_dumpjob AS
 CREATE VIEW mgr_instance AS
  SELECT p.id,
     p.dns_name,
-    p.pgport,
+    p.pgport AS port,
     p.pgsql_superuser AS superuser,
     p.status,
-    p.bu_window_start AS hour_start,
-    p.bu_window_end AS hour_end,
-    w.dns_name AS def_pgsnap_worker,
+    p.bu_window_start AS hr_s,
+    p.bu_window_end AS hr_e,
+    (((w.dns_name || ' ('::text) || substr(p.def_jobstatus, 1, 1)) || ')'::text) AS def_worker_addjobstatus,
     p.comment,
     to_char(p.date_added, 'YYYY-MM-DD HH24:MI:SS'::text) AS date_added
    FROM (pgsql_instance p
@@ -1127,26 +1097,6 @@ CREATE SEQUENCE pgsql_instance_id_seq
 --
 
 ALTER SEQUENCE pgsql_instance_id_seq OWNED BY pgsql_instance.id;
-
-
---
--- Name: restorejob_compact; Type: VIEW; Schema: public; Owner: -
---
-
-CREATE VIEW restorejob_compact AS
- SELECT j.id,
-    w.dns_name AS pgs_worker,
-    ((p.dns_name || ':'::text) || p.pgport) AS pgsql_instance,
-    j.dest_dbname,
-    j.restoretype,
-    j.restoreschema,
-    j.restoreoptions,
-    j.cron,
-    j.comment
-   FROM (((pgsnap_restorejob j
-     JOIN pgsql_instance p ON ((p.id = j.dest_pgsql_instance_id)))
-     LEFT JOIN pgsnap_catalog c ON ((c.id = j.pgsnap_catalog_id)))
-     LEFT JOIN pgsnap_worker w ON ((w.id = c.bu_worker_id)));
 
 
 --
