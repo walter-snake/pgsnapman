@@ -210,7 +210,7 @@ function createdumpjobs {
 
   # Find the databases (exclude templates and all database that you cannot connect to)
   # Too lazy too look for the correct postgres binary version, not really important for this plain simple query 
-  local DBS=`${PGSCBIN}/psql ${pgsqlhost} -p ${3} -U ${4} --dbname=${MAINTDB} -A -t -c "SELECT datname FROM pg_database WHERE datistemplate = false AND datallowconn = true;"` 2> /dev/null
+  local DBS=`${PGSCBIN}/psql ${pgsqlhost} -p ${3} -U ${4} --dbname=${MAINTDB} --no-password -A -t -c "SELECT datname FROM pg_database WHERE datistemplate = false AND datallowconn = true;"` 2> /dev/null
   if [ "$?" != "0" ]; then
     return
   fi
@@ -218,9 +218,17 @@ function createdumpjobs {
   # Process the database list
   local c=0
   for line in ${DBS}; do
-    local HASJOB=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT get_hasjob(${1}, '${line}');"`
+    local HASJOB=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} --no-password -A -t -c "SELECT get_hasjob(${1}, '${line}');"`
     if [ "${HASJOB}" != "YES" ]; then
-      local jobid=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT put_dumpjob(${1}, '${line}', 'auto added dump job', '${AUTO_DUMPJOB_STATUS}');"`
+      # set status add policy
+      local istatus=""
+      local defjobstatus=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} --no-password -A -t -c "SELECT get_defjobstatus(${1});"`
+      if [ "${defjobstatus}" == "INHERIT" ]; then
+        istatus="${AUTO_DUMPJOB_STATUS}"
+      else
+        istatus="${defjobstatus}"
+      fi
+      local jobid=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} --no-password -A -t -c "SELECT put_dumpjob(${1}, '${line}', 'auto added dump job', '${istatus}');"`
       MSG="add database: ${fqdnhost}:${3}/${line} - job id: ${jobid} - status: ${AUTO_DUMPJOB_STATUS}"
       snaplog "WARNING" "${MSG}"
       preparecatalogdata "`date '+%Y%m%dT%H%M%S%z'`\tWARNING\t${TOOLNAME}\t${MSG}\tCACHE_CONFIG\t-1\t${BUWORKERID}" "${UPLOADDIR}/$$.pgsnap_cacheconfig.message.dat" "ADD" ""

@@ -21,23 +21,29 @@ DISPMODE = 'li'
 # dicts with abbreviations
 views = { 'wo' : 'mgr_worker', 'po' : 'mgr_instance', 'du' : 'mgr_dumpjob'
   , 'ca' : 'mgr_catalog', 're' : 'mgr_restorejob', 'lo' : 'mgr_restorelog'
-  , 'me' : 'mgr_message', 'ac' : 'pgsnap_activity' }
+  , 'me' : 'mgr_message', 'ac' : 'pgsnap_activity', 'db' : 'mgr_database'}
 tables = { 'wo' : 'pgsnap_worker', 'po' : 'pgsql_instance', 'du' : 'pgsnap_dumpjob'
   , 'ca' : 'pgsnap_catalog', 're' : 'pgsnap_restorejob', 'lo' : 'pgsnap_restorelog'
   , 'me' : 'pgsnap_message', 'ac' : 'pgsnap_activity' }
 titles = { 'wo' : 'PgSnapMan worker', 'po' : 'Postgres instance', 'du' : 'Dump job'
   , 'ca' : 'Backup catalog', 're' : 'Restore job', 'lo' : 'Restore log'
-  , 'me' : 'System message', 'ac' : 'Activity/running processes' }
+  , 'me' : 'System message', 'ac' : 'Activity/running processes', 'db' : 'Database overview' }
 hourfilters = { 'ca' : 'starttime', 'lo' : 'starttime' , 'me' : 'logtime', 'ac' : 'starttime' }
 dbfilters = { 'ca': "split_part(id_db_schema, '/', 2) like '{}.%'"
   , 'lo': "split_part(id_db_schema, '/', 2) like '{}.%'"
   , 're': "src_dbname like '{}'"
-  , 'du': "dbname like '{}'" }
+  , 'du': "dbname like '{}'" 
+  , 'db': "dbname ilike '{}'" }
 jobidfilters = { 'du' : 'id={}'
   , 're' : 'id={}'
   , 'ca' : "split_part(id_db_schema, '/', 1) like '{}'"
   , 'lo' : "split_part(id_db_schema, '/', 1) like '{}'" }
-
+jobtypefilters = { 'du' : "substr(schedule, 1, 1) = substr('{}', 1, 1)"
+  , 're' : "substr(schedule, 1, 1) = substr('{}', 1, 1)" }
+statusfilters = { 'po' : "substr(status, 1, 1) = substr('{}', 1, 1)"
+  , 'wo' : "substr(status, 1, 1) = substr('{}', 1, 1)"
+  , 'du' : "substr(status, 1, 1) = substr('{}', 1, 1)"
+  , 're' : "substr(status, 1, 1) = substr('{}', 1, 1)" }
   
 def get_script_path():
     return os.path.dirname(os.path.realpath(sys.argv[0]))
@@ -219,11 +225,11 @@ def insertWorker(dns_name, cron_cacheconfig, cron_singlejob, cron_clean, cron_up
     conn.close()
     return row[0]
 
-def insertInstance(dns_name, pgport, pgsql_superuser, bu_window_start, bu_window_end, pgsnap_worker_id_default, comment):
+def insertInstance(dns_name, pgport, pgsql_superuser, bu_window_start, bu_window_end, pgsnap_worker_id_default, comment, def_jobstatus):
     conn = psycopg2.connect('host={} port={} dbname={} user={} password={}'.format(PGSCHOST, PGSCPORT, PGSCDB, PGSCUSER, PGSCPASSWORD))  
     cur = conn.cursor()
-    sql = 'insert into pgsql_instance (dns_name, pgport, pgsql_superuser, bu_window_start, bu_window_end, pgsnap_worker_id_default, comment) VALUES (%s, %s, %s, %s, %s, %s, %s) returning id;'
-    cur.execute(sql, (dns_name, pgport, pgsql_superuser, bu_window_start, bu_window_end, pgsnap_worker_id_default, comment))
+    sql = 'insert into pgsql_instance (dns_name, pgport, pgsql_superuser, bu_window_start, bu_window_end, pgsnap_worker_id_default, comment, def_jobstatus) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) returning id;'
+    cur.execute(sql, (dns_name, pgport, pgsql_superuser, bu_window_start, bu_window_end, pgsnap_worker_id_default, comment, def_jobstatus))
     row = cur.fetchone()
     print('-> Registered postgres instance with id: {}'.format(row[0]))
     conn.commit()
@@ -341,15 +347,16 @@ def registerInstance():
   bu_window_start = getInput('backup window start hour:', ["hour: the start of the time range that will be used to automatically generate a \n  backup time, you may always set the backup to any desired schedule\n    (0-23)"], '20', 54, False)
   bu_window_end = getInput('backup window end hour:', ["hour: the end of the time range that will be used to automatically generate a \n  backup time, you may always set the backup to any desired schedule\n    (0-23)"], '6', 54, False)
   pgsnap_worker_id_default = getInput('default pgsnapman worker', ['id of an existing worker'], '', 54, False)
+  def_jobstatus = getInput('auto-add job status', ['default status for auto-added jobs', 'INHERIT', 'ACTIVE', 'HALTED'], 'INHERIT', 54, False)
   comment = getInput('comment', ['optional comments'], '', 54)
   yn = raw_input('Save new instance? [Yn] ')
   if not yn.lower() == 'n':
-    id = insertInstance(dns_name, pgport, pgsql_superuser, bu_window_start, bu_window_end, pgsnap_worker_id_default, comment)
+    id = insertInstance(dns_name, pgport, pgsql_superuser, bu_window_start, bu_window_end, pgsnap_worker_id_default, comment, def_jobstatus)
     listDetails('pgsql_instance', id, 'Verify instance details')
     print('')
     yn = raw_input('Do you want to edit the instance? [yN] ')
     if yn.lower() == 'y':
-      editRecord('pgsql_instance', id, ['status', 'pgsql_superuser', 'bu_window_start', 'bu_window_end', 'pgsnap_worker_id_default', 'comment'])
+      editRecord('pgsql_instance', id, ['status', 'pgsql_superuser', 'bu_window_start', 'bu_window_end', 'pgsnap_worker_id_default', 'def_jobstatus', 'comment'])
   print('')
 
 # add dump job
@@ -559,25 +566,37 @@ Log of restore jobs
   log-restore(.options) (filter)
   log-restore export
   
-Messages
---------
+Miscellaneous lists
+-------------------
   message list(.options) (filter)
   message export
   
   activity list(.options) (filter)
   
+  database list(.options) (filter)
+  
+Option and filter syntax
+------------------------
 .options: list sorting, limiting
            .asc
            .desc
            .<limit>
 filter:  filter options, either one of the predefined filters
-           .hour=<hours_back_from_now> (on every list with a time stamp, decimal allowed)
-           .jobid=<job_id> (on dump job and catalog, and on restore job and restore log lists)
-           .db=<database_name> (on catalog and restore log lists, wildchard % allowed)
+           .hour=<hours_back_from_now> (on every list with a time stamp,
+                                        decimal dot allowed)
+           .jobid=<job_id> (on dump job and catalog, and on restore job
+                            and restore log lists)
+           .jobtype=<job_type> (on dump and restore job)
+           .status=<status> (on worker, pgsql instance, dump job
+                             and restore job)
+           .db=<database_name> (on database, catalog and restore log lists,
+                                wildchard % allowed)
            "<postgres_filter" regular Postgres filter, you may filter on every
                               column available in the view; for security
                               reasons using a ; is not allowed
 
+         Note: for jobtype and status only the first letter is needed.
+                              
 """  
 
 # Generic list viewer
@@ -626,8 +645,12 @@ def processFilter(list, filter):
     return "(now() - {}::timestamp without time zone) < '{} hours'::interval".format(hourfilters[list], val)
   elif filter.startswith('.jobid='):
     return jobidfilters[list].format(val)
+  elif filter.startswith('.jobtype='):
+    return jobtypefilters[list].format(val)
   elif filter.startswith('.db='):
     return dbfilters[list].format(val)
+  elif filter.startswith('.status='):
+    return statusfilters[list].format(val)
 
 # Generic list viewer
 def exportView(task):
@@ -644,7 +667,7 @@ def workerTask(task):
     setTableColumn('pgsnap_worker', 'status', id, status, True)
   elif t == 'ed': # edit record
     id = tokens[2]
-    editRecord('pgsnap_worker', id, ['cron_cacheconfig', 'cron_singlejob', 'cron_clean', 'cron_upload', 'comment', 'status'])
+    editRecord('pgsnap_worker', id, ['cron_cacheconfig', 'cron_singlejob', 'cron_clean', 'cron_upload', 'status', 'comment'])
   elif t == 're': # register worker   
     registerWorker()
   elif t == 'de': # delete worker
@@ -662,7 +685,7 @@ def instanceTask(task):
     setTableColumn('pgsql_instance', 'status', id, status, True)
   elif t == 'ed': # edit record
     id = tokens[2]
-    editRecord('pgsql_instance', id, ['pgsql_superuser', 'bu_window_start', 'bu_window_end', 'pgsnap_worker_id_default', 'comment', 'status'])
+    editRecord('pgsql_instance', id, ['pgsql_superuser', 'bu_window_start', 'bu_window_end', 'pgsnap_worker_id_default', 'def_jobstatus', 'status', 'comment'])
   elif t == 're': # register instance
     registerInstance()
   elif t == 'de': # delete instance
@@ -680,7 +703,7 @@ def dumpjobTask(task):
     setTableColumn('pgsnap_dumpjob', 'status', id, status, True)
   elif t == 'ed': # edit record
     id = tokens[2]
-    editRecord('pgsnap_dumpjob', id, ['jobtype', 'cron', 'dumpoptions', 'keep_daily', 'keep_weekly', 'keep_monthly', 'keep_yearly', 'pgsnap_restorejob_id', 'comment', 'status'])
+    editRecord('pgsnap_dumpjob', id, ['jobtype', 'cron', 'dumpoptions', 'keep_daily', 'keep_weekly', 'keep_monthly', 'keep_yearly', 'pgsnap_restorejob_id', 'status', 'comment'])
   elif t == 'ad': # add dumpjob    
     addDumpJob()
   elif t == 'de': # delete dumpjob
@@ -701,7 +724,7 @@ def restorejobTask(task):
     setTableColumn('pgsnap_restorejob', 'status', id, status, True)
   elif t == 'ed': # edit record
     id = tokens[2]
-    editRecord('pgsnap_restorejob', id, ['jobtype', 'cron', 'dest_pgsql_instance_id', 'dest_dbname', 'restoretype', 'restoreschema', 'restoreoptions', 'role_handling', 'tblspc_handling', 'comment', 'status'])
+    editRecord('pgsnap_restorejob', id, ['jobtype', 'cron', 'dest_pgsql_instance_id', 'dest_dbname', 'restoretype', 'restoreschema', 'restoreoptions', 'role_handling', 'tblspc_handling', 'status', 'comment'])
   elif t == 'ad': # add restorejob    
     addRestoreJob()
   elif t == 'de': # delete restorejob
@@ -755,7 +778,7 @@ def activityTask(task):
 
 def processCommand(cmd):
     
-  try:
+  # try:
     task = cmd.strip()
     # multiple token commands first
     if len(task.split()) >= 2:
@@ -788,9 +811,9 @@ def processCommand(cmd):
         listView(task + ' li')
       else:
         print("ERROR unknown command\n")
-  except Exception:
-    print Exception
-    print('Invalid command, options (like a non-existing or missing id)')
+  # except Exception:
+    # print Exception
+    # print('Invalid command, options (like a non-existing or missing id)')
       
 # ================================================================
 # 'MAIN'
