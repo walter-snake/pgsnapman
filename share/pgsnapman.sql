@@ -793,7 +793,7 @@ CREATE VIEW mgr_dumpjob AS
     vw_dumpjob_worker_instance.dbname,
     vw_dumpjob_worker_instance.dumpschema AS schema,
     vw_dumpjob_worker_instance.dumptype AS type,
-    vw_dumpjob_worker_instance.pgsnap_restorejob_id AS restorejob,
+    COALESCE(vw_dumpjob_worker_instance.pgsnap_restorejob_id, ''::text) AS restorejob,
     (("substring"(vw_dumpjob_worker_instance.jobtype, 1, 1) || '/'::text) || vw_dumpjob_worker_instance.cron) AS schedule,
     vw_dumpjob_worker_instance.status,
     substr(vw_dumpjob_worker_instance.comment, 1, 32) AS comment,
