@@ -623,6 +623,36 @@ CREATE TABLE pgsnap_dumpjob (
 
 
 --
+-- Name: pgsnap_restorejob; Type: TABLE; Schema: public; Owner: -; Tablespace: 
+--
+
+CREATE TABLE pgsnap_restorejob (
+    id integer NOT NULL,
+    dest_pgsql_instance_id integer NOT NULL,
+    dest_dbname text NOT NULL,
+    restoretype text DEFAULT 'FULL'::text,
+    restoreschema text DEFAULT '*'::text NOT NULL,
+    restoreoptions text DEFAULT ''::text,
+    existing_db text DEFAULT 'RENAME'::text,
+    status text DEFAULT 'ACTIVE'::text,
+    comment text,
+    jobtype text DEFAULT 'SINGLE'::text,
+    cron text DEFAULT '* * * * *'::text NOT NULL,
+    pgsnap_catalog_id integer,
+    role_handling text DEFAULT 'USE_ROLE'::text,
+    tblspc_handling text DEFAULT 'NO_TBLSPC'::text,
+    date_added timestamp with time zone DEFAULT now(),
+    CONSTRAINT pgsnap_restorejob_cron_check CHECK ((cron ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
+    CONSTRAINT pgsnap_restorejob_dest_dbname_check CHECK ((dest_dbname ~ '^[^".]*$'::text)),
+    CONSTRAINT pgsnap_restorejob_existing_db_check CHECK ((existing_db = ANY (ARRAY['DROP'::text, 'RENAME'::text, 'DROP_BEFORE'::text]))),
+    CONSTRAINT pgsnap_restorejob_jobtype_check CHECK ((jobtype = ANY (ARRAY['SINGLE'::text, 'REPEAT'::text, 'TRIGGER'::text]))),
+    CONSTRAINT pgsnap_restorejob_restoreschema_check CHECK ((restoreschema ~ '^[^".]*$'::text)),
+    CONSTRAINT pgsnap_restorejob_restoretype_check CHECK ((restoretype = ANY (ARRAY['FULL'::text, 'DATA'::text, 'SCHEMA'::text]))),
+    CONSTRAINT pgsnap_restorejob_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
+);
+
+
+--
 -- Name: pgsql_instance; Type: TABLE; Schema: public; Owner: -; Tablespace: 
 --
 
@@ -641,6 +671,72 @@ CREATE TABLE pgsql_instance (
     CONSTRAINT pgsql_instance_def_jobstatus_check CHECK ((def_jobstatus = ANY (ARRAY['INHERIT'::text, 'HALTED'::text, 'ACTIVE'::text]))),
     CONSTRAINT pgsql_instance_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
 );
+
+
+--
+-- Name: mgr_copyjob; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW mgr_copyjob AS
+ WITH dj_rj AS (
+         SELECT d_1.id AS djid,
+            (unnest(string_to_array(d_1.pgsnap_restorejob_id, ','::text)))::integer AS rjid
+           FROM pgsnap_dumpjob d_1
+          WHERE (NOT ((d_1.pgsnap_restorejob_id IS NULL) OR (d_1.pgsnap_restorejob_id = ''::text)))
+        )
+ SELECT d.id,
+    r.id AS rid,
+    ((pd.dns_name || ':'::text) || pd.pgport) AS src_pgsql_instance,
+    d.dbname AS src_dbname,
+    d.dumpschema AS src_schema,
+    d.dumptype AS dtype,
+    ((substr(d.jobtype, 1, 1) || '/'::text) || d.cron) AS schedule,
+    d.status AS dstatus,
+    ((rd.dns_name || ':'::text) || rd.pgport) AS dest_pgsql_instance,
+    r.dest_dbname,
+    r.restoreschema AS dest_schema,
+    r.restoretype AS rtype,
+    r.status AS rstatus
+   FROM ((((pgsnap_dumpjob d
+     JOIN dj_rj l ON ((l.djid = d.id)))
+     JOIN pgsnap_restorejob r ON ((r.id = l.rjid)))
+     JOIN pgsql_instance pd ON ((pd.id = d.pgsql_instance_id)))
+     JOIN pgsql_instance rd ON ((rd.id = d.pgsql_instance_id)))
+  ORDER BY d.dbname, pd.dns_name, pd.pgport;
+
+
+--
+-- Name: mgr_copyjob_detail; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW mgr_copyjob_detail AS
+ WITH dj_rj AS (
+         SELECT d_1.id AS djid,
+            (unnest(string_to_array(d_1.pgsnap_restorejob_id, ','::text)))::integer AS rjid
+           FROM pgsnap_dumpjob d_1
+          WHERE (NOT ((d_1.pgsnap_restorejob_id IS NULL) OR (d_1.pgsnap_restorejob_id = ''::text)))
+        )
+ SELECT d.id,
+    r.id AS rid,
+    ((pd.dns_name || ':'::text) || pd.pgport) AS src_pgsql_instance,
+    d.dbname AS src_dbname,
+    d.dumpschema AS src_schema,
+    d.dumptype AS dtype,
+    ((substr(d.jobtype, 1, 1) || '/'::text) || d.cron) AS schedule,
+    d.status AS dstatus,
+    COALESCE(d.comment, ''::text) AS dcomment,
+    ((rd.dns_name || ':'::text) || rd.pgport) AS dest_pgsql_instance,
+    r.dest_dbname,
+    r.restoreschema AS dest_schema,
+    r.restoretype AS rtype,
+    r.status AS rstatus,
+    COALESCE(r.comment, ''::text) AS rcomment
+   FROM ((((pgsnap_dumpjob d
+     JOIN dj_rj l ON ((l.djid = d.id)))
+     JOIN pgsnap_restorejob r ON ((r.id = l.rjid)))
+     JOIN pgsql_instance pd ON ((pd.id = d.pgsql_instance_id)))
+     JOIN pgsql_instance rd ON ((rd.id = d.pgsql_instance_id)))
+  ORDER BY d.id, r.id;
 
 
 --
@@ -756,36 +852,6 @@ CREATE VIEW mgr_message AS
     pgsnap_message.jobid
    FROM pgsnap_message
   ORDER BY pgsnap_message.logtime;
-
-
---
--- Name: pgsnap_restorejob; Type: TABLE; Schema: public; Owner: -; Tablespace: 
---
-
-CREATE TABLE pgsnap_restorejob (
-    id integer NOT NULL,
-    dest_pgsql_instance_id integer NOT NULL,
-    dest_dbname text NOT NULL,
-    restoretype text DEFAULT 'FULL'::text,
-    restoreschema text DEFAULT '*'::text NOT NULL,
-    restoreoptions text DEFAULT ''::text,
-    existing_db text DEFAULT 'RENAME'::text,
-    status text DEFAULT 'ACTIVE'::text,
-    comment text,
-    jobtype text DEFAULT 'SINGLE'::text,
-    cron text DEFAULT '* * * * *'::text NOT NULL,
-    pgsnap_catalog_id integer,
-    role_handling text DEFAULT 'USE_ROLE'::text,
-    tblspc_handling text DEFAULT 'NO_TBLSPC'::text,
-    date_added timestamp with time zone DEFAULT now(),
-    CONSTRAINT pgsnap_restorejob_cron_check CHECK ((cron ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
-    CONSTRAINT pgsnap_restorejob_dest_dbname_check CHECK ((dest_dbname ~ '^[^".]*$'::text)),
-    CONSTRAINT pgsnap_restorejob_existing_db_check CHECK ((existing_db = ANY (ARRAY['DROP'::text, 'RENAME'::text, 'DROP_BEFORE'::text]))),
-    CONSTRAINT pgsnap_restorejob_jobtype_check CHECK ((jobtype = ANY (ARRAY['SINGLE'::text, 'REPEAT'::text, 'TRIGGER'::text]))),
-    CONSTRAINT pgsnap_restorejob_restoreschema_check CHECK ((restoreschema ~ '^[^".]*$'::text)),
-    CONSTRAINT pgsnap_restorejob_restoretype_check CHECK ((restoretype = ANY (ARRAY['FULL'::text, 'DATA'::text, 'SCHEMA'::text]))),
-    CONSTRAINT pgsnap_restorejob_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'HALTED'::text])))
-);
 
 
 --

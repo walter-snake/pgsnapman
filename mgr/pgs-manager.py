@@ -5,6 +5,7 @@
 import readline
 import sys
 import os
+import signal
 from os.path import expanduser
 from configreader import ConfigReader
 import getpass
@@ -21,29 +22,36 @@ DISPMODE = 'li'
 # dicts with abbreviations
 views = { 'wo' : 'mgr_worker', 'po' : 'mgr_instance', 'du' : 'mgr_dumpjob'
   , 'ca' : 'mgr_catalog', 're' : 'mgr_restorejob', 'lo' : 'mgr_restorelog'
-  , 'me' : 'mgr_message', 'ac' : 'pgsnap_activity', 'db' : 'mgr_database'}
+  , 'me' : 'mgr_message', 'ac' : 'pgsnap_activity', 'db' : 'mgr_database'
+  , 'co': 'mgr_copyjob'}
 tables = { 'wo' : 'pgsnap_worker', 'po' : 'pgsql_instance', 'du' : 'pgsnap_dumpjob'
   , 'ca' : 'pgsnap_catalog', 're' : 'pgsnap_restorejob', 'lo' : 'pgsnap_restorelog'
-  , 'me' : 'pgsnap_message', 'ac' : 'pgsnap_activity' }
+  , 'me' : 'pgsnap_message', 'ac' : 'pgsnap_activity' 
+  , 'co' : 'mgr_copyjob_detail'}
 titles = { 'wo' : 'PgSnapMan worker', 'po' : 'Postgres instance', 'du' : 'Dump job'
   , 'ca' : 'Backup catalog', 're' : 'Restore job', 'lo' : 'Restore log'
-  , 'me' : 'System message', 'ac' : 'Activity/running processes', 'db' : 'Database overview' }
+  , 'me' : 'System message', 'ac' : 'Activity/running processes', 'db' : 'Database overview'
+  , 'co' : 'Copy jobs (linked dump and restore jobs)'}
 hourfilters = { 'ca' : 'starttime', 'lo' : 'starttime' , 'me' : 'logtime', 'ac' : 'starttime' }
 dbfilters = { 'ca': "split_part(id_db_schema, '/', 2) like '{}.%'"
   , 'lo': "split_part(id_db_schema, '/', 2) like '{}.%'"
   , 're': "src_dbname like '{}'"
   , 'du': "dbname like '{}'" 
-  , 'db': "dbname ilike '{}'" }
+  , 'db': "dbname ilike '{}'" 
+  , 'co': "src_dbname ilike '{}'"}
 jobidfilters = { 'du' : 'id={}'
   , 're' : 'id={}'
   , 'ca' : "split_part(id_db_schema, '/', 1) like '{}'"
-  , 'lo' : "split_part(id_db_schema, '/', 1) like '{}'" }
+  , 'lo' : "split_part(id_db_schema, '/', 1) like '{}'"
+  , 'co' : "id = {}"  }
 jobtypefilters = { 'du' : "substr(schedule, 1, 1) = substr('{}', 1, 1)"
-  , 're' : "substr(schedule, 1, 1) = substr('{}', 1, 1)" }
+  , 're' : "substr(schedule, 1, 1) = substr('{}', 1, 1)" 
+  , 'co' : "substr(schedule, 1, 1) = substr('{}', 1, 1)" }
 statusfilters = { 'po' : "substr(status, 1, 1) = substr('{}', 1, 1)"
   , 'wo' : "substr(status, 1, 1) = substr('{}', 1, 1)"
   , 'du' : "substr(status, 1, 1) = substr('{}', 1, 1)"
-  , 're' : "substr(status, 1, 1) = substr('{}', 1, 1)" }
+  , 're' : "substr(status, 1, 1) = substr('{}', 1, 1)" 
+  , 'co' : "substr(dstatus, 1, 1) = substr('{}', 1, 1)" }
   
 def get_script_path():
     return os.path.dirname(os.path.realpath(sys.argv[0]))
@@ -103,18 +111,22 @@ def listDbView(viewname, title, search, idsort, limit = ''):
 def listDetails(tablename, id, title):
   conn = psycopg2.connect('host={} port={} dbname={} user={} password={}'.format(PGSCHOST, PGSCPORT, PGSCDB, PGSCUSER, PGSCPASSWORD))  
   cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-  cur.execute('SELECT * FROM ' + tablename + ' WHERE id = %s;', (id, ))
-  rec = cur.fetchone()
-  if rec == None:
+  cur.execute('SELECT * FROM ' + tablename + ' WHERE id = %s;', (id, ))  
+  rows = cur.fetchall()  
+  cur.close()
+  conn.close()
+  if len(rows) == 0:
     print("ERROR id {} not found\n".format(str(id)))
     return False
-  colnames = [desc[0] for desc in cur.description]
-  print ''
-  print title
-  print ''.ljust(48, '-')
-  for c in colnames:
-    print(c.ljust(26) + str(rec[c]))
-  print ''
+  
+  for r in rows:
+    colnames = [desc[0] for desc in cur.description]
+    print ''
+    print title
+    print ''.ljust(48, '-')
+    for c in colnames:
+      print(c.ljust(26) + str(r[c]))
+    print ''
   return True
 
 def setTableColumn(tablename, column, id, value, showresults = False):
@@ -551,9 +563,10 @@ Restore job management
   restorejob delete <id>
   restorejob export
 
-Trigger jobs
+Copy jobs
 ------------
-  trigger
+  copyjob list(.options) (filter)
+  copyjob add
 
 Catalog management
 ------------------
@@ -582,6 +595,7 @@ Option and filter syntax
            .desc
            .<limit>
 filter:  filter options, either one of the predefined filters
+           id=<id> full details
            .hour=<hours_back_from_now> (on every list with a time stamp,
                                         decimal dot allowed)
            .jobid=<job_id> (on dump job and catalog, and on restore job
@@ -743,7 +757,13 @@ def catalogTask(task):
   else:
     print("ERROR unknown sub command\n")
 
-def triggerTask(task):
+def copyTask(task):
+  tokens = task.split(' ')
+  t = task.split(' ')[1][:2]
+  if not t == 'ad':
+    print("ERROR unknown sub command\n")
+    return
+
   # create one or more restorejob tasks, and call dumpjob with new ids
   print("Create a 'copy' job")
   print("===================")
@@ -798,6 +818,8 @@ def processCommand(cmd):
         restorejobTask(task)  
       elif task[:2].lower() == 'ac':
         activityTask(task)  
+      elif task[:2].lower() == 'co':
+        copyTask(task)
       else:
         print("ERROR unknown command\n")
     else: 
@@ -805,8 +827,6 @@ def processCommand(cmd):
         sys.exit(0)
       elif task[:1].lower() == 'h':
         showHelp()
-      elif task[:2].lower() == 'tr':
-        triggerTask(task)
       elif len(task.split()) == 1 :
         listView(task + ' li')
       else:

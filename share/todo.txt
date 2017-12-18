@@ -1,0 +1,66 @@
+Todo list, * is: done
+
+* init procedure: meld het als worker niet geconfigureerd is
+* oplossen ongeldige upload files (die mogelijk niet ongeldig zijn): / must be escaped (pgsnap_lib, check ook andere)
+* manager: edit jobtype too (jobtype als eerste)
+* python shebang line
+* config location manager relative (win: ok, linux: )
+* restorejob database name zoeken
+* dumpjob db name zoeken
+* restore log should include original database name
+* bij messages: welke worker heeft die gestuurd
+* report hostname in init log row : was voor initializatie perikelen, geeft weer bij init
+* fix adding instance bu_window_set
+* manager bij lijsten op datum zoeken in alleen de laatste zoveel uur (mag decimaal)
+* help manager bijwerken
+* check op absolute paden (upload, script, temp, dedupdata, snapshots)
+* fixes error in grep on role names in cluster globals
+* check grep versie, set flags: -P (GNU) of -E (BSD)
+  * check log upload
+  * check restore/grep roles etc
+* logs platform and grep flags in init log line
+* make a check on functioning grep version (e.g. a test line for the complex catalog upload pattern)
+* GNU systems grep default -P (???)
+* fixes error in message worker id upload
+* changed default schedule in manager for cacheconfig
+* added readline to manager/script apps (to prevent all sorts of unwanted behaviour), on Windows install pyreadline
+* fixes error in check pattern: added - as allowed in hostnames and paths
+* some changes in pgs-manager, for better readability
+* added md5 coniguration check (too tricky if not properly set up)
+* upload also without log entry
+* clean not working on scheduler, environment -> cron problem, restart daemon solved it
+* manager tab clean separated output (display, redirect for file)
+* cacheconfig unwanted output auto add in mail on cron (add database, new dump job created)
+* drop a job - in manager ask if backups should be removed too, if so: mark as keep='NO', and then everything will get removed with the first cleaning operation, otherwise the backups will be removed according to the delete retention policy
+* cacheconfig: do not update cron when no changes
+* upload message on crontab change
+* somehow prevent halted jobs from showing up every time again in the message log
+* list ordering by id up and down in manager
+* timer on config check, warns when taking > 30s
+* dedup not working on CentOS: stat flags (now configurable)
+* dedup run only once
+* trigger jobs start through separate script: dump can end
+* environment check includes stat, refactored and improved messaging
+* restore quits when log entry can not be inserted (indicates missing job entry in database)
+* activity table in database (unlogged)
+* manager can display activity
+* limit /sort desc wrong (limit on download sort, order issue) 
+* clear activity table (just in case)
+* 3 'exit' calls without cleanup, check (2 corrected)
+* mgr_catalog-message order by time
+* mgr-dumbjob include cron (prefix with letter for repeat/single, show 'TRIGGER' when trigger)
+* pgsnap_dump puts twice a record in the activity log: fixed (left over sql call removed which used the then still active sql)
+* manager list default
+* manager can edit restore trigger
+* per postgres instance status override for auto-added jobs
+* removed some old views, not all
+* list jobs by jobtype (SINGLE, TRIGGER, REPEAT)
+* list jobs by status
+* display pure database overview (makes sense: in auto mode every database should be listed)
+* remove restore log with deleting a restore job
+* added cat id to restore jobs list
+* minor tweaks to logging
+* added details view to copyjobs
+* renamed trigger job to copy job in manager (more functional name)
+
+
