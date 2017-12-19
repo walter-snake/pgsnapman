@@ -44,6 +44,51 @@ CREATE FUNCTION del_catalog(cat_id integer) RETURNS void
 
 
 --
+-- Name: get_aclroles(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION get_aclroles() RETURNS SETOF record
+    LANGUAGE plpgsql
+    AS $$
+declare
+sql text;
+r record;
+aclinfo record;
+begin
+  -- find all catalog tables that contain acl information
+  for r in select relname, attname
+      from pg_attribute a
+      join pg_class c
+        on a.attrelid = c.oid
+      join pg_type t
+        on atttypid = t.oid
+      where attname like '%acl%'
+        and t.typname = '_aclitem' -- acl array
+        loop
+    -- raise notice 'catalog: %.%', r.relname, r.attname;
+
+    -- query each catalog table for acl info
+    DROP TABLE IF EXISTS myacls;
+    if not r.relname = 'myacls' then
+      sql := 'CREATE TEMP TABLE myacls AS SELECT ' || r.attname || ' as xxx FROM ' || r.relname || ' WHERE NOT ' || r.attname || ' IS NULL;';
+      EXECUTE sql;
+--       for aclinfo in select split_part(xxx::text, '='::text, 1) as rights
+--         from (select distinct unnest(xxx) as xxx from myacls) as a
+      for aclinfo in select distinct split_part(xxx, '=' , 1) as the_role
+          from (select distinct unnest(xxx)::text as xxx from myacls) a
+        where not split_part(xxx, '=' , 1) = ''
+      loop
+        return next aclinfo;
+        -- raise notice 'acl: %', aclinfo.xxx;
+      end loop;
+    end if;
+    -- raise notice 'sql: %', sql;
+  end loop;
+end;
+$$;
+
+
+--
 -- Name: get_catalogidexists(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -686,17 +731,21 @@ CREATE VIEW mgr_copyjob AS
         )
  SELECT d.id,
     r.id AS rid,
-    ((pd.dns_name || ':'::text) || pd.pgport) AS src_pgsql_instance,
-    d.dbname AS src_dbname,
-    d.dumpschema AS src_schema,
-    d.dumptype AS dtype,
+    ((pd.dns_name || '
+'::text) || pd.pgport) AS s_pgsql,
+    d.dbname AS s_dbname,
+    d.dumpschema AS s_dschema,
+    d.dumptype AS s_dtype,
     ((substr(d.jobtype, 1, 1) || '/'::text) || d.cron) AS schedule,
     d.status AS dstatus,
-    ((rd.dns_name || ':'::text) || rd.pgport) AS dest_pgsql_instance,
-    r.dest_dbname,
-    r.restoreschema AS dest_schema,
-    r.restoretype AS rtype,
-    r.status AS rstatus
+    ((rd.dns_name || '
+'::text) || rd.pgport) AS d_pgsql,
+    r.dest_dbname AS d_dbname,
+    r.restoreschema AS d_rschema,
+    r.restoretype AS d_rtype,
+    r.status AS rstatus,
+    to_char(d.date_added, 'YYYY-MM-DD
+HH24:MI:SS'::text) AS date_added
    FROM ((((pgsnap_dumpjob d
      JOIN dj_rj l ON ((l.djid = d.id)))
      JOIN pgsnap_restorejob r ON ((r.id = l.rjid)))
@@ -746,10 +795,11 @@ CREATE VIEW mgr_copyjob_detail AS
 CREATE VIEW mgr_database AS
  SELECT d.dbname,
     p.dns_name,
-    p.pgport
+    p.pgport,
+    to_char(d.date_added, 'YYYY-MM-DD'::text) AS date_added
    FROM (pgsnap_dumpjob d
      JOIN pgsql_instance p ON ((p.id = d.pgsql_instance_id)))
-  GROUP BY p.dns_name, p.pgport, d.dbname
+  GROUP BY p.dns_name, p.pgport, d.dbname, d.date_added
   ORDER BY lower(d.dbname);
 
 
@@ -789,7 +839,8 @@ CREATE VIEW vw_dumpjob_worker_instance AS
 
 CREATE VIEW mgr_dumpjob AS
  SELECT vw_dumpjob_worker_instance.id,
-    ((vw_dumpjob_worker_instance.pgsql_instance_dns_name || ':'::text) || vw_dumpjob_worker_instance.pgsql_instance_port) AS pgsql,
+    ((vw_dumpjob_worker_instance.pgsql_instance_dns_name || '
+'::text) || vw_dumpjob_worker_instance.pgsql_instance_port) AS pgsql,
     vw_dumpjob_worker_instance.dbname,
     vw_dumpjob_worker_instance.dumpschema AS schema,
     vw_dumpjob_worker_instance.dumptype AS type,
@@ -797,8 +848,11 @@ CREATE VIEW mgr_dumpjob AS
     (("substring"(vw_dumpjob_worker_instance.jobtype, 1, 1) || '/'::text) || vw_dumpjob_worker_instance.cron) AS schedule,
     vw_dumpjob_worker_instance.status,
     substr(vw_dumpjob_worker_instance.comment, 1, 32) AS comment,
-    vw_dumpjob_worker_instance.pgsnap_worker_dns_name AS pgsnap_worker
-   FROM vw_dumpjob_worker_instance
+    vw_dumpjob_worker_instance.pgsnap_worker_dns_name AS pgsnap_worker,
+    to_char(pgsnap_dumpjob.date_added, 'YYYY-MM-DD
+HH24:MI:SS'::text) AS date_added
+   FROM (vw_dumpjob_worker_instance
+     JOIN pgsnap_dumpjob ON ((vw_dumpjob_worker_instance.id = pgsnap_dumpjob.id)))
   ORDER BY ((lower(vw_dumpjob_worker_instance.dbname) || '.'::text) || lower(vw_dumpjob_worker_instance.dumpschema));
 
 
@@ -861,11 +915,12 @@ CREATE VIEW mgr_message AS
 CREATE VIEW mgr_restorejob AS
  SELECT j.id,
     COALESCE((c.id)::text, 'N/A'::text) AS cat_id,
-    COALESCE(c.dbname, 'N/A'::text) AS src_dbname,
-    ((p.dns_name || ':'::text) || p.pgport) AS dest_pgsql,
-    j.dest_dbname,
-    j.restoreschema AS schema,
-    j.restoretype AS type,
+    COALESCE(c.dbname, 'N/A'::text) AS s_dbname,
+    ((p.dns_name || '
+'::text) || p.pgport) AS d_pgsql,
+    j.dest_dbname AS d_dbname,
+    j.restoreschema AS d_rschema,
+    j.restoretype AS d_rtype,
     j.restoreoptions AS options,
         CASE
             WHEN (j.jobtype = 'TRIGGER'::text) THEN j.jobtype
@@ -873,7 +928,9 @@ CREATE VIEW mgr_restorejob AS
         END AS schedule,
     j.status,
     j.comment,
-    COALESCE(w.dns_name, '(trigger)'::text) AS pgsnap_worker
+    COALESCE(w.dns_name, '(trigger)'::text) AS pgsnap_worker,
+    to_char(j.date_added, 'YYYY-MM-DD
+HH24:MI:SS'::text) AS date_added
    FROM (((pgsnap_restorejob j
      JOIN pgsql_instance p ON ((p.id = j.dest_pgsql_instance_id)))
      LEFT JOIN pgsnap_catalog c ON ((c.id = j.pgsnap_catalog_id)))
@@ -909,11 +966,13 @@ CREATE TABLE pgsnap_restorelog (
 
 CREATE VIEW mgr_restorelog AS
  SELECT pgsnap_restorelog.id,
-    pgsnap_restorelog.src_dbname,
-    ((pgsnap_restorelog.pgsql_dns_name || ':'::text) || pgsnap_restorelog.pgsql_port) AS dest_pgsql,
+    pgsnap_restorelog.src_dbname AS s_dbname,
+    ((pgsnap_restorelog.pgsql_dns_name || '
+'::text) || pgsnap_restorelog.pgsql_port) AS d_pgsql,
     ((((pgsnap_restorelog.pgsnap_restorejob_id || '/'::text) || pgsnap_restorelog.dest_dbname) || '.'::text) || pgsnap_restorelog.restoreschema) AS id_db_schema,
     pgsnap_restorelog.restoretype,
-    to_char(pgsnap_restorelog.starttime, 'YYYY-MM-DD HH24:MI:SS'::text) AS starttime,
+    to_char(pgsnap_restorelog.starttime, 'YYYY-MM-DD
+HH24:MI:SS'::text) AS starttime,
     (pgsnap_restorelog.endtime - pgsnap_restorelog.starttime) AS duration,
     pgsnap_restorelog.status,
     substr(pgsnap_restorelog.message, 1, 32) AS message,
