@@ -20,6 +20,7 @@ from texttable import Texttable
 DISPMODE = 'li'
 
 # dicts with abbreviations
+# overviews, details, titles
 views = { 'wo' : 'mgr_worker', 'po' : 'mgr_instance', 'du' : 'mgr_dumpjob'
   , 'ca' : 'mgr_catalog', 're' : 'mgr_restorejob', 'lo' : 'mgr_restorelog'
   , 'me' : 'mgr_message', 'ac' : 'pgsnap_activity', 'db' : 'mgr_database'
@@ -32,26 +33,29 @@ titles = { 'wo' : 'PgSnapMan worker', 'po' : 'Postgres instance', 'du' : 'Dump j
   , 'ca' : 'Backup catalog', 're' : 'Restore job', 'lo' : 'Restore log'
   , 'me' : 'System message', 'ac' : 'Activity/running processes', 'db' : 'Database overview'
   , 'co' : 'Copy jobs (linked dump and restore jobs)'}
-hourfilters = { 'ca' : 'starttime', 'lo' : 'starttime' , 'me' : 'logtime', 'ac' : 'starttime' }
+# Filters
+hourfilters = { 'ca' : 'starttime', 'lo' : 'starttime' , 'me' : 'logtime', 'ac' : 'starttime'
+  , 'du' : 'date_added', 're' : 'date_added' , 'wo' : 'date_added', 'po' : 'date_added'
+  , 'db' : 'date_added', 'co' : 'date_added'}
 dbfilters = { 'ca': "split_part(id_db_schema, '/', 2) like '{}.%'"
   , 'lo': "split_part(id_db_schema, '/', 2) like '{}.%'"
-  , 're': "src_dbname like '{}'"
+  , 're': "s_dbname like '{}'"
   , 'du': "dbname like '{}'" 
-  , 'db': "dbname ilike '{}'" 
-  , 'co': "src_dbname ilike '{}'"}
+  , 'db': "dbname like '{}'" 
+  , 'co': "s_dbname like '{}'"}
 jobidfilters = { 'du' : 'id={}'
   , 're' : 'id={}'
   , 'ca' : "split_part(id_db_schema, '/', 1) like '{}'"
   , 'lo' : "split_part(id_db_schema, '/', 1) like '{}'"
   , 'co' : "id = {}"  }
-jobtypefilters = { 'du' : "substr(schedule, 1, 1) = substr('{}', 1, 1)"
-  , 're' : "substr(schedule, 1, 1) = substr('{}', 1, 1)" 
-  , 'co' : "substr(schedule, 1, 1) = substr('{}', 1, 1)" }
-statusfilters = { 'po' : "substr(status, 1, 1) = substr('{}', 1, 1)"
-  , 'wo' : "substr(status, 1, 1) = substr('{}', 1, 1)"
-  , 'du' : "substr(status, 1, 1) = substr('{}', 1, 1)"
-  , 're' : "substr(status, 1, 1) = substr('{}', 1, 1)" 
-  , 'co' : "substr(dstatus, 1, 1) = substr('{}', 1, 1)" }
+schedulefilters = { 'du' : "substr(schedule, 1, 1) = substr(upper('{}'), 1, 1)"
+  , 're' : "substr(schedule, 1, 1) = substr(upper('{}'), 1, 1)" 
+  , 'co' : "substr(schedule, 1, 1) = substr(upper('{}'), 1, 1)" }
+statusfilters = { 'po' : "substr(status, 1, 1) = substr(upper('{}'), 1, 1)"
+  , 'wo' : "substr(status, 1, 1) = substr(upper('{}'), 1, 1)"
+  , 'du' : "substr(status, 1, 1) = substr(upper('{}'), 1, 1)"
+  , 're' : "substr(status, 1, 1) = substr(upper('{}'), 1, 1)" 
+  , 'co' : "substr(dstatus, 1, 1) = substr(upper('{}'), 1, 1)" }
   
 def get_script_path():
     return os.path.dirname(os.path.realpath(sys.argv[0]))
@@ -87,7 +91,13 @@ def listDbView(viewname, title, search, idsort, limit = ''):
     sort = 'order by id desc'
   else:
     sort = ''
-  cur.execute('SELECT * FROM {} WHERE {} {} {};'.format(viewname, search, sort, limit))
+  try:
+    cur.execute('SELECT * FROM {} WHERE {} {} {};'.format(viewname, search, sort, limit))
+  except psycopg2.ProgrammingError, e:
+    cur.close()
+    conn.close()
+    print(e.message)
+    return
 
   print('')
   print(title)
@@ -597,14 +607,14 @@ Option and filter syntax
 filter:  filter options, either one of the predefined filters
            id=<id> full details
            .hour=<hours_back_from_now> (on every list with a time stamp,
-                                        decimal dot allowed)
+                                        fractional hours allowed)
            .jobid=<job_id> (on dump job and catalog, and on restore job
                             and restore log lists)
-           .jobtype=<job_type> (on dump and restore job)
-           .status=<status> (on worker, pgsql instance, dump job
-                             and restore job)
-           .db=<database_name> (on database, catalog and restore log lists,
-                                wildchard % allowed)
+           .schedule=[REPEAT|SINGLE|TRIGGER] (on dump, restore and copy job)
+           .status=[ACTIVE|HALTED] (on worker, pgsql instance, dump job,
+                             restore job and copy job)
+           .db=<database_name> (on database, dump, restore, copy, catalog and
+                                restore log lists, wildchard % allowed)
            "<postgres_filter" regular Postgres filter, you may filter on every
                               column available in the view; for security
                               reasons using a ; is not allowed
@@ -627,7 +637,7 @@ def listView(task):
       sort = subtokens[tok]
     else:
       limit = subtokens[tok]
-  
+
   # figure out if we have to print details, or that the 3rd and following tokens are a more complex filter
   # an id only: automatically print details
   if len(tokens) >= 3:
@@ -643,8 +653,8 @@ def listView(task):
         search = processFilter(list, search.strip())
       listDbView(views[list], titles[list], search, sort, limit)
   else:
-    try: 
-      listDbView(views[list], titles[list], 'true', sort, limit)      
+    try:
+      listDbView(views[list], titles[list], 'true', sort, limit)
     except KeyError, e:
       print('ERROR Unknown list specified: {}'.format(list))
 
@@ -653,18 +663,24 @@ def processFilter(list, filter):
   # quick return
   if not filter.startswith('.'):
     return filter
-    
-  val = str(filter.split('=')[1].strip())
-  if filter.startswith('.hour='):
-    return "(now() - {}::timestamp without time zone) < '{} hours'::interval".format(hourfilters[list], val)
-  elif filter.startswith('.jobid='):
-    return jobidfilters[list].format(val)
-  elif filter.startswith('.jobtype='):
-    return jobtypefilters[list].format(val)
-  elif filter.startswith('.db='):
-    return dbfilters[list].format(val)
-  elif filter.startswith('.status='):
-    return statusfilters[list].format(val)
+  try:
+    val = str(filter.split('=')[1].strip())
+    if filter.startswith('.hour='):
+      return "(now() - {}::timestamp without time zone) < '{} hours'::interval".format(hourfilters[list], val)
+    elif filter.startswith('.jobid='):
+      return jobidfilters[list].format(val)
+    elif filter.startswith('.schedule='):
+      return schedulefilters[list].format(val)
+    elif filter.startswith('.db='):
+      return dbfilters[list].format(val)
+    elif filter.startswith('.status='):
+      return statusfilters[list].format(val)
+    else:
+      print('ERROR Unkown filter specified.')
+      return 'false'
+  except KeyError, e:
+    print('ERROR Filter not defined for this list.')
+    return 'false'
 
 # Generic list viewer
 def exportView(task):
@@ -797,8 +813,9 @@ def activityTask(task):
 
 
 def processCommand(cmd):
-    
-  # try:
+  
+  
+  try:
     task = cmd.strip()
     # multiple token commands first
     if len(task.split()) >= 2:
@@ -828,12 +845,12 @@ def processCommand(cmd):
       elif task[:1].lower() == 'h':
         showHelp()
       elif len(task.split()) == 1 :
-        listView(task + ' li')
+        listView(task + ' li .hour=24')
       else:
         print("ERROR unknown command\n")
-  # except Exception:
-    # print Exception
-    # print('Invalid command, options (like a non-existing or missing id)')
+  except Exception:
+    print Exception
+    print('ERROR Invalid command or options (like a non-existing list or invalid options)')
       
 # ================================================================
 # 'MAIN'
