@@ -80,27 +80,22 @@ function preparescriptrun {
   echo "PGBIN=${pgbin}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
   echo "PGSNAPMANLOG=${PGSNAPMANLOG}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
   echo "TOOL_LOG=${TOOL_LOG}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
+  echo "BUWORKERID=${BUWORKERID}" >> ${TEMPDIR}/$$.${JOBID}.pgsnap_dump_scriptinit.temp
   if [ "${jobdir}" == "" ] || [ "${buname}" == "" ]; then
     ERRCODE=1
   else   
     mkdir ${jobdir}/${buname}
     # Download script
     if [ ! -e ${SCRIPTDIR}/${1} ]; then
-      ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT get_scriptcode ('${1}');" > ${SCRIPTDIR}/${1}
+      getscript "${1}"
     fi
   fi
 }
 
-# Get the global ACL's from the database (stored in sql format)
-# $1 database name
-# $2 store in file (full path)
+# Get the global ACL's from the database, and convert them to sql format
+# $1 store in file (full path)
 function dumpglobalacls {
   local line
-  # Check name
-  if [ "${1}" == *";"* ]; then
-    return
-  fi
-
   # The nice way, using a function (but that's not present in every database)
   # local sql="select * from get_globalacl('${1}') as (datname name, acl_role text, acl_rights text);"
   # Ugly but acceptable: we checked for ; in the name, but probably nothing will work with a weird database name (you'll have to connect in the first place)
@@ -110,11 +105,11 @@ from (select datname, unnest(datacl)::text as acl \
   from pg_database) a \
 ) \
 select datname,acl_role,acl_rights from acls \
-where datname = '${1}'"
-  local acls=`${pgbin}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname="${1}" -F '|' -A -t -c "${sql}"`
-  touch ${2}
+where datname = '${dbname}'"
+  local acls=$( dbquery "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${dbname}" "${sql}" )
+  touch ${1}
   if [ "${acls}" != "" ]; then
-    echo "REVOKE ALL ON DATABASE ${1} FROM public;" >> ${2}
+    echo "REVOKE ALL ON DATABASE ${dbname} FROM public;" >> ${1}
   fi
   for line in $acls; do
     local acl="$(getfieldvalue ${line} 3)"
@@ -122,36 +117,30 @@ where datname = '${1}'"
     if [ "${role}" == "" ]; then
       role="public"
     fi
-    echo "REVOKE ALL ON DATABASE ${1} FROM ${role};" >> ${2}
+    echo "REVOKE ALL ON DATABASE ${dbname} FROM ${role};" >> ${1}
     if [[ "${acl}" =~ "C" ]]; then
-      echo "GRANT CREATE ON DATABASE ${1} TO ${role};" >> ${2}
+      echo "GRANT CREATE ON DATABASE ${dbname} TO ${role};" >> ${1}
     fi
     if [[ "${acl}" =~ "T" ]]; then
-      echo "GRANT TEMP ON DATABASE ${1} TO ${role};" >> ${2}
+      echo "GRANT TEMP ON DATABASE ${dbname} TO ${role};" >> ${1}
     fi
     if [[ "${acl}" =~ "c" ]]; then
-      echo "GRANT CONNECT ON DATABASE ${1} TO ${role};" >> ${2}
+      echo "GRANT CONNECT ON DATABASE ${dbname} TO ${role};" >> ${1}
     fi
   done
 }
 
 # Dump the database settings (raw table format, | separated)
-# $1 database name
-# $2 export file
+# $1 export file
 function dumpdbsettings {
-  # Check name
-  if [ "${1}" == *";"* ]; then
-    return
-  fi
- 
   local sql="SELECT d.datname, pg_catalog.pg_get_userbyid(d.datdba) as owner, pg_catalog.pg_encoding_to_char(d.encoding) as encoding, \
     d.datcollate as collate, d.datctype as ctype, pg_catalog.array_to_string(d.datacl, ',') AS acl_rights \
     , spcname as dattablespace \
     FROM pg_catalog.pg_database d \
     LEFT JOIN (SELECT oid, spcname FROM pg_catalog.pg_tablespace WHERE spcname NOT LIKE 'pg_default') t \
       ON d.dattablespace = t.oid \
-    WHERE d.datname = '$1';"
-  ${pgbin}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname="${1}" -F '|' -A -t -c "${sql}" > ${2}
+    WHERE d.datname = '${dbname}';"
+  dbquerytofile "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${dbname}" "${sql}" "${1}"
 }
 
 # Check if we should make a backup, taking into account dump on demand settings
@@ -261,9 +250,9 @@ i         log "ERROR" "${MSG}"
         ERRORS=1
       fi
       # Database settings
-      dumpdbsettings "${dbname}" "${jobdir}/${buname}.database_settings.list"
+      dumpdbsettings "${jobdir}/${buname}.database_settings.list"
       # Connection rights
-      dumpglobalacls "${dbname}" "${jobdir}/${buname}.database_acl.sql"
+      dumpglobalacls "${jobdir}/${buname}.database_acl.sql"
       # Dump (possibly schema-only, that's included in the dump options)
       snaplog "INFO" "dumping - ${pgbin}/pg_dump ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} ${schemaonly} -Fd -f ${jobdir}/${buname} -v ${dbname}"
       ${pgbin}/pg_dump ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} ${schemaonly} -Fd -f ${jobdir}/${buname} -v ${dbname} 2>>  ${jobdir}/${buname}.log
