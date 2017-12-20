@@ -10,6 +10,13 @@ SET check_function_bodies = false;
 SET client_min_messages = warning;
 
 --
+-- Name: pgsnapman; Type: SCHEMA; Schema: -; Owner: -
+--
+
+CREATE SCHEMA pgsnapman;
+
+
+--
 -- Name: plpgsql; Type: EXTENSION; Schema: -; Owner: -
 --
 
@@ -557,9 +564,23 @@ CREATE FUNCTION set_restorelog(logid integer, status text, message text, bupath 
  where id = $1; $_$;
 
 
+SET search_path = pgsnapman, pg_catalog;
+
 SET default_tablespace = '';
 
 SET default_with_oids = false;
+
+--
+-- Name: metainfo; Type: TABLE; Schema: pgsnapman; Owner: -; Tablespace: 
+--
+
+CREATE TABLE metainfo (
+    key text NOT NULL,
+    val text
+);
+
+
+SET search_path = public, pg_catalog;
 
 --
 -- Name: pgsnap_catalog; Type: TABLE; Schema: public; Owner: -; Tablespace: 
@@ -729,19 +750,17 @@ CREATE VIEW mgr_copyjob AS
            FROM pgsnap_dumpjob d_1
           WHERE (NOT ((d_1.pgsnap_restorejob_id IS NULL) OR (d_1.pgsnap_restorejob_id = ''::text)))
         )
- SELECT d.id,
-    r.id AS rid,
+ SELECT d.id AS did,
     ((pd.dns_name || '
 '::text) || pd.pgport) AS s_pgsql,
-    d.dbname AS s_dbname,
-    d.dumpschema AS s_dschema,
+    ((d.dbname || '.'::text) || d.dumpschema) AS s_db_schema,
     d.dumptype AS s_dtype,
     ((substr(d.jobtype, 1, 1) || '/'::text) || d.cron) AS schedule,
     d.status AS dstatus,
+    r.id AS rid,
     ((rd.dns_name || '
 '::text) || rd.pgport) AS d_pgsql,
-    r.dest_dbname AS d_dbname,
-    r.restoreschema AS d_rschema,
+    ((r.dest_dbname || '.'::text) || r.restoreschema) AS d_db_schema,
     r.restoretype AS d_rtype,
     r.status AS rstatus,
     to_char(d.date_added, 'YYYY-MM-DD
@@ -915,7 +934,7 @@ CREATE VIEW mgr_message AS
 CREATE VIEW mgr_restorejob AS
  SELECT j.id,
     COALESCE((c.id)::text, 'N/A'::text) AS cat_id,
-    COALESCE(c.dbname, 'N/A'::text) AS s_dbname,
+    COALESCE(((c.dbname || '.'::text) || c.dumpschema), 'N/A'::text) AS s_db_schema,
     ((p.dns_name || '
 '::text) || p.pgport) AS d_pgsql,
     j.dest_dbname AS d_dbname,
@@ -1378,6 +1397,18 @@ ALTER TABLE ONLY pgsnap_worker ALTER COLUMN id SET DEFAULT nextval('pgsnap_worke
 
 ALTER TABLE ONLY pgsql_instance ALTER COLUMN id SET DEFAULT nextval('pgsql_instance_id_seq'::regclass);
 
+
+SET search_path = pgsnapman, pg_catalog;
+
+--
+-- Name: metainfo_pkey; Type: CONSTRAINT; Schema: pgsnapman; Owner: -; Tablespace: 
+--
+
+ALTER TABLE ONLY metainfo
+    ADD CONSTRAINT metainfo_pkey PRIMARY KEY (key);
+
+
+SET search_path = public, pg_catalog;
 
 --
 -- Name: pgsnap_catalog_pkey; Type: CONSTRAINT; Schema: public; Owner: -; Tablespace: 

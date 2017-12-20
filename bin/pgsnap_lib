@@ -20,7 +20,7 @@ function lock {
 function cleanupexit {
   # Remove entry from database activity table (we don't care if this fails)
   local sql="select del_activity(${ACTIVITYID});"
-  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} --no-password --quiet --output=/dev/null -c "${sql}" 2> /dev/null
+  catdbexecute "${sql}"
 
   # Remove temp files, including lock
   rm -f ${TEMPDIR}/$$.*.${TOOLNAME}*
@@ -136,8 +136,8 @@ function log {
 # Requires PGSCDB_REQUIRED to be set (before sourcing this library)
 # When db not required, we obtain the value from the cached data
 function setworkerid {
-  BUWORKERID=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "SELECT get_pgsnap_worker_id('${FQDN}');" 2> /dev/null`
-  if [ "$?" != "0" ] || [ "${BUWORKERID}" == "" ]; then
+  BUWORKERID=$( catdbquery "SELECT get_pgsnap_worker_id('${FQDN}');" )
+  if [ "$SQLERROR" != "0" ] || [ "${BUWORKERID}" == "" ]; then
     if [ "${PGSCDB_REQUIRED}" == "NO" ]; then
       ERRCODE=0
       snaplog "WARNING" "init - could not connect to catalog database (ignored)"
@@ -172,8 +172,8 @@ function getinstancestatus {
   # Get data from server
   local instancestatus="UNKNOWN"
   local instanceid=$(echo `basename "$1"` | cut -d '_' -f 1)
-  instancestatus=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT status FROM pgsql_instance WHERE id = ${instanceid}"`
-  if [ "$?" != "0" ]; then
+  instancestatus=$( catdbquery "SELECT status FROM pgsql_instance WHERE id = ${instanceid}" )
+  if [ "$SQLERROR" != "0" ]; then
       instancestatus=`cat ${DUMPSNAP}/${1}/status`
   else
     # compare with cached version, if different: store the current value
@@ -182,7 +182,6 @@ function getinstancestatus {
       snaplog "INFO" "instance status changed to: ${instancestatus}"
     fi
   fi
-
   echo "${instancestatus}"
 }
 
@@ -195,8 +194,8 @@ function getworkerstatus {
   fi
   # Get data from server
   local workerstatus="UNKNOWN"
-  workerstatus=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "SELECT status FROM pgsnap_worker WHERE id = ${BUWORKERID}"`
-  if [ "$?" != "0" ]; then
+  workerstatus=$( catdbquery "SELECT status FROM pgsnap_worker WHERE id = ${BUWORKERID}" )
+  if [ "$SQLERROR" != "0" ]; then
       workerstatus=`cat ${ROOTDIR}/status`
   else
     # compare with cached version, if different: store the current value
@@ -222,8 +221,118 @@ function getpgbinlocation {
   fi
 }
 
-# Catalog database
+# Database queries, generic
 # -----------------------------------------
+
+# Run a sql query against a database without result (all output suppressed)
+# $1 hostname (use local for local pipe connections)
+# $2 port
+# $3 user
+# $4 db name
+# $5 sql
+# Sets variable: SQLERROR (psql exit code)
+function dbexecute {
+  ${PGSCBIN}/psql "${1}" -p "${2}" -U "${3}" --dbname="${4}" --no-password --output=/dev/null --quiet -A -t -c "${5}" 2> /dev/null
+  SQLERROR=$?
+}
+
+# Run a sql query against a database (all other output suppressed), echoes result
+# $1 hostname (use local for local pipe connections)
+# $2 port
+# $3 user
+# $4 db name
+# $5 sql
+# Sets variable: SQLERROR (psql exit code)
+function dbquery {
+  local result=$( ${PGSCBIN}/psql "${1}" -p "${2}" -U "${3}" --dbname="${4}" --no-password --quiet -A -t -c "${5}" 2> /dev/null )
+  # DOES NOT WORK
+  SQLERROR=$?
+  echo "${result}"
+}
+
+# Run a sql query against a database, output to file (all other output suppressed)
+# $1 hostname (use local for local pipe connections)
+# $2 port
+# $3 user
+# $4 db name
+# $5 sql
+# $6 output file
+# Sets variable: SQLERROR (psql exit code)
+function dbquerytofile {
+  ${PGSCBIN}/psql "${1}" -p "${2}" -U "${3}" --dbname="${4}" --no-password --quiet --output="${6}" -F '|' -A -t -c "${5}" 2> /dev/null
+  SQLERROR=$?
+}
+
+# Execute SQL in catalog db
+# $1 sql query
+function catdbexecute {
+  dbexecute "${PGSCHOST}" "${PGSCPORT}" "${PGSCUSER}" "${PGSCDB}" "${1}"
+}
+
+# Query the catalog db
+# $1 sql query
+function catdbquery {
+  local result=$( dbquery "${PGSCHOST}" "${PGSCPORT}" "${PGSCUSER}" "${PGSCDB}" "${1}" )
+  echo "${result}"
+}
+
+# Query catalog db, output to file
+# $1 sql query
+# $2 output file
+function catdbquerytofile {
+  dbquerytofile "${PGSCHOST}" "${PGSCPORT}" "${PGSCUSER}" "${PGSCDB}" "${1}" "${2}" 
+}
+
+
+# Backup database
+# -----------------------------------------
+
+# Checks if the pgsnapman.metainfo table is present
+# $1 hostname (use local for local pipe connections)
+# $2 port
+# $3 user
+# $4 db name
+function metainfoexists {
+  local sql="SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'pgsnapman' AND table_name = 'metainfo';"
+  local val=$( dbquery "$1" "$2" "$3" "$4" "${sql}" )
+  return "${val}"
+}
+
+# Create the pgsnapman schema
+# $1 hostname (use local for local pipe connections)
+# $2 port
+# $3 user
+# $4 db name
+function createmetainfo {
+  local sql="CREATE SCHEMA IF NOT EXISTS pgsnapman;"
+  dbexecute "$1" "$2" "$3" "$4" "${sql}"
+  local sql="CREATE TABLE pgsnapman.metainfo (key text primary key, val text);"
+  dbexecute "$1" "$2" "$3" "$4" "${sql}"
+}
+
+# Get meta data from pgsnapman metadata table
+# $1 hostname (use local for local pipe connections)
+# $2 port
+# $3 user
+# $4 db name
+# $5 key
+function getmetainfo {
+  local sql="SELECT val FROM pgsnapman.metainfo WHERE key = '${5}'"
+  local val=$( dbquery "$1" "$2" "$3" "$4" "${sql}" )
+  echo "${val}"
+}
+
+# Write data to the pgsnapman metadata table
+# $1 hostname (use local for local pipe connections)
+# $2 port
+# $3 user
+# $4 db name
+# $5 key
+# $6 value
+function setmetainfo {
+  local sql="DELETE FROM pgsnapman.metainfo WHERE key = '${5}'; INSERT INTO pgsnapman.metainfo (key, val) values ('${5}', '${6}');"
+  dbexecute "$1" "$2" "$3" "$4" "${sql}"
+}
 
 # Gets the postgres server version
 # $1 hostname (use local for local pipe connections)
@@ -231,9 +340,9 @@ function getpgbinlocation {
 # $3 user
 # $4 db name
 function getpgversion {
-  ${PGSCBIN}/psql ${1} -p ${2} -U ${3} --dbname=${4} -c "SELECT 1" &> /dev/null
-  if [ "$?" == "0" ]; then
-    local result=`${PGSCBIN}/psql ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "show server_version;"`
+  dbexecute "${1}" "${2}" "${3}" "${4}" "SELECT 1;"
+  if [ "$SQLERROR" == "0" ]; then
+    local result=$( dbquery "${1}" "${2}" "${3}" "${4}" "show server_version;" )
     local pgv=$(echo "${result}" | cut -d '.' -f 1)$(echo "${result}" | cut -d '.' -f 2)
   else
     pgv=""
@@ -249,7 +358,8 @@ function getpgversion {
 # $5 check database name
 # returns 0 (not exists) or 1 (exists) 
 function dbexists {
-  local c=`${PGSCBIN}/psql ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "select count(*) from pg_database where datname = trim(both '\"' from '$5');"`
+  local sql="select count(*) from pg_database where datname = trim(both '\"' from '$5');"
+  local c=$( dbquery "${1}" "${2}" "${3}" "${4}" "${sql}" )
   echo ${c}
 }
 
@@ -261,7 +371,8 @@ function dbexists {
 # $5 schema name
 # returns 0 (not exists) or 1 (exists) 
 function schemaexists {
-  local c=`${PGSCBIN}/psql ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "select count(*) from pg_namespace where nspname = trim(both '\"' from '$5');"`
+  local sql="select count(*) from pg_namespace where nspname = trim(both '\"' from '$5');"
+  local c=$( dbquery "${1}" "${2}" "${3}" "${4}" "${sql}" )
   echo ${c}
 }
 
@@ -289,12 +400,15 @@ function getdbsize {
     WHERE table_schema = trim(both '\"' from '$5') \
     GROUP BY table_schema;"
   fi
-  local dbsize=`${pgbin}/psql ${1} -p ${2} -U ${3} --dbname=${4} -A -t -c "${sql}"`
+  local dbsize=$( dbquery "${1}" "${2}" "${3}" "${4}" "${sql}" )
   if [ "${dbsize}" == "" ]; then
     dbsize=-1
   fi
   echo "${dbsize}"
 }
+
+# Catalog database
+# -----------------------------------------
 
 # Mark a single run job as halted in the database
 # $1 job class/type [DUMP|RESTORE]
@@ -307,8 +421,8 @@ function setjobstatus {
   else
     sql="SELECT set_restorejobstatus($2, '$3');"
   fi
-  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" > /dev/null
-  ERRCODE=$?
+  catdbexecute "$sql"
+  ERRCODE=$SQLERROR
 }
 
 # Get the job status from the server, latest state
@@ -323,8 +437,8 @@ function getjobstatus {
     sql="SELECT get_restorejobstatus($2);"
   fi
   local js
-  js=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "$sql" 2> /dev/null`
-  ERRCODE=$?
+  js=$( catdbquery "$sql" )
+  ERRCODE=$SQLERROR
   RETVAL="${js}"
 }
 
@@ -396,7 +510,7 @@ function getfieldvalue {
 # $1 script name
 function getscript {
   local sql="SELECT get_scriptcode('$1')"
-  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -A -t -c "${sql}" > ${SCRIPTDIR}/$1
+  catdbquerytofile "${sql}" "${SCRIPTDIR}/$1"
 }
 
 # Reset all global error codes and messages
@@ -415,6 +529,8 @@ RETVAL=""
 ERROR=""
 MSG=""
 ERRCODE=0
+SQLERROR=0
+
 
 # Try to find the config file, check and read
 if [ ! -e ${CONFIGFILE} ]; then
@@ -486,5 +602,4 @@ if [ "${LOGINIT}" != "NO" ]; then snaplog "INFO" "init - using config: ${CONFIGF
 
 # Write marker to database activity table (we don't care if this fails)
 sql="select put_activity(${BUWORKERID}, $$, '${TOOLNAME} ${1} ${2} ${3} ${4} ${5} ${6}'::text);"
-ACTIVITYID=$( ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --no-password --dbname=${PGSCDB} --quiet -A -t  -c "${sql}" 2> /dev/null )
-
+ACTIVITYID=$( catdbquery "${sql}" )

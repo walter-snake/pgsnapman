@@ -39,15 +39,15 @@ hourfilters = { 'ca' : 'starttime', 'lo' : 'starttime' , 'me' : 'logtime', 'ac' 
   , 'db' : 'date_added', 'co' : 'date_added'}
 dbfilters = { 'ca': "split_part(id_db_schema, '/', 2) like '{}.%'"
   , 'lo': "split_part(id_db_schema, '/', 2) like '{}.%'"
-  , 're': "s_dbname like '{}'"
+  , 're': "'{}' in (split_part(s_db_schema, '.', 1), d_dbname)"
   , 'du': "dbname like '{}'" 
   , 'db': "dbname like '{}'" 
-  , 'co': "s_dbname like '{}'"}
+  , 'co': "'{}' in (split_part(s_db_schema, '.', 1), split_part(d_db_schema, '.', 1))"}
 jobidfilters = { 'du' : 'id={}'
   , 're' : 'id={}'
   , 'ca' : "split_part(id_db_schema, '/', 1) like '{}'"
   , 'lo' : "split_part(id_db_schema, '/', 1) like '{}'"
-  , 'co' : "id = {}"  }
+  , 'co' : "did = {}"  }
 schedulefilters = { 'du' : "substr(schedule, 1, 1) = substr(upper('{}'), 1, 1)"
   , 're' : "substr(schedule, 1, 1) = substr(upper('{}'), 1, 1)" 
   , 'co' : "substr(schedule, 1, 1) = substr(upper('{}'), 1, 1)" }

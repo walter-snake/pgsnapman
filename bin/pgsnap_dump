@@ -154,6 +154,30 @@ function dumpdbsettings {
   ${pgbin}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname="${1}" -F '|' -A -t -c "${sql}" > ${2}
 }
 
+# Check if we should make a backup, taking into account dump on demand settings
+# $1 database name
+function isbackuprequired {
+  local sql=""
+  local val=""
+  # When not using on demand or in SINGLE mode, always return YES (thus: dump is schedule driven)
+  if [ "${ENABLE_DUMP_ON_DEMAND}" != "YES" ] || [ "${STARTTYPE}" == "SINGLE" ]; then
+    echo "YES"
+  else
+    # Check the metainfo key, and we act a bit blunt: if not found just create table and schema and insert key (in normal SCHEDULE mode)
+    val=$( getmetainfo "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${1}" "TAKE_BACKUP" )
+    if [ "${val}" == "" ]; then
+      createmetainfo "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${1}"
+      setmetainfo "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${1}" "TAKE_BACKUP" "SCHEDULE"
+    fi
+    val=$( getmetainfo "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${1}" "TAKE_BACKUP" )
+    if [ "${val}" != "NO" ]; then
+      echo "YES"
+    else
+      echo "NO"
+    fi
+  fi
+}
+
 # Start a specific dump job 
 # $1 path to postgres instance snapshot root directory
 # $2 id of job to start
@@ -187,6 +211,7 @@ function startpgsnapjob {
     eval pgbinvar=PGBIN${pgversion}
     pgbin=${!pgbinvar}
   fi
+
   # check if pg dump exists
   if [ ! -e ${pgbin}/pg_dump ]; then
     MSG="job id ${jobid} - job can not run - pg_dump not found, check PGBINxx paths in config file ${CONFIGFILE}"
@@ -280,7 +305,7 @@ else
 fi
 
 # Start message
-snaplog "INFO" "init - pgsql_instance.job: [`basename ${PGSQLID}`].[${JOBID}]"
+snaplog "INFO" "init - pgsql_instance.job: [$( basename ${PGSQLID} )].[${JOBID}]"
 
 # Get pgsql instance status (the instance that contains the db to be backed up)
 INSTANCESTATUS=$(getinstancestatus ${PGSQLID})
@@ -410,8 +435,16 @@ if [ "${jobtype}" == "SINGLE" ]; then
   setjobstatus "DUMP" ${JOBID} "HALTED"
 fi
 if [ $ERRCODE -eq 0 ]; then
-  # Start the dumpjob
-  startpgsnapjob ${PGSQLID} ${JOBID}
+  # Check if backup is required
+  if [ "$( isbackuprequired "${dbname}" )" == "YES" ]; then
+    # Start the dumpjob
+    startpgsnapjob ${PGSQLID} ${JOBID}
+  else
+    MSG="dump job id ${JOBID} aborted by DUMP_ON_DEMAND status in database (TAKE_BACKUP=NO)"
+    preparecatalogdata "`date '+%Y%m%dT%H%M%S%z'`\tINFO\tpgsnap_dump\t${MSG}\tDUMP\t${JOBID}\t${BUWORKERID}" "${UPLOADDIR}/$$.pgsnap_dump.message.dat" "NEW" "" 
+    snaplog "INFO" "${MSG}"
+    cleanupexit 1
+  fi
 else
   MSG="Aborted as job status could not be set, indicates a catalog database error"
   snaplog "ERROR" "${MSG}"
@@ -426,9 +459,6 @@ if [ "$VERBOSITY" == "VERBOSE" ]; then
   echo "pg_dump log:     ${jobdir}/${buname}.log"
   echo ""
 fi
-
-# File format for database import (using COPY FROM STDIN)
-# columns: pgsnap_job_id starttime endtime status bu_name bu_location dbsize dumpsize
 
 # Write status info for log and catalog
 if [ "${ERRORS}" == "1" ]; then
@@ -451,6 +481,9 @@ preparecatalogdata "${2}\t${INITIMESTAMP}\t`date +'%Y%m%dT%H%M%S%z'`\t${jobresul
 if [ "${jobresult}" == "FAILED" ]; then
   cleanupexit 1
 else
+  if [ "$( getmetainfo "${pgsqlhost}" ${pgsqlport} ${pgsqlsuperuser} "${dbname}" "TAKE_BACKUP" )" == "YES" ]; then
+    setmetainfo "${pgsqlhost}" ${pgsqlport} ${pgsqlsuperuser} "${dbname}" "TAKE_BACKUP" "NO"
+  fi
   # Start dedup for a FULL backup
   if [ "${butype}" == "FULL" ]; then
     ${SCRIPTPATH}/pgsnap_dedup ${jobdir}/${buname} SILENT ${jobid}

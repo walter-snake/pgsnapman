@@ -71,6 +71,13 @@ STAT_OPTIONS=""
 AUTO_DUMPJOB=YES
 AUTO_DUMPJOB_STATUS=HALTED
 
+# Enable backups on demand, database driven [YES|NO]
+# Adds "pgsnapman" schema to a backed up database with "metainfo" table.
+# Useful for huge databases that change only occasionally, and where automated update
+# processes can set the flag that a new backup should be made.
+# Shouldn't hurt to have it on, even if you don't use the feature.
+ENABLE_DUMP_ON_DEMAND=NO
+
 # Maintenance db (must be present on every pgsql instance)
 MAINTDB=postgres
 
