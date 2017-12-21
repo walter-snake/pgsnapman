@@ -47,7 +47,7 @@ fi
 function getcatalogjobinfo {
   # Obtain retention policy values for deleted jobs
   local sql="select get_default('retention_on_delete');"
-  local defretpol=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" -A -t`
+  local defretpol=$( catdbquery "$sql" )
   if [ "$defretpol" == "" ]; then
     defretpol="7|1|0|0"
   fi
@@ -57,21 +57,21 @@ function getcatalogjobinfo {
     from pgsnap_catalog c \
     left join pgsnap_dumpjob j \
       on j.id = c.pgsnap_dumpjob_id;"
-  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" -A -t -F '|' > ${TEMPDIR}/$$.0.catalogjobinfo.list
+  catdbquerytofile "${sql}" "${TEMPDIR}/$$.0.catalogjobinfo.list"
 }
 
 # Removes an entry from the catalog list
 # $1 id of the catalog entry
 function removefromcatalogdb {
   local sql="select del_catalog($1)";
-  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" > /dev/null
+  catdbexecute "${sql}"
 }
 
 # Removes an entry from the catalog list
 # $1 id of the catalog entry
 function setcatalogdbstatus {
   local sql="select set_catalogstatus($1, '$2')";
-  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" > /dev/null
+  catdbexecute "${sql}"
 }
 
 # Clean up a specific job based on provided retention settings
@@ -87,6 +87,7 @@ function cleanupjob {
 # FOR DEBUGGING
 #  local sql="select c.id, c.starttime, c.bu_name, c.bu_location || '/' || c.bu_name as full_path from pgsnap_catalog c where c.pgsnap_dumpjob_id = $1 AND c.id not in (select id from get_keep_catjobid('`date '+%Y%m%dT%H%M%S%z'`', $1, 0, 0, 0, 0) as (id integer));"
 # END DEBUGGING
+  # We'll leave this psql request here, because of special logging
   ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "$sql" -A -t -F '|' --output=${TEMPDIR}/$$.removedumps.list 2>> ${LOGDIR}/pgsnap_clean.keepcatids.log
   # Loop through all catalog entries, and remove them
   while read line; do

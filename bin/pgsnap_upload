@@ -51,6 +51,7 @@ function uploaddata {
 
   # Upload the data
   talk "uploading `basename ${1}`"
+  # psql call left here, special with data piped in
   echo -e "\.\n" | cat ${1} - | ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -c "${sql}" > /dev/null
   if [ "$?" == "0" ]; then
     snaplog "INFO" "processing - finished uploading `basename ${1}`"

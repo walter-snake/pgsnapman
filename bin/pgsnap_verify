@@ -38,7 +38,7 @@ function verifybackupselection {
     limit (select round((count(*)::numeric * ${1}/100)::numeric)::int \
       from pgsnap_catalog
       where dumptype not like 'CLUSTER%' and status = 'SUCCESS' and verified NOT LIKE 'YES');"
-  local lines=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}"`
+  local lines=$( catdbquery "${sql}" )
   local id
   local bupath
   local pgversion
@@ -81,7 +81,7 @@ function setcatalogstatus {
   else
     sql="update pgsnap_catalog set verified='YES' where id = ${1};"
   fi
-  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --dbname=${PGSCDB} -F '|' -A -t -c "${sql}" --output=/dev/null 2> /dev/null
+  catdbexecute "${sql}"
 }
 
 # ========================================

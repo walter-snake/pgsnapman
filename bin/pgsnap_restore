@@ -66,7 +66,7 @@ function getrestorejob {
        status_pgsqlinstance
   FROM vw_restorejob_instance
   WHERE id = ${1};"
-  data=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --no-password --dbname=${PGSCDB} -c "$sql" -A -t`
+  data=$( catdbquery "${sql}" )
   echo "${data}"
 }
 
@@ -75,7 +75,7 @@ function getrestorejob {
 function getdumppathfromcatalog {
   local data
   local sql="SELECT bu_location || '/' || bu_name FROM pgsnap_catalog WHERE id = $1 AND status = 'SUCCESS';"
-  data=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --no-password --dbname=${PGSCDB} -c "$sql" -A -t`
+  data=$( catdbquery "${sql}" )
   echo "${data}"
 }
 
@@ -98,7 +98,7 @@ function setpgbinpath {
 # Inserts job id and dump name
 function logstart {
   local sql="select put_restorelog(${JOBID}, '${DUMP}');"
-  LOGID=`${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --no-password --dbname=${PGSCDB} -c "$sql" -A -t`
+  LOGID=$( catdbquery "${sql}" )
   if [ "${LOGID}" == "" ]; then
     MSG="job id ${JOBID} - could not write restore log entry, exit"
     ERRCODE=1
@@ -120,7 +120,7 @@ function logend {
   log "${1}" "${2}"
   snaplog "${1}" "${2}"
   talk "${1} ${2}"
-  ${PGSCBIN}/psql ${PGSCHOST} -p ${PGSCPORT} -U ${PGSCUSER} --no-password --dbname=${PGSCDB} -c "$sql" > /dev/null
+  catdbexecute "${sql}"
 }
 
 # Db management helper functions
@@ -159,6 +159,7 @@ function dropdatabase {
   if [ ${ERRCODE} -gt 0 ]; then
     return
   else
+   talk "dropping database $1"
    log "INFO" "dropping database $1"
     # drop, this should succeed, as all connections are dead, and no one can be connected any more (well, a superuser)
     ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "DROP DATABASE IF EXISTS \"${1}\"" >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
@@ -190,6 +191,7 @@ function renamedatabase {
   fi
 
   log "INFO" "rename database $1->$2"
+  talk "renaming database $1->$2"
   # rename, this should succeed, as all connections are dead, and no one can be connected any more (well, a superuser)
   ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "ALTER DATABASE \"${1}\" RENAME TO \"${2}\"" >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
   ERRCODE=$?
@@ -405,6 +407,7 @@ function run_dir_restore {
 
   # restore, depends on DATA/SCHEMA/FULL
   log "INFO" "processing - restore to database ${RESTOREDB} started"
+  talk "processing - restore to database ${RESTOREDB} started"
   if [ "${restoreschema}" == "*" ]; then
     snaplog "INFO" "restore started: pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${RESTOREDB} ${restoreoptions} ${DUMP}"
     eval "${PGBIN}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${RESTOREDB} ${restoreoptions} ${DUMP} >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1"

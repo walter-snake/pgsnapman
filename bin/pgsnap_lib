@@ -244,8 +244,8 @@ function dbexecute {
 # $5 sql
 # Sets variable: SQLERROR (psql exit code)
 function dbquery {
-  local result=$( ${PGSCBIN}/psql "${1}" -p "${2}" -U "${3}" --dbname="${4}" --no-password --quiet -A -t -c "${5}" 2> /dev/null )
-  # DOES NOT WORK
+  local result
+  result=$( ${PGSCBIN}/psql "${1}" -p "${2}" -U "${3}" --dbname="${4}" --no-password --quiet -A -t -c "${5}" 2> /dev/null )
   SQLERROR=$?
   echo "${result}"
 }
@@ -272,7 +272,8 @@ function catdbexecute {
 # Query the catalog db
 # $1 sql query
 function catdbquery {
-  local result=$( dbquery "${PGSCHOST}" "${PGSCPORT}" "${PGSCUSER}" "${PGSCDB}" "${1}" )
+  local result
+  result=$( dbquery "${PGSCHOST}" "${PGSCPORT}" "${PGSCUSER}" "${PGSCDB}" "${1}" )
   echo "${result}"
 }
 
