@@ -316,6 +316,15 @@ def removeAllBackupsForDumpJob(id):
     conn.close()
     print('-> Marked {} catalog entries for removal'.format(str(c)))
   
+def getInstanceDumps(dns_name, port):
+  conn = psycopg2.connect('host={} port={} dbname={} user={} password={}'.format(PGSCHOST, PGSCPORT, PGSCDB, PGSCUSER, PGSCPASSWORD))  
+  cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+  sql = """with dbr as (select dbname, max(starttime) as st from pgsnap_catalog c where pgsql_dns_name = %s and pgsql_port = %s and status = 'SUCCESS' and keep in ('AUTO', 'YES') and dumptype = 'FULL' and dumpschema = '*' group by dbname) select id as cat_id, bu_worker_id as worker_id, c.dbname, st from pgsnap_catalog c join dbr on dbr.st = c.starttime and dbr.dbname = c.dbname where pgsql_dns_name = %s and pgsql_port= %s and dbr.dbname not like '{}';""".format(MAINTDB)
+  cur.execute(sql, (dns_name, port, dns_name, port))
+  rows = cur.fetchall()
+  conn.close()  
+  return rows
+  
 def getInput(message, values, defval, width = 32, allowempty = True):
   ri = ''
   # need strings for comparison
@@ -811,10 +820,46 @@ def activityTask(task):
   else:
     print("ERROR unknown sub command\n")
 
+def serverrestoreTask(task):
+  tokens = task.split(' ')
+  dns_name = tokens[1]
+  port = tokens[2]
+  dest_dns_name = tokens[3]
+  dest_port = tokens[4]
+  start = tokens[5]
+  print('Create a server restore task: automatically generate restore jobs for')
+  print('all available FULL dumps without schema restrictions.')
+  print('')
+  print('Collecting all available dumps for: {}:{}').format(dns_name, port)
+  dumps = getInstanceDumps(dns_name, port)  
+  t = PrettyTable(['cat_id', 'worker_id','dbname', 'dump_timestamp'])
+  for d in dumps:
+    t.add_row([d['cat_id'], d['worker_id'], d['dbname'], d['st']])
+  t.align = 'l'
+  print(t)
+  print('')
+  print('Looking up pgsql instance id for: {}:{}').format(dest_dns_name, dest_port)
+  dest_pgsql_instance_id = getPgsqlInstanceId(dest_dns_name, dest_port)
+  if  dest_pgsql_instance_id == None:
+    print('ERROR Destination pgsql instance id not found.')
+    return
+  else:
+    print('-> destination pgsql instance id: {}').format(str(dest_pgsql_instance_id))
+    print('Generate restore jobs for restoring into pgsql instance: {}:{}').format(dest_dns_name, dest_port)
+    if start == 'NOW':
+      cron = '* * * * *'
+    else:
+      cron = raw_input('Schedule (cron): ')
+    c = 0
+    for d in dumps:
+      insertRestoreJob(dest_pgsql_instance_id, d['dbname'], 'FULL', '*', '', 'DROP', 'generated server restore job', 'SINGLE', cron, d['cat_id'], 'USE_ROLE', 'USE_TBLSPC')
+      c += 1
+    if start == 'NOW':
+      print('Created {} jobs, starting as soon as possible'.format(str(c)))
+    else:
+      print('Created {} jobs, starting according to cron schedule: {}'.format(str(c), cron))
 
 def processCommand(cmd):
-  
-  
   try:
     task = cmd.strip()
     # multiple token commands first
@@ -837,6 +882,8 @@ def processCommand(cmd):
         activityTask(task)  
       elif task[:2].lower() == 'co':
         copyTask(task)
+      elif task[:2].lower() == 'sr':
+        serverrestoreTask(task)
       else:
         print("ERROR unknown command\n")
     else: 
@@ -872,6 +919,11 @@ PGSCPORT=config.getval('PGSCPORT')
 PGSCUSER=config.getval('PGSCUSER')
 PGSCDB=config.getval('PGSCDB')
 PGSCPASSWORD=config.getval('PGSCPASSWORD')
+MAINTDB=config.getval('MAINTDB')
+
+if MAINTDB == '':
+  print('No maintenance db configured, exit.')
+  sys.exit(1)
 
 if PGSCPASSWORD == '':
   PGSCPASSWORD=getpass.getpass('password: ')

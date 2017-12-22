@@ -3,8 +3,8 @@
 # pgsnap_singlejob Checks for jobs marked as single run, downloads configuration and starts the jobs.
 #
 # $1 verbosity [VERBOSE|SILENT]
-# $2 job type (optional)
-# $3 job id (optional)
+# $2 job type (optional, for manual runs)
+# $3 job id (optional, for manual runs)
 
 # ======================================
 # Initialization
@@ -175,6 +175,7 @@ fi
 
 
 # RESTORE jobs
+let " MAXSTART = ${MAX_RESTORE_START:-2} - $( nrunning pgsnap_restore )"
 c=0
 if [ "${2}" != "DUMP" ]; then
   talk "Checking for single run restore jobs"
@@ -188,12 +189,19 @@ if [ "${2}" != "DUMP" ]; then
   if [ $c -eq 0 ]; then
     talk "Nothing to do"
   else
+    # Start max allowed jobs, other jobs will have to wait
+    if [ $c -gt ${MAXSTART} ]; then
+      MSG="too many jobs requested, starting maximum ${MAXSTART} out of $c restore jobs"
+      talk "${MSG}"
+      snaplog "WARNING" "${MSG}"
+    fi
     sql="select r.id as restore_id, c.id as catalog_id from pgsnap_restorejob r join pgsnap_catalog c on r.pgsnap_catalog_id = c.id \
       where r.status = 'ACTIVE' \
         and r.jobtype = 'SINGLE' \
         and r.cron = '* * * * *' \
-        and r.id::text like '${id}'
-        and c.bu_worker_id = ${BUWORKERID};"
+        and r.id::text like '${id}' \
+        and c.bu_worker_id = ${BUWORKERID} \
+      limit ${MAXSTART};"
     catdbquerytofile "${sql}" "${TEMPDIR}/$$.0.singlerestorejobs.list"
     # Start the restores
     talk "Start the restore jobs..."

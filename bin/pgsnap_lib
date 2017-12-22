@@ -27,6 +27,14 @@ function cleanupexit {
   exit $1
 }
 
+# Count number of specific tool running on this worker
+# $1 toolname
+function nrunning {
+ local c
+ c=`ps -ef | ${GRPPROG} ${GRPFLG} "${1}.*SILENT" | grep -v "grep" | wc -l | sed 's/ //g'`
+ echo ${c} 
+}
+
 # Checks lock files for running job
 # $1 job id
 function isjobrunning {
@@ -613,7 +621,7 @@ fi
 if [ "$(getworkerstatus)" == "HALTED" ]; then cleanupexit 0; fi
 
 # Write tool init log entry
-if [ "${LOGINIT}" != "NO" ]; then snaplog "INFO" "init - using config: ${CONFIGFILE} - platform mode: ${PLATFORM} - grep: ${GRPPROG} ${GRPFLG}"; fi
+if [ "${LOGINIT}" != "NO" ]; then snaplog "INFO" "init - using config: ${CONFIGFILE} - platform: ${PLATFORM}"; fi
 
 # Write marker to database activity table (we don't care if this fails)
 sql="select put_activity(${BUWORKERID}, $$, '${TOOLNAME} ${1} ${2} ${3} ${4} ${5} ${6}'::text);"

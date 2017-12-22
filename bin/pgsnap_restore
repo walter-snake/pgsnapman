@@ -312,10 +312,11 @@ function prepareroles {
   # check and create other roles
   # a bit more complex: read schema, and find all alter owner, grant and revoke rows
   # use pg_restore to read the schema, and grep relevant records
-  ${PGBIN}/pg_restore --schema-only ${restoreoptions} "${DUMP}" | ${GRPPROG} ${GRPFLG} '^((GRANT|REVOKE|ALTER.*OWNER\ TO))' | awk '{if ($1 == "ALTER") print $6; else print $7;}' | grep -iv 'PUBLIC' | sed 's/;//'| sort > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles_temp
-  # add roles from database acl when we need them
+  #${PGBIN}/pg_restore --schema-only ${restoreoptions} "${DUMP}" | ${GRPPROG} ${GRPFLG} '^((GRANT|REVOKE|ALTER.*OWNER\ TO))' | awk '{if ($1 == "ALTER") print $6; else print $7;}' | grep -iv 'PUBLIC' | sed 's/;//'| sort > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles_temp
+  ${PGBIN}/pg_restore --schema-only ${restoreoptions} "${DUMP}" | ${GRPPROG} ${GRPFLG} '^(ALTER.*OWNER\ TO.*;|GRANT.*ON.*TO.*|REVOKE.*ON.*FROM.*)$' | awk '{print substr($NF, 1, length($NF)-1)}' | grep -iv 'PUBLIC' | sort > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles_temp
+  # add roles from database acl when we need them (when creating a database)
   if [ "${DIRECTRESTORE}" == "NO" ]; then
-    cat "${DUMP}.database_acl.sql" | awk '{print $7}' | sed 's/;//' | grep -iv 'public' >> ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles_temp
+    cat "${DUMP}.database_acl.list" | awk -F '|' '{if ($2 != "") print $2; }' >> ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles_temp
   fi
   cat ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles_temp | sort > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles
   # read user names, create
@@ -510,7 +511,7 @@ function run_dir_restore {
 # Get restore information from the database, startup specials
 # - should check backup catalog for SUCCESS of the specific dump job, but not in case of a TRIGGER start (catalog entry probably not present)
 # - we don't want to start a new restore operation while this one is running (same for backups, but there it gives system load/lockup, restore
-#   could potentially break integrity), this is handle lock function.
+#   could potentially break integrity), this is handled by the lock function.
 
 ERRCODE=0
 MSG=""
@@ -652,7 +653,7 @@ fi
 log "INFO" "starting ${STARTTYPE} restore, job id [${JOBID}] from dump [`basename ${DUMP}`]"
 snaplog "INFO" "init - starting ${STARTTYPE} restore, job id [${JOBID}] from dump [`basename ${DUMP}`]"
 
-# Start psql or pg_restore operation, set job status to started in case of a SINGLE run job
+# Start psql or pg_restore operation, set job status to HALTED in case of a SINGLE run job (prevents it from being started again)
 RESULT="ERROR"
 ERRCODE=0
 if [ "${jobtype}" == "SINGLE" ]; then
@@ -679,7 +680,11 @@ else
 fi
 logend "$RESULT" "$MSG"
 
-talk "SQL error log: ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log"
+if [ "`cat ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log`" == "" ]; then
+  talk "No SQL errors"
+else
+  talk "WARNING SQL errors: ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log"
+fi
 
 # Normal end
 if [ "${RESULT}" == "ERROR" ]; then
