@@ -178,7 +178,7 @@ function setaclallowconnect {
   DBACL=""
   dbacl2sql "${1}"
   if [ -e "${DBACL}" ]; then
-    dbexecutefromfile "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}" "${TEMPDIR}/$$.pgsnap_restore_dbacl.sql" "${LOGDIR}/$$.${JOBID}.pgsnap_restore.log"
+    dbexecutefromfile "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}" "${DBACL}" "${LOGDIR}/$$.${JOBID}.pgsnap_restore.log"
   fi
   dbexecute "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}" "UPDATE pg_catalog.pg_database SET datallowconn=true WHERE datname='${1}'" "${LOGDIR}/$$.${JOBID}.pgsnap_restore.log"
 }
