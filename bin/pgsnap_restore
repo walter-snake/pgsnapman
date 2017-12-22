@@ -131,24 +131,56 @@ function logend {
 function lockoutusers {
   # disable connections
   log "INFO" "prevent new connections to database ${1}"
-  ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "UPDATE pg_catalog.pg_database SET datallowconn=false WHERE datname='${1}'"   >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
-
+  dbexecute "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}" "UPDATE pg_catalog.pg_database SET datallowconn=false WHERE datname='${1}'" "${LOGDIR}/$$.${JOBID}.pgsnap_restore.log"
   # close connections
   # get list of connected users, loop through and terminate backends
   log "INFO" "terminate existing connections on database $1"
-  ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "select pg_terminate_backend(pid) from pg_stat_activity where datname='${1}'"   >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
-  ERRCODE=$?
+  dbexecute "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}" "select pg_terminate_backend(pid) from pg_stat_activity where datname='${1}'" "${LOGDIR}/$$.${JOBID}.pgsnap_restore.log"
+  ERRCODE=$SQLERROR
   if [ $ERRCODE -gt 0 ]; then MSG="could not successfully terminate clients on database ${1}"; fi
+}
+
+# Convert database acls to sql
+# $1 database name
+function dbacl2sql {
+  DBACL=${TEMPDIR}/$$.pgsnap_restore_dbacl.sql
+  if [ ! -e "${DUMP}.database_acl.list" ]; then
+    return
+  fi
+
+  local c=`cat "${DUMP}.database_acl.list" | wc -l | sed 's/ //g'`
+  if [ ${c} -gt 0 ]; then
+    echo "REVOKE ALL ON DATABASE ${1} FROM public;" > ${DBACL}
+    while read line; do
+      local acl="$(getfieldvalue ${line} 3)"
+      local role="$(getfieldvalue ${line} 2)"
+      if [ "${role}" == "" ]; then
+        role="public"
+      fi
+      echo "REVOKE ALL ON DATABASE ${1} FROM ${role};" >> ${DBACL}
+      if [[ "${acl}" =~ "C" ]]; then
+        echo "GRANT CREATE ON DATABASE ${1} TO ${role};" >> ${DBACL}
+      fi
+      if [[ "${acl}" =~ "T" ]]; then
+        echo "GRANT TEMP ON DATABASE ${1} TO ${role};" >> ${DBACL}
+      fi
+      if [[ "${acl}" =~ "c" ]]; then
+        echo "GRANT CONNECT ON DATABASE ${1} TO ${role};" >> ${DBACL}
+      fi
+    done < "${DUMP}.database_acl.list"
+  fi
 }
 
 # Set acl and allow connections
 # $1 database name
 function setaclallowconnect {
   log "INFO" "set acl and allow new connections to database ${1}"
-  if [ -e "${DUMP}.database_acl.sql" ]; then
-    ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -f ${DUMP}.database_acl.sql   >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
+  DBACL=""
+  dbacl2sql "${1}"
+  if [ -e "${DBACL}" ]; then
+    dbexecutefromfile "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}" "${TEMPDIR}/$$.pgsnap_restore_dbacl.sql" "${LOGDIR}/$$.${JOBID}.pgsnap_restore.log"
   fi
-  ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "UPDATE pg_catalog.pg_database SET datallowconn=true WHERE datname='${1}'"   >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
+  dbexecute "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}" "UPDATE pg_catalog.pg_database SET datallowconn=true WHERE datname='${1}'" "${LOGDIR}/$$.${JOBID}.pgsnap_restore.log"
 }
 
 # Drop database
@@ -162,8 +194,9 @@ function dropdatabase {
    talk "dropping database $1"
    log "INFO" "dropping database $1"
     # drop, this should succeed, as all connections are dead, and no one can be connected any more (well, a superuser)
-    ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "DROP DATABASE IF EXISTS \"${1}\"" >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
-    ERRCODE=$?
+    # If it doesn succeed, we're in trouble.
+    dbexecute "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}" "DROP DATABASE IF EXISTS \"${1}\"" "${LOGDIR}/$$.${JOBID}.pgsnap_restore.log"
+    ERRCODE=$SQLERROR
     if [ ${ERRCODE} -eq 0 ]; then
       log "INFO" "database $1 dropped successfully (or did not exist at all)"
     else
@@ -193,8 +226,8 @@ function renamedatabase {
   log "INFO" "rename database $1->$2"
   talk "renaming database $1->$2"
   # rename, this should succeed, as all connections are dead, and no one can be connected any more (well, a superuser)
-  ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -c "ALTER DATABASE \"${1}\" RENAME TO \"${2}\"" >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
-  ERRCODE=$?
+  dbexecute "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}" "ALTER DATABASE \"${1}\" RENAME TO \"${2}\"" "${LOGDIR}/$$.${JOBID}.pgsnap_restore.log"
+  ERRCODE=$SQLERROR
   if [ ${ERRCODE} -eq 0 ]; then
     log "INFO" "database $1 renamed successfully"
   else
@@ -205,9 +238,10 @@ function renamedatabase {
 # Create a role, skips setting password when role already exists
 # $1 role name (should be sanitized, without double quotes)
 function createrole {
-  local line=`${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -A -t -c "SELECT count(*) from pg_catalog.pg_roles WHERE rolname = '${1}'"`
+  local sql="SELECT count(*) from pg_catalog.pg_roles WHERE rolname = '${1}';"
+  local c=$( dbquery "{pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}" "${sql}" )
   # not present: create from information in globals dump
-  if [ "$line" == "1" ]; then
+  if [ "$c" == "1" ]; then
     talk "skip existing role: ${1}"
   else
     talk "create role:        ${1}"
@@ -238,13 +272,17 @@ function createdatabase {
 # Create schema
 # $1 schema name
 function createschema {
+  local ec=1
   log "INFO" "creating schema: ${restoreschema}"
   # strip the quotes
   local schema=$(echo ${restoreschema} | sed 's/"//g')
   # 2 modes: when schema creation info is present in the dump, use it, otherwise, just create one (owner will be the owner of the database, no acl)
   # 1: no information (we inspect the dump here without the schema restriction!)
   if [ "`${PGBIN}/pg_restore -l --create ${restoreoptions} ${DUMP} | grep SCHEMA`" == "" ]; then
-    ${PGBIN}/psql  ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${RESTOREDB} -c 'CREATE SCHEMA '${restoreschema}' AUTHORIZATION '"$(getfieldvalue "${DBSETTINGS}" 2)"';' >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1  
+    SQLERROR=1
+    local sql='CREATE SCHEMA '${restoreschema}' AUTHORIZATION '"$(getfieldvalue "${DBSETTINGS}" 2)"';'
+    dbexecute "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${RESTOREDB}" "${sql}" "${LOGDIR}/$$.${JOBID}.pgsnap_restore.log"
+    ec=$SQLERROR
   else
     # collect toc entries for this schema
     ${PGBIN}/pg_restore -l --create ${restoreoptions} ${DUMP} | ${GRPPROG} ${GRPFLG} "SCHEMA\ -\ ${schema}\ " > ${TEMPDIR}/$$.0.pgsnap_restore.schema
@@ -252,8 +290,9 @@ function createschema {
     ${PGBIN}/pg_restore -l --create ${restoreoptions} ${DUMP} | ${GRPPROG} ${GRPFLG} "ACL\ -\ ${schema}\ " >> ${TEMPDIR}/$$.0.pgsnap_restore.schema
     # do the restore, using these entries
     ${PGBIN}/pg_restore ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${RESTOREDB} -L ${TEMPDIR}/$$.0.pgsnap_restore.schema ${DUMP} >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
+    ec=$?
   fi
-  echo $?
+  echo $ec
 }
 
 # Set database owner
@@ -261,7 +300,8 @@ function createschema {
 function setdatabaseowner {
   log "INFO" "setting owner on database $1 to $(getfieldvalue "${DBSETTINGS}" 2)"
   # Set owner (failure does not produce an error)
-  echo "ALTER DATABASE \"$1\" OWNER TO \"$(getfieldvalue "${DBSETTINGS}" 2)\";" | ${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --dbname=${MAINTDB} --no-password   >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
+  local sql="ALTER DATABASE \"$1\" OWNER TO \"$(getfieldvalue "${DBSETTINGS}" 2)\";" 
+  dbexecute "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}" "${sql}" "${LOGDIR}/$$.${JOBID}.pgsnap_restore.log"
 }
 
 # Create the roles, neccessary for this database
@@ -311,9 +351,10 @@ function checktablespaces {
 # Checks if a tablespace exists
 # $1 tablespace name (should be sanitized, without double quotes)
 function hastablespace {
-  local line=`${PGBIN}/psql ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --dbname=${MAINTDB} -A -t -c "SELECT count(*) from pg_catalog.pg_tablespace WHERE spcname = '${1}'"`
-  # not present: create from information in globals dump
-  if [ "$line" == "0" ]; then
+  local sql="SELECT count(*) from pg_catalog.pg_tablespace WHERE spcname = '${1}';"
+  local c=$( dbquery "{pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}" "${sql}" )
+  # not present: break out
+  if [ "$c" == "0" ]; then
     ERRCODE=1
     MSG="required tablespace does not exist: ${1}"
     talk "${MSG}"
@@ -395,7 +436,7 @@ function run_dir_restore {
       log "INFO" "existing schema required, check for existence"
       t=$(schemaexists "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${RESTOREDB}"  "${restoreschema}" )
       if [ ${t} -eq 0 ]; then
-        ec=$(createschema "${restoreschema}")
+        ec=$( createschema "${restoreschema}" )
         if [ "$ec" != "0" ]; then
           MSG="schema creation failed for ${restoreschema}"
           RESULT="ERROR"
@@ -637,6 +678,8 @@ else
   fi
 fi
 logend "$RESULT" "$MSG"
+
+talk "SQL error log: ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log"
 
 # Normal end
 if [ "${RESULT}" == "ERROR" ]; then

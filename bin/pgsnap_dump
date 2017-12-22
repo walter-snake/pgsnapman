@@ -106,28 +106,7 @@ from (select datname, unnest(datacl)::text as acl \
 ) \
 select datname,acl_role,acl_rights from acls \
 where datname = '${dbname}'"
-  local acls=$( dbquery "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${dbname}" "${sql}" )
-  touch ${1}
-  if [ "${acls}" != "" ]; then
-    echo "REVOKE ALL ON DATABASE ${dbname} FROM public;" >> ${1}
-  fi
-  for line in $acls; do
-    local acl="$(getfieldvalue ${line} 3)"
-    local role="$(getfieldvalue ${line} 2)"
-    if [ "${role}" == "" ]; then
-      role="public"
-    fi
-    echo "REVOKE ALL ON DATABASE ${dbname} FROM ${role};" >> ${1}
-    if [[ "${acl}" =~ "C" ]]; then
-      echo "GRANT CREATE ON DATABASE ${dbname} TO ${role};" >> ${1}
-    fi
-    if [[ "${acl}" =~ "T" ]]; then
-      echo "GRANT TEMP ON DATABASE ${dbname} TO ${role};" >> ${1}
-    fi
-    if [[ "${acl}" =~ "c" ]]; then
-      echo "GRANT CONNECT ON DATABASE ${dbname} TO ${role};" >> ${1}
-    fi
-  done
+  dbquerytofile "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${dbname}" "${sql}" "${1}"
 }
 
 # Dump the database settings (raw table format, | separated)
@@ -252,7 +231,7 @@ i         log "ERROR" "${MSG}"
       # Database settings
       dumpdbsettings "${jobdir}/${buname}.database_settings.list"
       # Connection rights
-      dumpglobalacls "${jobdir}/${buname}.database_acl.sql"
+      dumpglobalacls "${jobdir}/${buname}.database_acl.list"
       # Dump (possibly schema-only, that's included in the dump options)
       snaplog "INFO" "dumping - ${pgbin}/pg_dump ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} ${schemaonly} -Fd -f ${jobdir}/${buname} -v ${dbname}"
       ${pgbin}/pg_dump ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} ${dumpoptions} ${schemaonly} -Fd -f ${jobdir}/${buname} -v ${dbname} 2>>  ${jobdir}/${buname}.log

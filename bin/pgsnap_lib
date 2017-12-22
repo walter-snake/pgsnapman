@@ -230,9 +230,23 @@ function getpgbinlocation {
 # $3 user
 # $4 db name
 # $5 sql
+# $6 log file (if empty -> log output down the drain)
 # Sets variable: SQLERROR (psql exit code)
 function dbexecute {
-  ${PGSCBIN}/psql "${1}" -p "${2}" -U "${3}" --dbname="${4}" --no-password --output=/dev/null --quiet -A -t -c "${5}" 2> /dev/null
+  ${PGSCBIN}/psql "${1}" -p "${2}" -U "${3}" --dbname="${4}" --no-password --output=/dev/null --quiet -A -t -c "${5}" >> "${6:-/dev/null}" 2>&1
+  SQLERROR=$?
+}
+
+# Run sql queries from file against a database without result (all output suppressed)
+# $1 hostname (use local for local pipe connections)
+# $2 port
+# $3 user
+# $4 db name
+# $5 sql file
+# $6 log file (if empty -> log output down the drain)
+# Sets variable: SQLERROR (psql exit code)
+function dbexecutefromfile {
+  ${PGSCBIN}/psql "${1}" -p "${2}" -U "${3}" --dbname="${4}" --no-password --output=/dev/null --quiet -A -t -f "${5}" >> "${6:-/dev/null}" 2>&1
   SQLERROR=$?
 }
 
@@ -604,3 +618,4 @@ if [ "${LOGINIT}" != "NO" ]; then snaplog "INFO" "init - using config: ${CONFIGF
 # Write marker to database activity table (we don't care if this fails)
 sql="select put_activity(${BUWORKERID}, $$, '${TOOLNAME} ${1} ${2} ${3} ${4} ${5} ${6}'::text);"
 ACTIVITYID=$( catdbquery "${sql}" )
+
