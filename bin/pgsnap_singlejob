@@ -175,7 +175,7 @@ fi
 
 
 # RESTORE jobs
-let " MAXSTART = ${MAX_RESTORE_START:-2} - $( nrunning pgsnap_restore )"
+let " MAXSTART = ${MAX_PARALLEL_RESTORE:-2} - $( nrunning pgsnap_restore )"
 c=0
 if [ "${2}" != "DUMP" ]; then
   talk "Checking for single run restore jobs"

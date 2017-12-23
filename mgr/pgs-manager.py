@@ -21,9 +21,19 @@ DISPMODE = 'li'
 
 # dicts with abbreviations
 # overviews, details, titles
+listaliases = { 'wo':'wo'
+  , 'pi':'po', 'po':'po'
+  , 'cj':'co', 'co':'co'
+  , 'dj':'du', 'du':'du'
+  , 'dc':'ca', 'ca':'ca'
+  , 'rj':'re', 're':'re'
+  , 'rl':'lo', 'lo':'lo'
+  , 'db':'da', 'da':'da'
+  , 'ac':'ac'
+  , 'me':'me'}
 views = { 'wo' : 'mgr_worker', 'po' : 'mgr_instance', 'du' : 'mgr_dumpjob'
   , 'ca' : 'mgr_catalog', 're' : 'mgr_restorejob', 'lo' : 'mgr_restorelog'
-  , 'me' : 'mgr_message', 'ac' : 'pgsnap_activity', 'db' : 'mgr_database'
+  , 'me' : 'mgr_message', 'ac' : 'pgsnap_activity', 'da' : 'mgr_database'
   , 'co': 'mgr_copyjob'}
 tables = { 'wo' : 'pgsnap_worker', 'po' : 'pgsql_instance', 'du' : 'pgsnap_dumpjob'
   , 'ca' : 'pgsnap_catalog', 're' : 'pgsnap_restorejob', 'lo' : 'pgsnap_restorelog'
@@ -31,17 +41,17 @@ tables = { 'wo' : 'pgsnap_worker', 'po' : 'pgsql_instance', 'du' : 'pgsnap_dumpj
   , 'co' : 'mgr_copyjob_detail'}
 titles = { 'wo' : 'PgSnapMan worker', 'po' : 'Postgres instance', 'du' : 'Dump job'
   , 'ca' : 'Backup catalog', 're' : 'Restore job', 'lo' : 'Restore log'
-  , 'me' : 'System message', 'ac' : 'Activity/running processes', 'db' : 'Database overview'
+  , 'me' : 'System message', 'ac' : 'Activity/running processes', 'da' : 'Database overview'
   , 'co' : 'Copy jobs (linked dump and restore jobs)'}
 # Filters
 hourfilters = { 'ca' : 'starttime', 'lo' : 'starttime' , 'me' : 'logtime', 'ac' : 'starttime'
   , 'du' : 'date_added', 're' : 'date_added' , 'wo' : 'date_added', 'po' : 'date_added'
-  , 'db' : 'date_added', 'co' : 'date_added'}
+  , 'da' : 'date_added', 'co' : 'date_added'}
 dbfilters = { 'ca': "split_part(id_db_schema, '/', 2) like '{}.%'"
   , 'lo': "split_part(id_db_schema, '/', 2) like '{}.%'"
   , 're': "'{}' in (split_part(s_db_schema, '.', 1), d_dbname)"
   , 'du': "dbname like '{}'" 
-  , 'db': "dbname like '{}'" 
+  , 'da': "dbname like '{}'" 
   , 'co': "'{}' in (split_part(s_db_schema, '.', 1), split_part(d_db_schema, '.', 1))"}
 jobidfilters = { 'du' : 'id={}'
   , 're' : 'id={}'
@@ -524,7 +534,7 @@ def clearActivity():
     conn.commit()
     conn.close()
   
-def showHeader():
+def showHeader(showconnparams = False):
   print """
 +--------------------------------------------------+
 |                                                  |
@@ -535,7 +545,8 @@ def showHeader():
 |                                                  |
 +--------------------------------------------------+
 """
-  print('PgSnapMan catalog: {}@{}:{}/{}'.format(PGSCUSER, PGSCHOST, str(PGSCPORT), PGSCDB))
+  if showconnparams:
+    print('PgSnapMan catalog: {}@{}:{}/{}'.format(PGSCUSER, PGSCHOST, str(PGSCPORT), PGSCDB))
   print('')
 
 def showHelp():
@@ -548,7 +559,9 @@ General
 q: quit
 h: this help
 
-* The commands may be abbreviated to the first two letters.
+Give pgs-manager.py instrcuction by typing a command:
+* The commands may be abbreviated to the first two letters or the given
+  alternnative 2 letter combination (where available).
 * Choice:       [choice1|choice2|...]
 * Optional:     ()
 * Variable:     <id>
@@ -557,68 +570,80 @@ h: this help
 It is also possible to enter the commands directly on the command line
 when calling pgs-manager.
 
+IMPORTANT: When specifying only the list, specified without subcommend (e.g.
+pgs-manager.py dumpjob), the default display is the list filtered for new
+from the last 24 hours. The full list is shown when specifying the
+subcommand 'list' (e.g. pgs-manager.py dumpjob list).
+
 Worker management
 -----------------
+  (wo)
   worker list(.options) (filter)
   worker register
-  worker status [ACTIVE|HALTED]
+  worker status <id> [ACTIVE|HALTED]
   worker edit <id>
   worker delete <id>
   worker export
   
-Postgres management
--------------------
+Postgres instance management
+----------------------------
+  (po/pi)
   postgres list(.options) (filter)
   postgres register
-  postgres status [ACTIVE|HALTED]
+  postgres status <id> [ACTIVE|HALTED]
   postgres edit <id>
   postgres delete <id>
   postgres export
 
 Dump job management
 -------------------
+  (du/dj)
   dumpjob list(.options) (filter)
   dumpjob add
-  dumpjob status [ACTIVE|HALTED]
+  dumpjob status <id> [ACTIVE|HALTED]
   dumbjob edit <id>
   dumbjob clear-dumps <id>
   dumbjob delete <id>
   dumpjob export
 
-Restore job management
+  (ca/dc)
+  catalog list(.options) (filter)
+  catalog keep <id> [NO|YES|AUTO]
+  catalog export
+
+Restore job management 
 ----------------------
+  (re/rj)
   restorejob list(.options) (filter)
   restorejob add
-  restorejob status [ACTIVE|HALTED]
+  restorejob status <id> [ACTIVE|HALTED]
   restorejob edit <id>
   restorejob delete <id>
   restorejob export
   
+  (se/sr)
   serverrestore <src_dns_name> <src_port> <dest_dns_name> <dest_port>
 
-Copy jobs
-------------
-  copyjob list(.options) (filter)
-  copyjob add
-
-Catalog management
-------------------
-  catalog list(.options) (filter)
-  catalog keep [NO|YES|AUTO]
-  catalog export
-
-Log of restore jobs
--------------------
+  (lo/rl)
   log-restore(.options) (filter)
   log-restore export
   
+Copy job wizzard
+----------------
+  (co/cj)
+  copyjob list(.options) (filter)
+  copyjob add
+
 Miscellaneous lists
 -------------------
+  (me)
   message list(.options) (filter)
   message export
   
+  (ac)
   activity list(.options) (filter)
   
+  (da/db)
   database list(.options) (filter)
   
 Option and filter syntax
@@ -649,7 +674,7 @@ filter:  filter options, either one of the predefined filters
 # Generic list viewer
 def listView(task):
   tokens = task.split(' ')
-  list = task.split(' ')[0][:2]
+  list = listaliases[task.split(' ')[0][:2]]
 
   # filter out the sort options (list.asc or list.desc)
   subtokens = tokens[1].split('.')
@@ -876,21 +901,21 @@ def processCommand(cmd):
         listView(task)
       elif task.split()[1][:2].lower() == 'ex':
         exportView(task)    
-      elif task[:2].lower() == 'wo':
+      elif task[:2].lower() in ['wo']:
         workerTask(task)
-      elif task[:2].lower() == 'po':
+      elif task[:2].lower() in ['po', 'pi']:
         instanceTask(task)
-      elif task[:2].lower() == 'du':
+      elif task[:2].lower() in ['du', 'dj']:
         dumpjobTask(task)
-      elif task[:2].lower() == 'ca':
+      elif task[:2].lower() in ['ca', 'dc']:
         catalogTask(task)
-      elif task[:2].lower() == 're':
+      elif task[:2].lower() in ['re', 'rj']:
         restorejobTask(task)  
-      elif task[:2].lower() == 'ac':
+      elif task[:2].lower() in ['ac']:
         activityTask(task)  
-      elif task[:2].lower() == 'co':
+      elif task[:2].lower() in ['co', 'cj']:
         copyTask(task)
-      elif task[:2].lower() == 'se':
+      elif task[:2].lower() in ['se', 'sr']:
         serverrestoreTask(task)
       else:
         print("ERROR unknown command\n")
@@ -898,6 +923,7 @@ def processCommand(cmd):
       if task[:].lower() == 'q':
         sys.exit(0)
       elif task[:1].lower() == 'h':
+        showHeader(True)
         showHelp()
       elif len(task.split()) == 1 :
         listView(task + ' li .hour=24')
@@ -913,6 +939,7 @@ def processCommand(cmd):
 
 if len(sys.argv) > 1:
   if sys.argv[1][:1] == 'h':
+    showHeader()
     showHelp()
     sys.exit(0)
 
@@ -950,7 +977,7 @@ if len(sys.argv) > 1:
   processCommand(cmd)
   sys.exit(0)
 
-showHeader()
+showHeader(True)
 
 while True:
   task=raw_input('Enter command (q=quit, h=help): ')
