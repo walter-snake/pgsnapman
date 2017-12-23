@@ -888,7 +888,7 @@ def serverrestoreTask(task):
     c = 0
     cron='* * * * *'
     for d in dumps:
-      insertRestoreJob(dest_pgsql_instance_id, d['dbname'], 'FULL', '*', '', 'DROP', 'generated server restore job', 'SINGLE', cron, d['cat_id'], 'USE_ROLE', 'USE_TBLSPC')
+      insertRestoreJob(dest_pgsql_instance_id, d['dbname'], 'FULL', '*', '', 'LEAVE', 'generated server restore job', 'SINGLE', cron, d['cat_id'], 'USE_ROLE', 'USE_TBLSPC')
       c += 1
     print('Created {} jobs, starting as soon as possible'.format(str(c)))
 

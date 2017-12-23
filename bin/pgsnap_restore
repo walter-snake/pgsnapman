@@ -561,6 +561,15 @@ rolehandling="$(getfieldvalue "${restorejob}" 15)"
 tblspchandling="$(getfieldvalue "${restorejob}" 16)"
 pgsqlstatus="$(getfieldvalue "${restorejob}" 17)"
 
+pgsqlhost=$(resolvepghost ${pgsqlfqdn})
+
+# Check one: if existingdb handling is LEAVE and db exists, abort job immediately, with log message
+if [ "${existingdb}" == "LEAVE" ] && [ $( dbexists "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}" "${dbname}" ) -eq 1 ]; then
+  logend "ABORTED" "job id ${JOBID} aborted because database ${dbname} is already present, status set to halted"
+  setjobstatus "RESTORE" ${JOBID} "HALTED"
+  cleanupexit 0
+fi
+
 # Check active status
 # Always stop when pgsql set to inactive
 if [ "${pgsqlstatus}" == "HALTED" ]; then
@@ -592,8 +601,6 @@ if [ ! -e ${DUMP}.catalog.dat ] || [ "$(getbackupstatus ${DUMP}.catalog.dat)" !=
   logend "ERROR" "backup ${DUMP} does not exist, or failed, restore not started" 
   cleanupexit 1
 fi
-
-pgsqlhost=$(resolvepghost ${pgsqlfqdn})
 
 # Set postgres destination server version (also connection test)
 setpgbinpath
