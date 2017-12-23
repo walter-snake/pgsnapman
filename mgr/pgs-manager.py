@@ -319,8 +319,20 @@ def removeAllBackupsForDumpJob(id):
 def getInstanceDumps(dns_name, port):
   conn = psycopg2.connect('host={} port={} dbname={} user={} password={}'.format(PGSCHOST, PGSCPORT, PGSCDB, PGSCUSER, PGSCPASSWORD))  
   cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-  sql = """with dbr as (select dbname, max(starttime) as st from pgsnap_catalog c where pgsql_dns_name = %s and pgsql_port = %s and status = 'SUCCESS' and keep in ('AUTO', 'YES') and dumptype = 'FULL' and dumpschema = '*' group by dbname) select id as cat_id, bu_worker_id as worker_id, c.dbname, st from pgsnap_catalog c join dbr on dbr.st = c.starttime and dbr.dbname = c.dbname where pgsql_dns_name = %s and pgsql_port= %s and dbr.dbname not like '{}';""".format(MAINTDB)
-  cur.execute(sql, (dns_name, port, dns_name, port))
+  sql = """with dbr as (select distinct first_value(id) over (partition by dbname order by starttime desc) as cat_id
+    from pgsnap_catalog
+    where pgsql_dns_name = %s
+      and pgsql_port = %s
+      and status = 'SUCCESS'
+      and keep in ('AUTO', 'YES')
+      and dumptype = 'FULL'
+      and dumpschema = '*'
+      and dbname not like %s)
+    select cat_id, bu_worker_id as worker_id, dbname, starttime as st
+    from dbr
+    join pgsnap_catalog
+      on cat_id = id;"""
+  cur.execute(sql, (dns_name, port, MAINTDB))
   rows = cur.fetchall()
   conn.close()  
   return rows
