@@ -581,6 +581,8 @@ Restore job management
   restorejob edit <id>
   restorejob delete <id>
   restorejob export
+  
+  serverrestore <src_dns_name> <src_port> <dest_dns_name> <dest_port>
 
 Copy jobs
 ------------
@@ -826,7 +828,6 @@ def serverrestoreTask(task):
   port = tokens[2]
   dest_dns_name = tokens[3]
   dest_port = tokens[4]
-  start = tokens[5]
   print('Create a server restore task: automatically generate restore jobs for')
   print('all available FULL dumps without schema restrictions.')
   print('')
@@ -845,19 +846,14 @@ def serverrestoreTask(task):
     return
   else:
     print('-> destination pgsql instance id: {}').format(str(dest_pgsql_instance_id))
-    print('Generate restore jobs for restoring into pgsql instance: {}:{}').format(dest_dns_name, dest_port)
-    if start == 'NOW':
-      cron = '* * * * *'
-    else:
-      cron = raw_input('Schedule (cron): ')
+    print('Generating restore jobs for restoring into pgsql instance: {}:{}').format(dest_dns_name, dest_port)
+    print('Skipping maintenance database: {}'.format(MAINTDB))
     c = 0
+    cron='* * * * *'
     for d in dumps:
       insertRestoreJob(dest_pgsql_instance_id, d['dbname'], 'FULL', '*', '', 'DROP', 'generated server restore job', 'SINGLE', cron, d['cat_id'], 'USE_ROLE', 'USE_TBLSPC')
       c += 1
-    if start == 'NOW':
-      print('Created {} jobs, starting as soon as possible'.format(str(c)))
-    else:
-      print('Created {} jobs, starting according to cron schedule: {}'.format(str(c), cron))
+    print('Created {} jobs, starting as soon as possible'.format(str(c)))
 
 def processCommand(cmd):
   try:
@@ -882,7 +878,7 @@ def processCommand(cmd):
         activityTask(task)  
       elif task[:2].lower() == 'co':
         copyTask(task)
-      elif task[:2].lower() == 'sr':
+      elif task[:2].lower() == 'se':
         serverrestoreTask(task)
       else:
         print("ERROR unknown command\n")

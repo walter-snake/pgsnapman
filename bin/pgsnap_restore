@@ -85,6 +85,7 @@ function setpgbinpath {
   PGVERSION=$(getpgversion "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}")
   if [ "${PGVERSION}" == "" ]; then
     log "ERROR" "job id ${JOBID} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlfqdn}:${pgsqlport}/${MAINTDB}"
+    return
   else
     eval pgbinvar=PGBIN${PGVERSION}
     PGBIN=${!pgbinvar}
@@ -304,19 +305,23 @@ function setdatabaseowner {
   dbexecute "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}" "${sql}" "${LOGDIR}/$$.${JOBID}.pgsnap_restore.log"
 }
 
-# Create the roles, neccessary for this database
+# Create the roles, neccessary for this database (skip PUBLIC)
+# No need to skip postgres or maintenance db role (existing roles are skipped by the createrole function)
 function prepareroles {
   log "INFO" "preparing roles for restore job ${JOBID}"
   # check and create database owner
   createrole $(getfieldvalue "${DBSETTINGS}" 2)
   # check and create other roles
   # a bit more complex: read schema, and find all alter owner, grant and revoke rows
-  # use pg_restore to read the schema, and grep relevant records
-  #${PGBIN}/pg_restore --schema-only ${restoreoptions} "${DUMP}" | ${GRPPROG} ${GRPFLG} '^((GRANT|REVOKE|ALTER.*OWNER\ TO))' | awk '{if ($1 == "ALTER") print $6; else print $7;}' | grep -iv 'PUBLIC' | sed 's/;//'| sort > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles_temp
-  ${PGBIN}/pg_restore --schema-only ${restoreoptions} "${DUMP}" | ${GRPPROG} ${GRPFLG} '^(ALTER.*OWNER\ TO.*;|GRANT.*ON.*TO.*|REVOKE.*ON.*FROM.*)$' | awk '{print substr($NF, 1, length($NF)-1)}' | grep -iv 'PUBLIC' | sort > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles_temp
-  # add roles from database acl when we need them (when creating a database)
+  # use pg_restore to read the schema, and grep relevant records, awk to get the role token
+  ${PGBIN}/pg_restore --schema-only ${restoreoptions} "${DUMP}" | ${GRPPROG} ${GRPFLG} '^(ALTER\ .*OWNER\ TO.*;|GRANT\ .*ON\ .*TO\ .*;|REVOKE\ .*ON\ .*FROM\ .*;)$' | awk '{print substr($NF, 1, length($NF)-1)}' | grep -iv 'PUBLIC' > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles_temp
+  # add roles from database acl when creating a database
   if [ "${DIRECTRESTORE}" == "NO" ]; then
-    cat "${DUMP}.database_acl.list" | awk -F '|' '{if ($2 != "") print $2; }' >> ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles_temp
+    if [ -e "${DUMP}.database_acl.list" ]; then
+      cat "${DUMP}.database_acl.list" | awk -F '|' '{if ($2 != "") print $2; }' >> ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles_temp
+    else
+      log "WARNING" "could not set database acl, missing acl config file"
+    fi
   fi
   cat ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles_temp | sort > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles
   # read user names, create
@@ -678,7 +683,6 @@ else
     fi
   fi
 fi
-logend "$RESULT" "$MSG"
 
 if [ "`cat ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log`" == "" ]; then
   talk "No SQL errors"
@@ -686,15 +690,13 @@ else
   talk "WARNING SQL errors: ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log"
 fi
 
+logend "$RESULT" "$MSG"
 # Normal end
 if [ "${RESULT}" == "ERROR" ]; then
   cleanupexit 1
 else
   cleanupexit 0
 fi
-
-logend "$RESULT" "$MSG"
-cleanupexit ${ERRCODE}
 
 # EOF
 

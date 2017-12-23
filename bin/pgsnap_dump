@@ -175,6 +175,7 @@ function startpgsnapjob {
     MSG="job id ${jobid} - could not connect to postgres instance: ${pgsqlsuperuser}@${pgsqlfqdn}:${pgsqlport}/${dbname}"
     log "ERROR" "${MSG}"
     ERRORS=1
+    return
   else
     eval pgbinvar=PGBIN${pgversion}
     pgbin=${!pgbinvar}
