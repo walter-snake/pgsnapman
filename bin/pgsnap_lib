@@ -158,9 +158,10 @@ function setworkerid {
 }
 
 # Get the hostname, resolve 'local' connections
+# local connections: dns_name=local or <someprefix>/local, e.g. myserver/local
 # $1 FQDN psotgres host
 function resolvepghost {
-  if [ "${1}" == "local" ]; then
+  if [ "${1}" == "local" ] || [ "${1:(-1)}" == "." ]; then
     local pgh=""
   else
     local pgh="-h${1}"
@@ -484,7 +485,7 @@ function preparecatalogdata {
       return
     fi
   elif [ "${format}" == "message" ]; then
-    if [ "`echo -e "${1}" | ${GRPPROG} ${GRPFLG} '^\d{8}T\d{6}[+-]\d+\t((INFO|WARNING|ERROR|CRITICAL|DEBUG))\t.+\t.*\t((CACHE_CONFIG|DUMP|RESTORE|VERIFY|DEDUP))\t-?\d+\t\d+$'`" == "" ]; then
+    if [ "`echo -e "${1}" | ${GRPPROG} ${GRPFLG} '^\d{8}T\d{6}[+-]\d+\t((INFO|WARNING|ERROR|CRITICAL|DEBUG))\t.+\t.*\t((CACHE_CONFIG|DUMP|RESTORE|VERIFY|DEDUP|CLEAN))\t-?\d+\t\d+$'`" == "" ]; then
       snaplog "ERROR" "message upload wrong format: $1"
       return
     fi

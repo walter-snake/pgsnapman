@@ -200,7 +200,8 @@ function dedupstore_clean {
       chksum=$(getfieldvalue "${line}" 1 " ")
       rmfile=$(getdedupindexedpath "${chksum}")
       talk "* remove file: ${rmfile}"
-      #rm -f "${rmfile}"
+      rm -f "${rmfile}"
+      let " RMCOUNT = ${RMCOUNT} + 1 "
     done < ${TEMPDIR}/$$.0.datafiles.rm
   fi
 }
@@ -274,7 +275,7 @@ function dedupstore_fullclean {
   else
     if [ "${BATCHMODE}" != "BATCH" ]; then
       while true; do
-        read -p "Do you wish to remove $tc files??" yn
+        read -p "Do you wish to remove $tc files? [yn] " yn
         case $yn in
           [Yy]* ) break;;
           [Nn]* ) cleanupexit;;
@@ -286,6 +287,7 @@ function dedupstore_fullclean {
     log "INFO" "removing $tc files"
     while read line; do
       rm -f ${line} 
+      let " RMCOUNT = ${RMCOUNT} + 1 "
     done < ${TEMPDIR}/$$.0.datafiles.rm
   fi
 }
@@ -293,6 +295,9 @@ function dedupstore_fullclean {
 # =======================================
 # MAIN
 # =======================================
+
+RMCOUNT=0
+MSG=""
 
 # Check if already running, quit if so, exit code 0 (its not an error).
 JOBID=0
@@ -364,6 +369,11 @@ else
     ${SCRIPTPATH}/pgsnap_verify ${VERBOSITY} &
   fi
 fi
+
+# put dedup clean message in log
+MSG="removed ${RMCOUNT} files from dedup store"
+preparecatalogdata "`date '+%Y%m%dT%H%M%S%z'`\tINFO\tpgsnap_clean\t${MSG}\tCLEAN\t-1\t${BUWORKERID}" "${UPLOADDIR}/$$.pgsnap_clean.message.dat" "NEW" ""
+
 cleanupexit 0
 
 
