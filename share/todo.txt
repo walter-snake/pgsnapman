@@ -64,4 +64,5 @@ Todo list, * is: done
 * renamed trigger job to copy job in manager (more functional name)
 * refinements to list display in manager
 * default list shows only last 24hour items
+* truncate mode for data-only restore
 

@@ -305,6 +305,13 @@ function setdatabaseowner {
   dbexecute "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${MAINTDB}" "${sql}" "${LOGDIR}/$$.${JOBID}.pgsnap_restore.log"
 }
 
+# Truncate all tables that have data in the dump
+function truncatetables {
+  log "INFO" "scanning for tables to truncate for restore job ${JOBID}"
+  ${PGBIN}/pg_restore -l --data-only ${restoreoptions} "${DUMP}" | grep "TABLE DATA" | awk '{print "TRUNCATE TABLE "$6"."$7";"}' >  ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.truncate_temp
+  dbexecutefromfile "${pgsqlhost}" "${pgsqlport}" "${pgsqlsuperuser}" "${RESTOREDB}" "${TEMPDIR}/$$.${JOBID}.pgsnap_restore.truncate_temp" "${LOGDIR}/$$.${JOBID}.pgsnap_restore.log"
+}
+
 # Create the roles, neccessary for this database (skip PUBLIC)
 # No need to skip postgres or maintenance db role (existing roles are skipped by the createrole function)
 function prepareroles {
@@ -406,8 +413,14 @@ function run_dir_restore {
     RESTOREDB="${dbname}_$$"
   fi
 
-  # The entire following block must be skipped when a DATAonly restore is requested, it is al structure related stuff
-  if [ "${restoretype}" != "DATA" ]; then
+  # For a data only restore, truncate if requested otherwise for a restore including schema perform lots of other stuff
+  if [ "${restoretype}" == "DATA" ]; then
+    # When TRUNCATE is active, find all tables that should be truncated and do it
+   if [ "${existingdb}" == "TRUNCATE" ]; then
+     truncatetables
+   fi
+  else
+    # The entire following block must be skipped when a DATAonly restore is requested, it is al structure related stuff
     # When requested, prepare roles (only a little useless work when doing DATA only, maybe we process too many roles, but that's not too bad)
     if [ "${rolehandling}" == "USE_ROLE" ]; then
       prepareroles

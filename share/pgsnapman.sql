@@ -710,7 +710,7 @@ CREATE TABLE pgsnap_restorejob (
     date_added timestamp with time zone DEFAULT now(),
     CONSTRAINT pgsnap_restorejob_cron_check CHECK ((cron ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
     CONSTRAINT pgsnap_restorejob_dest_dbname_check CHECK ((dest_dbname ~ '^[^".]*$'::text)),
-    CONSTRAINT pgsnap_restorejob_existing_db_check CHECK ((existing_db = ANY (ARRAY['DROP'::text, 'RENAME'::text, 'DROP_BEFORE'::text, 'LEAVE'::text]))),
+    CONSTRAINT pgsnap_restorejob_existing_db_check CHECK ((existing_db = ANY (ARRAY['DROP'::text, 'RENAME'::text, 'DROP_BEFORE'::text, 'LEAVE'::text, 'TRUNCATE'::text]))),
     CONSTRAINT pgsnap_restorejob_jobtype_check CHECK ((jobtype = ANY (ARRAY['SINGLE'::text, 'REPEAT'::text, 'TRIGGER'::text]))),
     CONSTRAINT pgsnap_restorejob_restoreschema_check CHECK ((restoreschema ~ '^[^".]*$'::text)),
     CONSTRAINT pgsnap_restorejob_restoretype_check CHECK ((restoretype = ANY (ARRAY['FULL'::text, 'DATA'::text, 'SCHEMA'::text]))),

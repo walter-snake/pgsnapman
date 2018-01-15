@@ -497,7 +497,7 @@ def addRestoreJob(_trigger = False):
   restoreschema = getInput('restore schema', ['restore specific schema or all (*)'], '*', 54, False)
   restoreoptions = getInput('additional options', ['regular pg_restore(all) options; N/A for a CLUSTER* restore'], '', 54)  
   restoretype = getInput('restore type (N/A for a CLUSTER* restore)', ['type of restore; SCHEMA is structure in this context; N/A for a CLUSTER* restore','FULL','SCHEMA','DATA'], 'FULL', 54, False)
-  existing_db = getInput('handling of existing database', ['drop or rename an existing database; DROP_BEFORE drops before attempting to restore', 'DROP', 'RENAME', 'DROP_BEFORE'], 'RENAME', 54, False)
+  existing_db = getInput('handling of existing database', ['drop or rename an existing database; DROP_BEFORE drops before attempting to restore', 'DROP', 'RENAME', 'DROP_BEFORE', 'LEAVE', 'TRUNCATE'], 'RENAME', 54, False)
   if jobtype == 'SINGLE':
     runwhen = getInput('run once at', ['cron schedule (NOW: as soon as possible)', 'NOW', 'numeric cron entry'], 'NOW', 54, False)
     if runwhen == 'NOW':
@@ -802,7 +802,7 @@ def restorejobTask(task):
     setTableColumn('pgsnap_restorejob', 'status', id, status, True)
   elif t == 'ed': # edit record
     id = tokens[2]
-    editRecord('pgsnap_restorejob', id, ['jobtype', 'cron', 'dest_pgsql_instance_id', 'dest_dbname', 'restoretype', 'restoreschema', 'restoreoptions', 'role_handling', 'tblspc_handling', 'status', 'comment'])
+    editRecord('pgsnap_restorejob', id, ['jobtype', 'cron', 'dest_pgsql_instance_id', 'dest_dbname', 'restoretype', 'restoreschema', 'restoreoptions', 'existing_db', 'role_handling', 'tblspc_handling', 'status', 'comment'])
   elif t == 'ad': # add restorejob    
     addRestoreJob()
   elif t == 'de': # delete restorejob
