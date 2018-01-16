@@ -397,6 +397,7 @@ function updatecronjobconfig {
 }
 
 # Set up the job list for the single jobs that have to be executed (both dump and restore)
+# Get dump jobs (single)
 function updatesinglejobconfig {
   local line
   # cron = '* * * * *' is the clue to run a job on the minutely scheduler, only valid for SINGLE (RUN) JOBS
@@ -430,10 +431,15 @@ function updatesinglejobconfig {
 # include all CRON jobs, restore jobs always contact the catalog database for their configuration
 function addrestorejobs {
   # Restore jobs (temp, will not be cached)
-  talk "Checking for cron run dump jobs"
+  talk ""
+  talk "Checking for cron run restore jobs"
+  talk "----------------------------------"
   local sql="select r.id as restore_id, c.id as catalog_id, r.cron, c.bu_name, c.starttime, r.dest_dbname, r.restoreschema \
-    , r.restoretype, r.restoreoptions from pgsnap_restorejob r join pgsnap_catalog c on r.pgsnap_catalog_id = c.id \
-    where r.cron NOT LIKE '* * * * *' and c.bu_worker_id = ${BUWORKERID};"
+    , r.restoretype, r.restoreoptions \
+    from pgsnap_restorejob r \
+    join pgsnap_catalog c on r.pgsnap_catalog_id = c.id \
+    join pgsnap_worker w on w.id = c.bu_worker_id \
+    where r.cron NOT LIKE '* * * * *' and coalesce(w.restore_worker_id, c.bu_worker_id) = ${BUWORKERID};"
   catdbquerytofile "${sql}" "${TEMPDIR}/$$.0.restorejobs.list"
   # Be talkative
   if [ "$VERBOSITY" == "VERBOSE" ]; then

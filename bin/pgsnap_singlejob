@@ -180,11 +180,12 @@ c=0
 if [ "${2}" != "DUMP" ]; then
   talk "Checking for single run restore jobs"
   sql="select count(*) from pgsnap_restorejob r join pgsnap_catalog c on r.pgsnap_catalog_id = c.id \
+    join pgsnap_worker w on w.id = c.bu_worker_id \
     where r.status = 'ACTIVE' \
       and r.jobtype = 'SINGLE' \
       and r.cron = '* * * * *' \
-      and r.id::text like '${id}'
-      and c.bu_worker_id = ${BUWORKERID};"
+      and r.id::text like '${id}' \
+      and coalesce(w.restore_worker_id, c.bu_worker_id) = ${BUWORKERID};"
   c=$( catdbquery "${sql}" )
   if [ $c -eq 0 ]; then
     talk "Nothing to do"
@@ -196,11 +197,12 @@ if [ "${2}" != "DUMP" ]; then
       snaplog "WARNING" "${MSG}"
     fi
     sql="select r.id as restore_id, c.id as catalog_id from pgsnap_restorejob r join pgsnap_catalog c on r.pgsnap_catalog_id = c.id \
+      join pgsnap_worker w on w.id = c.bu_worker_id \
       where r.status = 'ACTIVE' \
         and r.jobtype = 'SINGLE' \
         and r.cron = '* * * * *' \
         and r.id::text like '${id}' \
-        and c.bu_worker_id = ${BUWORKERID} \
+        and coalesce(w.restore_worker_id, c.bu_worker_id) = ${BUWORKERID} \
       limit ${MAXSTART};"
     catdbquerytofile "${sql}" "${TEMPDIR}/$$.0.singlerestorejobs.list"
     # Start the restores

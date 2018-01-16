@@ -65,4 +65,6 @@ Todo list, * is: done
 * refinements to list display in manager
 * default list shows only last 24hour items
 * truncate mode for data-only restore
+* alternative restore worker (set per worker)
+* fix: enter cron schedule for single jobs (only NOW was allowed)
 

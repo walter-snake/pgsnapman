@@ -432,12 +432,12 @@ def addDumpJob(_status = 'ACTIVE'):
   dumpoptions = getInput('additional options', ['regular pg_dump(all) options'], '', 54)
   dumptype = getInput('dump type', ['choose one from; SCHEMA is structure in this context','FULL','SCHEMA','DATA','CLUSTER','CLUSTER_SCHEMA'], 'FULL', 54, False)
   if jobtype == 'SINGLE':
-    runwhen = getInput('run once at', ['cron schedule (NOW: as soon as possible)', 'NOW', 'numeric cron entry'], 'NOW', 54, False)
+    runwhen = getInput('run once at', ['cron schedule (NOW: as soon as possible OR numeric cron entry)'], 'NOW', 54, False)
     if runwhen == 'NOW':
-      cron = '* * * * *'
+      runwhen = '* * * * *'
   else:
     runwhen = getInput('repeat schedule', ['cron schedule (numeric)'], getRndCron(pgsqlid), 54, False)
-    cron = runwhen
+  cron = runwhen
   trigger = getInput('trigger', ['restore jobs to start, comma separated id list without spaces'], '', 54)
   comment = getInput('comment', ['optional comments'], '', 54)
   yn = raw_input('Save new job? [Yn] ')
@@ -499,14 +499,14 @@ def addRestoreJob(_trigger = False):
   restoretype = getInput('restore type (N/A for a CLUSTER* restore)', ['type of restore; SCHEMA is structure in this context; N/A for a CLUSTER* restore','FULL','SCHEMA','DATA'], 'FULL', 54, False)
   existing_db = getInput('handling of existing database', ['drop or rename an existing database; DROP_BEFORE drops before attempting to restore', 'DROP', 'RENAME', 'DROP_BEFORE', 'LEAVE', 'TRUNCATE'], 'RENAME', 54, False)
   if jobtype == 'SINGLE':
-    runwhen = getInput('run once at', ['cron schedule (NOW: as soon as possible)', 'NOW', 'numeric cron entry'], 'NOW', 54, False)
+    runwhen = getInput('run once at', ['cron schedule (NOW: as soon as possible OR numeric cron entry)'], 'NOW', 54, False)
     if runwhen == 'NOW':
-      cron = '* * * * *'
+      runwhen = '* * * * *'
   elif jobtype == 'TRIGGER':
-    cron = '* * * * *'
+    runwhen = '* * * * *'
   else:
     runwhen = getInput('repeat schedule', ['cron schedule (numeric)'], getRndCron(pgsqlid), 54, False)
-    cron = runwhen
+  cron = runwhen
   role_handling = getInput('handling of roles', ['tries to create required roles or ignore are role related information', 'USE_ROLE', 'NO_ROLE'], 'USE_ROLE', 54, False)
   tblspc_handling = getInput('handling of existing database', ['tries to restore into the correct tablespaces (must be present) or restore to default', 'NO_TBLSPC', 'USE_TBLSPC'], 'NO_TBLSPC', 54, False)
   comment = getInput('comment', ['optional comments'], '', 54)
@@ -745,7 +745,7 @@ def workerTask(task):
     setTableColumn('pgsnap_worker', 'status', id, status, True)
   elif t == 'ed': # edit record
     id = tokens[2]
-    editRecord('pgsnap_worker', id, ['cron_cacheconfig', 'cron_singlejob', 'cron_clean', 'cron_upload', 'status', 'comment'])
+    editRecord('pgsnap_worker', id, ['cron_cacheconfig', 'cron_singlejob', 'cron_clean', 'cron_upload', 'status', 'comment', 'restore_worker_id'])
   elif t == 're': # register worker   
     registerWorker()
   elif t == 'de': # delete worker
@@ -893,7 +893,7 @@ def serverrestoreTask(task):
     print('Created {} jobs, starting as soon as possible'.format(str(c)))
 
 def processCommand(cmd):
-  try:
+#  try:
     task = cmd.strip()
     # multiple token commands first
     if len(task.split()) >= 2:
@@ -929,9 +929,9 @@ def processCommand(cmd):
         listView(task + ' li .hour=24')
       else:
         print("ERROR unknown command\n")
-  except Exception:
-    print Exception
-    print('ERROR Invalid command or options (like a non-existing list or invalid options)')
+#  except Exception:
+#    print Exception
+#    print('ERROR Invalid command or options (like a non-existing list or invalid options)')
       
 # ================================================================
 # 'MAIN'
