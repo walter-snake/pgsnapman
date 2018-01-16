@@ -893,7 +893,7 @@ def serverrestoreTask(task):
     print('Created {} jobs, starting as soon as possible'.format(str(c)))
 
 def processCommand(cmd):
-#  try:
+  try:
     task = cmd.strip()
     # multiple token commands first
     if len(task.split()) >= 2:
@@ -929,9 +929,9 @@ def processCommand(cmd):
         listView(task + ' li .hour=24')
       else:
         print("ERROR unknown command\n")
-#  except Exception:
-#    print Exception
-#    print('ERROR Invalid command or options (like a non-existing list or invalid options)')
+  except Exception:
+    print Exception
+    print('ERROR Invalid command or options (like a non-existing list or invalid options)')
       
 # ================================================================
 # 'MAIN'
