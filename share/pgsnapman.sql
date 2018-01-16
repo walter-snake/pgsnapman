@@ -627,6 +627,7 @@ CREATE TABLE pgsnap_worker (
     cron_upload text DEFAULT '*/5 * * * *'::text,
     status text DEFAULT 'ACTIVE'::text,
     date_added timestamp with time zone DEFAULT now(),
+    restore_worker_id integer,
     CONSTRAINT pgsnap_worker_cron_cacheconfig_check CHECK ((cron_cacheconfig ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
     CONSTRAINT pgsnap_worker_cron_clean_check CHECK ((cron_clean ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
     CONSTRAINT pgsnap_worker_cron_singlejob_check CHECK ((cron_singlejob ~ '^([\*\/0-9,]+\ ){4}[\*\/0-9,]+$'::text)),
@@ -1014,6 +1015,7 @@ CREATE VIEW mgr_worker AS
     pgsnap_worker.cron_clean,
     pgsnap_worker.cron_upload,
     pgsnap_worker.comment,
+    COALESCE((pgsnap_worker.restore_worker_id)::text, ''::text) AS restore_worker_id,
     to_char(pgsnap_worker.date_added, 'YYYY-MM-DD HH24:MI:SS'::text) AS date_added
    FROM pgsnap_worker
   ORDER BY pgsnap_worker.dns_name;
