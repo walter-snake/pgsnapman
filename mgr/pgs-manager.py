@@ -497,7 +497,13 @@ def addRestoreJob(_trigger = False):
   restoreschema = getInput('restore schema', ['restore specific schema or all (*)'], '*', 54, False)
   restoreoptions = getInput('additional options', ['regular pg_restore(all) options; N/A for a CLUSTER* restore'], '', 54)  
   restoretype = getInput('restore type (N/A for a CLUSTER* restore)', ['type of restore; SCHEMA is structure in this context; N/A for a CLUSTER* restore','FULL','SCHEMA','DATA'], 'FULL', 54, False)
-  existing_db = getInput('handling of existing database', ['drop or rename an existing database; DROP_BEFORE drops before attempting to restore', 'DROP', 'RENAME', 'DROP_BEFORE', 'LEAVE', 'TRUNCATE'], 'RENAME', 54, False)
+  if restoretype == 'DATA':
+    opts=['add to, or truncate existing data', 'LEAVE', 'TRUNCATE']
+    defopt='LEAVE'
+  else:
+    opts=['drop, rename or leave an existing database; DROP_BEFORE drops before attempting to restore', 'DROP', 'RENAME', 'DROP_BEFORE', 'LEAVE']
+    defopt='RENAME'
+  existing_db = getInput('handling of existing database/data', opts, defopt, 54, False)
   if jobtype == 'SINGLE':
     runwhen = getInput('run once at', ['cron schedule (NOW: as soon as possible OR numeric cron entry)'], 'NOW', 54, False)
     if runwhen == 'NOW':
