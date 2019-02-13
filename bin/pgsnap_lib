@@ -371,7 +371,7 @@ function getpgversion {
     if [ ${major} -lt 10 ]; then 
       local pgv=$(echo "${result}" | cut -d '.' -f 1)$(echo "${result}" | cut -d '.' -f 2)
     else
-      local pgv=${major}}
+      local pgv=${major}
     fi
   else
     pgv=""
