@@ -33,7 +33,7 @@ PGBIN93=/Library/PostgreSQL/9.3/bin
 PGBIN94=/Library/PostgreSQL/9.4/bin
 PGBIN95=/Library/PostgreSQL/9.5/bin
 PGBIN96=/Library/PostgreSQL/9.6/bin
-PGBIN100=/Library/PostgreSQL/10.0/bin
+PGBIN10=/Library/PostgreSQL/10/bin
 
 # Central config database
 PGSCBIN=/Library/PostgreSQL/9.3/bin
