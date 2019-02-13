@@ -67,4 +67,9 @@ Todo list, * is: done
 * truncate mode for data-only restore
 * alternative restore worker (set per worker)
 * fix: enter cron schedule for single jobs (only NOW was allowed)
+* shows only relevant options for existing data handling when creating a restore job
+
+- when displaying the activity list, do not filter
+- clean should report count of dumps dropped
+
 

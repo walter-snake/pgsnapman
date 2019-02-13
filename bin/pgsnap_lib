@@ -367,7 +367,12 @@ function getpgversion {
   dbexecute "${1}" "${2}" "${3}" "${4}" "SELECT 1;"
   if [ "$SQLERROR" == "0" ]; then
     local result=$( dbquery "${1}" "${2}" "${3}" "${4}" "show server_version;" )
-    local pgv=$(echo "${result}" | cut -d '.' -f 1)$(echo "${result}" | cut -d '.' -f 2)
+    local major=$(echo "${result}" | cut -d '.' -f 1)
+    if [ ${major} -lt 10 ]; then 
+      local pgv=$(echo "${result}" | cut -d '.' -f 1)$(echo "${result}" | cut -d '.' -f 2)
+    else
+      local pgv=${major}}
+    fi
   else
     pgv=""
   fi
