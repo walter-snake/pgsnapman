@@ -321,7 +321,7 @@ function prepareroles {
   # check and create other roles
   # a bit more complex: read schema, and find all alter owner, grant and revoke rows
   # use pg_restore to read the schema, and grep relevant records, awk to get the role token
-  ${PGBIN}/pg_restore --schema-only ${restoreoptions} "${DUMP}" | ${GRPPROG} ${GRPFLG} '^(ALTER\ .*OWNER\ TO.*;|GRANT\ .*ON\ .*TO\ .*;|REVOKE\ .*ON\ .*FROM\ .*;)$' | awk '{print substr($NF, 1, length($NF)-1)}' | grep -iv 'PUBLIC' > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles_temp
+  ${PGBIN}/pg_restore --schema-only ${restoreoptions} "${DUMP}" | ${GRPPROG} ${GRPFLG} '^(ALTER\ .*PRIVILEGES\ FOR\ .*;|ALTER\ .*OWNER\ TO.*;|GRANT\ .*ON\ .*TO\ .*;|REVOKE\ .*ON\ .*FROM\ .*;)$' | awk '{print substr($NF, 1, length($NF)-1)}' | grep -iv 'PUBLIC' > ${TEMPDIR}/$$.${JOBID}.pgsnap_restore.roles_temp
   # add roles from database acl when creating a database
   if [ "${DIRECTRESTORE}" == "NO" ]; then
     if [ -e "${DUMP}.database_acl.list" ]; then
