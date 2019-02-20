@@ -546,15 +546,15 @@ def showHeader(showconnparams = False):
 |                                                  |
 |                PgSnapMan manager                 |
 |                                                  |
-| W.Boasson, 2017                                  |
+| W.Boasson, 2019                                  |
 | License: GPL3                                    |
+| Version: 1.0                                     |
 |                                                  |
 +--------------------------------------------------+
 """
   if showconnparams:
-    print('PgSnapMan catalog: {}@{}:{}/{}'.format(PGSCUSER, PGSCHOST, str(PGSCPORT), PGSCDB))
-  print('')
-  print('Configuration file: ' + configfile)
+    print('PgSnapMan catalog:  {}@{}:{}/{}'.format(PGSCUSER, PGSCHOST, str(PGSCPORT), PGSCDB))
+    print('Configuration file: ' + configfile)
   print('')
 
 def showHelp():
