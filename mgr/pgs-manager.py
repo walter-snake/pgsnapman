@@ -554,6 +554,8 @@ def showHeader(showconnparams = False):
   if showconnparams:
     print('PgSnapMan catalog: {}@{}:{}/{}'.format(PGSCUSER, PGSCHOST, str(PGSCPORT), PGSCDB))
   print('')
+  print('Configuration file: ' + configfile)
+  print('')
 
 def showHelp():
   print """
