@@ -399,6 +399,7 @@ fi
 # Both on cron and as single job
 # This MUST succeed in order to proceed (otherwise risk of running job over and over again)
 ERRCODE=0
+ERRORS=0
 if [ "${jobtype}" == "SINGLE" ]; then
   # sets errcode
   setjobstatus "DUMP" ${JOBID} "HALTED"

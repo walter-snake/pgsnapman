@@ -232,8 +232,8 @@ function createdumpjobs {
       fi
       local jobid=$( catdbquery "SELECT put_dumpjob(${1}, '${line}', 'auto added dump job', '${istatus}');" )
       MSG="add database: ${fqdnhost}:${3}/${line} - job id: ${jobid} - status: ${AUTO_DUMPJOB_STATUS}"
-      snaplog "WARNING" "${MSG}"
-      preparecatalogdata "`date '+%Y%m%dT%H%M%S%z'`\tWARNING\t${TOOLNAME}\t${MSG}\tCACHE_CONFIG\t-1\t${BUWORKERID}" "${UPLOADDIR}/$$.pgsnap_cacheconfig.message.dat" "ADD" ""
+      snaplog "INFO" "${MSG}"
+      preparecatalogdata "`date '+%Y%m%dT%H%M%S%z'`\tINFO\t${TOOLNAME}\t${MSG}\tCACHE_CONFIG\t-1\t${BUWORKERID}" "${UPLOADDIR}/$$.pgsnap_cacheconfig.message.dat" "ADD" ""
       let "c = c + 1"
     fi
   done
