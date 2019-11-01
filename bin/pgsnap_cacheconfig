@@ -537,7 +537,7 @@ fi
 # Timer end and message
 ENDTIME=$( date '+%s' )
 let " RUNNINGTIME = $ENDTIME - $STARTTIME "
-if [ ${RUNNINGTIME} -gt 30 ]; then
+if [ ${RUNNINGTIME} -gt 60 ]; then
   MSG="config check took ${RUNNINGTIME} [s]"
   preparecatalogdata "`date '+%Y%m%dT%H%M%S%z'`\tWARNING\t${TOOLNAME}\t${MSG}\tCACHE_CONFIG\t-1\t${BUWORKERID}" "${UPLOADDIR}/$$.pgsnap_cacheconfig.message.dat" "ADD" ""
 fi
