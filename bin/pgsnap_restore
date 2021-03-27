@@ -265,8 +265,18 @@ function createdatabase {
   if [ "$2" == "USE_TBLSPC" ] &&  [ "$(getfieldvalue "${DBSETTINGS}" 7)" != "" ]; then
     local tblspc="--tablespace=$(getfieldvalue "${DBSETTINGS}" 7)"
   fi
+  # adjust encodings for special case C
+  lccollate=$(getfieldvalue "${DBSETTINGS}" 4)
+  if [ "${lccollate:0:2}" == "C."  ]; then
+    lccollate="C"
+  fi
+  lctype=$(getfieldvalue "${DBSETTINGS}" 5)
+  if [ "${lctype:0:2}" == "C."  ]; then
+    lctype="C"
+  fi
   log "INFO" "creating database $1"
-  ${PGBIN}/createdb ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --maintenance-db=${MAINTDB} -E $(getfieldvalue "${DBSETTINGS}" 3) --lc-collate=$(getfieldvalue "${DBSETTINGS}" 4) --lc-ctype=$(getfieldvalue "${DBSETTINGS}" 5) --template=template0 ${tblspc} "$1"  >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
+  #${PGBIN}/createdb ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --maintenance-db=${MAINTDB} -E $(getfieldvalue "${DBSETTINGS}" 3) --lc-collate=$(getfieldvalue "${DBSETTINGS}" 4) --lc-ctype=$(getfieldvalue "${DBSETTINGS}" 5) --template=template0 ${tblspc} "$1"  >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
+  ${PGBIN}/createdb ${pgsqlhost} -p ${pgsqlport} -U ${pgsqlsuperuser} --no-password --maintenance-db=${MAINTDB} -E $(getfieldvalue "${DBSETTINGS}" 3) --lc-collate=${lccollate} --lc-ctype=${lctype} --template=template0 ${tblspc} "$1"  >> ${LOGDIR}/$$.${JOBID}.pgsnap_restore.log 2>&1
   echo $?
 }
 
