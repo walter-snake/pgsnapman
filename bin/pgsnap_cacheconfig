@@ -385,14 +385,16 @@ function updatecronjobconfig {
 
     # Check the pgsql_instances for unlisted databases, when instance is active and this backup worker is the default backup worker
     if [ "${AUTO_DUMPJOB}" == "YES" ] && [ "${defworkerid}" == "${BUWORKERID}" ] && [ "$(getinstancestatus ${pgid}_${pgdns}_${pgport})" == "ACTIVE" ]; then
+      #log "DEBUG" "starting createdumpjobs ${pgid} ${pgdns} ${pgport} ${pguser} instance status $(getinstancestatus ${pgid}_${pgdns}_${pgport}) ${pgstatus}"
       createdumpjobs ${pgid} ${pgdns} ${pgport} ${pguser}
     fi
 
-    # Retrieve job list from server
-    getcronjobs ${pgid} ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}
-
-    # Prepare the jobs: create directories, cron entries
-    createcronjobs ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}
+    # Retrieve job list from server (only for active instances, skip creating dump jobs, last file remains in place)
+    if [ "${pgstatus}" == "ACTIVE" ]; then
+      getcronjobs ${pgid} ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}
+      # Prepare the jobs: create directories, cron entries
+      createcronjobs ${DUMPSNAP}/${pgid}_${pgdns}_${pgport}
+    fi
   done < $ROOTDIR/pg_instances.list
 }
 
